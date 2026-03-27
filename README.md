@@ -6,6 +6,8 @@
 
 This contains everything you need to run your app locally.
 
+🌐 **Live Demo:** https://senamallas-pixel.github.io/hypermart/
+
 View your app in AI Studio: https://ai.studio/apps/15dede10-a93f-4041-81f8-9827e539747d
 
 ## Run Locally
