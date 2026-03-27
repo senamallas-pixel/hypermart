@@ -2,6 +2,7 @@ node_modules/
 build/
 dist/
 coverage/
+# assets/ is intentionally tracked (GitHub Pages build output)
 .DS_Store
 *.log
 .env*
