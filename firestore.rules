@@ -37,8 +37,12 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        (request.auth.token.email == "srujan77991@gmail.com" && request.auth.token.email_verified == true)
+        request.auth.token.email == "senamallas@gmail.com" ||
+        request.auth.token.email.lower() == "senamallas@gmail.com" ||
+        request.auth.token.email == "srujan77991@gmail.com" ||
+        request.auth.token.email.lower() == "srujan77991@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
     }
 
@@ -63,16 +67,14 @@ service cloud.firestore {
     }
 
     function isValidShop(data) {
-      return data.keys().hasAll(['id', 'ownerId', 'name', 'status']) &&
-             data.id is string &&
+      return data.keys().hasAll(['ownerId', 'name', 'status']) &&
              data.ownerId is string &&
              data.name is string &&
              data.status in ['pending', 'approved', 'suspended'];
     }
 
     function isValidProduct(data) {
-      return data.keys().hasAll(['id', 'shopId', 'name', 'price', 'status']) &&
-             data.id is string &&
+      return data.keys().hasAll(['shopId', 'name', 'price', 'status']) &&
              data.shopId is string &&
              data.name is string &&
              data.price is number &&
@@ -97,6 +99,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
       allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /shops/{shopId} {
