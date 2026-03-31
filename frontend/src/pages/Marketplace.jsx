@@ -5,8 +5,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Store, MapPin, Clock, Package, ShoppingCart, Star, Search,
-  ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, ChevronDown,
+  Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
+  ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2,
 } from 'lucide-react';
 import { listShops, listProducts, placeOrder, getMyOrders } from '../api/client';
 import { useApp } from '../context/AppContext';
@@ -46,7 +46,10 @@ function ShopCard({ shop, onClick }) {
           <MapPin size={8} /> {shop.address}
         </p>
         <div className="flex items-center justify-between pt-2 border-t border-[#1A1A1A]/5">
-          <Clock size={12} className="text-[#5A5A40]/40" />
+          <div className="flex gap-2.5">
+            <Phone size={12} className="text-[#5A5A40] hover:scale-110 transition-transform" />
+            <MessageCircle size={12} className="text-[#5A5A40] hover:scale-110 transition-transform" />
+          </div>
           <button className="text-[9px] font-bold text-white bg-[#5A5A40] px-3 py-1 rounded-lg hover:bg-[#4A4A30] transition-colors">
             Shop
           </button>
