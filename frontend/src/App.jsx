@@ -304,9 +304,9 @@ function BottomNav() {
   if (!currentUser) return null;
 
   const CUSTOMER_TABS = [
-    { path: '/marketplace', icon: Store,       label: 'Market' },
-    { path: '/cart',        icon: ShoppingCart, label: 'Cart',   badge: cartItemCount },
-    { path: '/profile',     icon: User,         label: 'Profile' },
+    { path: '/marketplace', icon: ShoppingBag,  label: 'Shop' },
+    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
+    { path: '/profile',     icon: User,          label: 'Profile' },
   ];
   const OWNER_TABS = [
     { path: '/owner',   icon: LayoutDashboard, label: 'Dashboard' },
@@ -323,29 +323,26 @@ function BottomNav() {
     CUSTOMER_TABS;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#1A1A1A]/5 safe-bottom sm:hidden">
-      <div className={`grid h-16 px-4 ${tabs.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-        {tabs.map(tab => {
-          const active = location.pathname === tab.path || (tab.path !== '/' && location.pathname.startsWith(tab.path));
-          return (
-            <button
-              key={tab.path}
-              onClick={() => navigate(tab.path)}
-              className="flex flex-col items-center justify-center gap-1 relative"
-            >
-              <div className="relative">
-                <tab.icon size={22} className={active ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/30'} strokeWidth={active ? 2.5 : 1.5} />
-                {tab.badge > 0 && (
-                  <span className="absolute -top-1 -right-1.5 bg-[#FF3269] text-white text-[7px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{tab.badge}</span>
-                )}
-              </div>
-              <span className={`text-[8px] font-bold uppercase tracking-[0.12em] ${active ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/30'}`}>{tab.label}</span>
-              {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[#5A5A40] rounded-full" />}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#1A1A1A]/10 px-6 py-3 flex justify-around items-center sm:hidden z-50">
+      {tabs.map(tab => {
+        const active = location.pathname === tab.path || (tab.path !== '/' && location.pathname.startsWith(tab.path));
+        return (
+          <button
+            key={tab.path}
+            onClick={() => navigate(tab.path)}
+            className={`flex flex-col items-center gap-1 ${active ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/40'}`}
+          >
+            <div className="relative">
+              <tab.icon size={20} />
+              {tab.badge > 0 && (
+                <span className="absolute -top-1 -right-1.5 bg-[#FF3269] text-white text-[7px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{tab.badge}</span>
+              )}
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-widest">{tab.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -358,7 +355,7 @@ function TopNav() {
   const navigate = useNavigate();
 
   const isAuth = location.pathname === '/' || location.pathname === '/role-selection';
-  if (isAuth || !currentUser) return null;
+  if (isAuth) return null;
 
   const isMarketplace = location.pathname === '/marketplace';
   const handleSignOut = () => { signOut(); navigate('/'); };
@@ -367,7 +364,7 @@ function TopNav() {
     <header className="sticky top-0 z-50 bg-white border-b border-[#1A1A1A]/5 h-16 flex items-center">
       <div className="max-w-7xl mx-auto w-full px-4 flex items-center justify-between gap-4">
         {/* Logo */}
-        <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={() => navigate(roleHome(currentUser.role))}>
+        <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={() => navigate(currentUser ? roleHome(currentUser.role) : '/marketplace')}>
           <div className="w-8 h-8 bg-[#5A5A40] rounded-full flex items-center justify-center text-white">
             <Store size={18} />
           </div>
@@ -406,20 +403,29 @@ function TopNav() {
             </div>
           </div>
 
-          {/* User info + logout */}
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:block text-right">
-              <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{currentUser.role}</p>
-              <p className="text-xs font-bold truncate max-w-[100px]">{currentUser.display_name}</p>
+          {/* User info + logout OR Login button */}
+          {currentUser ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden lg:block text-right">
+                <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{currentUser.role}</p>
+                <p className="text-xs font-bold truncate max-w-[100px]">{currentUser.display_name}</p>
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="p-2 hover:bg-[#F5F5F0] rounded-full transition-colors text-[#5A5A40]"
+                title="Sign out"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
+          ) : (
             <button
-              onClick={handleSignOut}
-              className="p-2 hover:bg-[#F5F5F0] rounded-full transition-colors text-[#5A5A40]"
-              title="Sign out"
+              onClick={() => navigate('/')}
+              className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all"
             >
-              <LogOut size={20} />
+              Login
             </button>
-          </div>
+          )}
         </div>
       </div>
     </header>
@@ -515,11 +521,7 @@ function AppShell() {
       <Routes>
         <Route path="/"               element={<SignIn />} />
         <Route path="/role-selection" element={<RoleSelection />} />
-        <Route path="/marketplace" element={
-          <RequireAuth roles={['customer','admin']}>
-            <Marketplace />
-          </RequireAuth>
-        } />
+        <Route path="/marketplace" element={<Marketplace />} />
         <Route path="/owner" element={
           <RequireAuth roles={['owner','admin']}>
             <OwnerDashboard />

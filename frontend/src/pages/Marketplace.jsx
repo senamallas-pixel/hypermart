@@ -466,8 +466,8 @@ export default function Marketplace() {
                       <ShopCard key={shop.id} shop={shop} onClick={() => setSelectedShop(shop)} />
                     ))
                   ) : (
-                    <div className="flex-shrink-0 w-full h-32 flex items-center justify-center bg-[#F5F5F0]/50 rounded-3xl border border-dashed border-[#1A1A1A]/10 px-12">
-                      <p className="text-[#1A1A1A]/30 italic text-sm">No shops in {activeLocation} yet.</p>
+                    <div className="flex-shrink-0 w-full sm:w-auto h-32 flex items-center justify-center bg-[#F5F5F0]/50 rounded-3xl border border-dashed border-[#1A1A1A]/10 px-12">
+                      <p className="text-[#1A1A1A]/30 italic text-sm">No shops registered in this category yet.</p>
                     </div>
                   )}
                 </div>
