@@ -1,27 +1,33 @@
-"""
+﻿"""
 HyperMart — FastAPI Application
-Full CRUD API for the SQLite + SQLAlchemy backend.
+JWT auth, password hashing, subscription system, full CRUD.
 """
 
+import os
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, List
 
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 import models as M
 import schemas as S
 from database import get_db, create_tables
 
-# ── App ───────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# App
+# ─────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="HyperMart API",
     description="Hyperlocal marketplace — Python / SQLAlchemy / SQLite backend",
-    version="2.0.0",
+    version="3.0.0",
 )
 
 app.add_middleware(
@@ -32,25 +38,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def startup():
     create_tables()
 
 
-# ── Auth helpers ──────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Security helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-ADMIN_EMAIL = "senamallas@gmail.com"
+SECRET_KEY    = os.getenv("JWT_SECRET", "hypermart-dev-secret-change-in-production")
+ALGORITHM     = "HS256"
+TOKEN_EXPIRY  = timedelta(days=30)
+ADMIN_EMAIL   = "senamallas@gmail.com"
+SUBSCRIPTION_AMOUNT = 10.0  # ₹10 per month
+
+pwd_ctx  = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer(auto_error=False)
 
 
-def get_current_user(uid: str = Query(...), db: Session = Depends(get_db)) -> M.User:
-    user = db.query(M.User).filter(M.User.uid == uid).first()
+def hash_password(plain: str) -> str:
+    return pwd_ctx.hash(plain)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_ctx.verify(plain, hashed)
+
+
+def create_access_token(user_id: int) -> str:
+    expire = datetime.utcnow() + TOKEN_EXPIRY
+    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> M.User:
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_token(credentials.credentials)
+    user = db.get(M.User, int(payload["sub"]))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Always enforce admin role for admin email
     if user.email == ADMIN_EMAIL and user.role != M.UserRole.admin:
         user.role = M.UserRole.admin
         db.commit()
     return user
+
+
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[M.User]:
+    """Returns user if authenticated, None otherwise — used for public endpoints."""
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        return db.get(M.User, int(payload["sub"]))
+    except HTTPException:
+        return None
 
 
 def require_role(*roles: M.UserRole):
@@ -61,60 +120,79 @@ def require_role(*roles: M.UserRole):
     return _dep
 
 
+def _check_subscription(user: M.User, db: Session) -> None:
+    """Raise 402 if owner's subscription is not active."""
+    if user.role != M.UserRole.owner:
+        return
+    sub = db.query(M.Subscription).filter(M.Subscription.user_id == user.id).first()
+    if not sub or sub.status != M.SubscriptionStatus.active:
+        raise HTTPException(
+            status_code=402,
+            detail="Active subscription required. Subscribe for ₹10/month to manage shops."
+        )
+    if sub.expires_at and sub.expires_at < datetime.utcnow():
+        sub.status = M.SubscriptionStatus.expired
+        db.commit()
+        raise HTTPException(
+            status_code=402,
+            detail="Your subscription has expired. Please renew for ₹10/month."
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════
-# AUTH
+# AUTH — register / login
 # ═══════════════════════════════════════════════════════════════════
 
-@app.post("/auth/login", response_model=S.UserOut)
-def login(payload: S.LoginRequest, db: Session = Depends(get_db)):
-    """
-    Look up user by email. If not found and display_name + role are provided,
-    create a new account. Used by the frontend instead of Firebase Auth.
-    """
-    user = db.query(M.User).filter(M.User.email == payload.email).first()
-    if user:
-        # Admin override on every login
-        if user.email == ADMIN_EMAIL and user.role != M.UserRole.admin:
-            user.role = M.UserRole.admin
-        user.last_login = datetime.utcnow()
-        db.commit()
-        db.refresh(user)
-        return user
-    # New user — require name and role
-    if not payload.display_name or not payload.role:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found. Provide display_name and role to register."
-        )
-    role = M.UserRole.admin if payload.email == ADMIN_EMAIL else (payload.role or M.UserRole.customer)
-    new_user = M.User(
+@app.post("/auth/register", response_model=S.TokenOut, status_code=201)
+def register(payload: S.RegisterRequest, db: Session = Depends(get_db)):
+    """Create a new account and return a JWT token."""
+    if db.query(M.User).filter(M.User.email == str(payload.email)).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    role = M.UserRole.admin if str(payload.email) == ADMIN_EMAIL else payload.role
+    user = M.User(
         uid=str(uuid.uuid4()),
         email=str(payload.email),
         display_name=payload.display_name,
+        phone=payload.phone,
         role=role,
+        password_hash=hash_password(payload.password),
     )
-    db.add(new_user)
+    db.add(user)
+    db.flush()
+
+    # Owners get a pending subscription record automatically
+    if role == M.UserRole.owner:
+        db.add(M.Subscription(user_id=user.id))
+
     db.commit()
-    db.refresh(new_user)
-    return new_user
+    db.refresh(user)
+    token = create_access_token(user.id)
+    return {"access_token": token, "token_type": "bearer", "user": user}
+
+
+@app.post("/auth/login", response_model=S.TokenOut)
+def login(payload: S.LoginRequest, db: Session = Depends(get_db)):
+    """Verify email + password and return a JWT token."""
+    user = db.query(M.User).filter(M.User.email == str(payload.email)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Admin override
+    if user.email == ADMIN_EMAIL and user.role != M.UserRole.admin:
+        user.role = M.UserRole.admin
+    user.last_login = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+    token = create_access_token(user.id)
+    return {"access_token": token, "token_type": "bearer", "user": user}
 
 
 # ═══════════════════════════════════════════════════════════════════
 # USERS
 # ═══════════════════════════════════════════════════════════════════
-
-@app.post("/users", response_model=S.UserOut, status_code=201)
-def create_user(payload: S.UserCreate, db: Session = Depends(get_db)):
-    if db.query(M.User).filter(M.User.uid == payload.uid).first():
-        raise HTTPException(400, "User already exists")
-    if db.query(M.User).filter(M.User.email == str(payload.email)).first():
-        raise HTTPException(400, "Email already registered")
-    user = M.User(**payload.model_dump())
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
 
 @app.get("/users/me", response_model=S.UserOut)
 def get_me(current_user: M.User = Depends(get_current_user)):
@@ -131,7 +209,6 @@ def update_me(
         if field == "role" and current_user.role != M.UserRole.admin:
             continue
         setattr(current_user, field, value)
-    current_user.last_login = datetime.utcnow()
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -163,6 +240,66 @@ def change_user_role(
 
 
 # ═══════════════════════════════════════════════════════════════════
+# SUBSCRIPTIONS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/subscriptions/me", response_model=S.SubscriptionOut)
+def get_my_subscription(
+    current_user: M.User = Depends(require_role(M.UserRole.owner, M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    sub = db.query(M.Subscription).filter(M.Subscription.user_id == current_user.id).first()
+    if not sub:
+        raise HTTPException(404, "No subscription found")
+    # Auto-expire if past expiry
+    if sub.expires_at and sub.expires_at < datetime.utcnow() and sub.status == M.SubscriptionStatus.active:
+        sub.status = M.SubscriptionStatus.expired
+        db.commit()
+        db.refresh(sub)
+    return sub
+
+
+@app.post("/subscriptions/activate", response_model=S.SubscriptionOut)
+def activate_subscription(
+    current_user: M.User = Depends(require_role(M.UserRole.owner, M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    """
+    Mock payment: activates or renews the owner subscription for 30 days (₹10).
+    In production, integrate a real payment gateway before calling this.
+    """
+    sub = db.query(M.Subscription).filter(M.Subscription.user_id == current_user.id).first()
+    now = datetime.utcnow()
+    if sub:
+        # Renew: extend from now (or existing expiry if still active)
+        base = sub.expires_at if (sub.expires_at and sub.expires_at > now) else now
+        sub.starts_at   = now
+        sub.expires_at  = base + timedelta(days=30)
+        sub.status      = M.SubscriptionStatus.active
+        sub.plan_amount = SUBSCRIPTION_AMOUNT
+    else:
+        sub = M.Subscription(
+            user_id=current_user.id,
+            plan_amount=SUBSCRIPTION_AMOUNT,
+            status=M.SubscriptionStatus.active,
+            starts_at=now,
+            expires_at=now + timedelta(days=30),
+        )
+        db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+@app.get("/subscriptions", response_model=List[S.SubscriptionOut])
+def list_subscriptions(
+    _: M.User = Depends(require_role(M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    return db.query(M.Subscription).order_by(M.Subscription.created_at.desc()).all()
+
+
+# ═══════════════════════════════════════════════════════════════════
 # SHOPS
 # ═══════════════════════════════════════════════════════════════════
 
@@ -174,14 +311,15 @@ def list_shops(
     search:   Optional[str]            = None,
     page:     int = Query(1, ge=1),
     size:     int = Query(20, ge=1, le=500),
-    current_user: M.User = Depends(get_current_user),
+    current_user: Optional[M.User] = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     q = db.query(M.Shop)
-    if current_user.role != M.UserRole.admin:
-        q = q.filter(M.Shop.status == M.ShopStatus.approved)
-    elif status:
+    is_admin = current_user and current_user.role == M.UserRole.admin
+    if is_admin and status:
         q = q.filter(M.Shop.status == status)
+    elif not is_admin:
+        q = q.filter(M.Shop.status == M.ShopStatus.approved)
     if location:
         q = q.filter(M.Shop.location_name == location)
     if category:
@@ -200,6 +338,8 @@ def create_shop(
     current_user: M.User = Depends(require_role(M.UserRole.owner, M.UserRole.admin)),
     db: Session = Depends(get_db),
 ):
+    if current_user.role == M.UserRole.owner:
+        _check_subscription(current_user, db)
     shop = M.Shop(owner_id=current_user.id, **payload.model_dump())
     db.add(shop)
     db.commit()
@@ -208,7 +348,7 @@ def create_shop(
 
 
 @app.get("/shops/{shop_id}", response_model=S.ShopOut)
-def get_shop(shop_id: int, _: M.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_shop(shop_id: int, db: Session = Depends(get_db)):
     shop = db.get(M.Shop, shop_id)
     if not shop:
         raise HTTPException(404, "Shop not found")
@@ -284,7 +424,6 @@ def get_my_shops(
 def list_products(
     shop_id: int,
     active_only: bool = True,
-    _: M.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = db.query(M.Product).filter(M.Product.shop_id == shop_id)
@@ -467,12 +606,14 @@ def platform_analytics(
         .scalar()
         or 0.0
     )
+    active_subs = db.query(M.Subscription).filter(M.Subscription.status == M.SubscriptionStatus.active).count()
     return {
         "total_shops":       db.query(M.Shop).count(),
         "approved_shops":    db.query(M.Shop).filter(M.Shop.status == M.ShopStatus.approved).count(),
         "total_users":       db.query(M.User).count(),
         "total_orders":      db.query(M.Order).count(),
         "delivered_revenue": round(delivered_rev, 2),
+        "active_subscriptions": active_subs,
     }
 
 
@@ -509,7 +650,7 @@ def shop_analytics(
     }
 
 
-# ── Private helpers ─────────────────────────────────────────────────────────
+# ── Private helpers ──────────────────────────────────────────────────────────
 
 def _get_product_or_404(db, shop_id, product_id):
     p = (
