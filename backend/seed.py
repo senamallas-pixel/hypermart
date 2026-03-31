@@ -25,7 +25,7 @@ from models import (
     OrderStatus, PaymentStatus, SubscriptionStatus,
 )
 
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

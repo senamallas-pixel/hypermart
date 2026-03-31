@@ -6,19 +6,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
-  Search, Package, ChevronRight, CheckCircle2,
+  Search, Package, ChevronRight, CheckCircle2, Eye, EyeOff, Phone,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
-import { login, placeOrder } from './api/client';
+import { login, register, placeOrder } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';
 
 // ── Constants ─────────────────────────────────────────────────────
 const DEMO = [
-  { label: 'Customer',   email: 'customer1@example.com', role: 'customer' },
-  { label: 'Shop Owner', email: 'anand@example.com',     role: 'owner'    },
-  { label: 'Admin',      email: 'senamallas@gmail.com',  role: 'admin'    },
+  { label: 'Customer',   email: 'ravi@example.com',   password: 'Customer@123', role: 'customer' },
+  { label: 'Shop Owner', email: 'anand@example.com',  password: 'Owner@123',    role: 'owner'    },
+  { label: 'Admin',      email: 'senamallas@gmail.com', password: 'Admin@123',  role: 'admin'    },
 ];
 
 const LOCATIONS = ['Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
@@ -45,161 +45,161 @@ function RequireAuth({ children, roles }) {
   return children;
 }
 
-// ── Sign In ────────────────────────────────────────────────────────
+// ── Sign In / Register ────────────────────────────────────────────
 function SignIn() {
   const { signIn, currentUser, authLoading } = useApp();
   const navigate = useNavigate();
-  const [email, setEmail]     = useState('');
+  const [tab, setTab]         = useState('login');   // 'login' | 'register'
+  const [showPw, setShowPw]   = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
+  // Login fields
+  const [email, setEmail]     = useState('');
+  const [password, setPassword] = useState('');
+
+  // Register fields
+  const [regName, setRegName]       = useState('');
+  const [regEmail, setRegEmail]     = useState('');
+  const [regPhone, setRegPhone]     = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regRole, setRegRole]       = useState('customer');
+
   if (!authLoading && currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
 
-  const handleSignIn = async (emailOverride) => {
-    const target = (emailOverride || email).trim().toLowerCase();
-    if (!target) { setError('Please enter your email.'); return; }
+  const handleLogin = async (emailOvr, pwOvr) => {
+    const e = (emailOvr || email).trim().toLowerCase();
+    const p  = pwOvr || password;
+    if (!e || !p) { setError('Email and password are required.'); return; }
     setLoading(true); setError('');
     try {
-      const res = await login({ email: target });
-      signIn(res.data);
-      navigate(roleHome(res.data.role), { replace: true });
+      const res = await login({ email: e, password: p });
+      signIn(res.data.access_token, res.data.user);
+      navigate(roleHome(res.data.user.role), { replace: true });
     } catch (err) {
-      if (err.response?.status === 404) {
-        navigate(`/role-selection?email=${encodeURIComponent(target)}`, { replace: true });
-      } else {
-        setError(err.response?.data?.detail || 'Login failed. Try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
+      setError(err.response?.data?.detail || 'Login failed. Check credentials.');
+    } finally { setLoading(false); }
   };
+
+  const handleRegister = async () => {
+    if (!regName || !regEmail || !regPassword) { setError('Name, email and password are required.'); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await register({ display_name: regName.trim(), email: regEmail.trim().toLowerCase(), phone: regPhone.trim() || undefined, password: regPassword, role: regRole });
+      signIn(res.data.access_token, res.data.user);
+      navigate(roleHome(res.data.user.role), { replace: true });
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Registration failed. Try again.');
+    } finally { setLoading(false); }
+  };
+
+  const ROLES = [
+    { key: 'customer', label: 'Customer',   desc: 'Browse shops & order' },
+    { key: 'owner',    label: 'Shop Owner', desc: 'List & manage your shop' },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F5F5F0] via-[#F0F0E8] to-[#E8E8DC] flex items-center justify-center px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-sm">
         <div className="bg-white rounded-3xl shadow-2xl shadow-[#5A5A40]/10 overflow-hidden">
-          <div className="bg-[#5A5A40] px-8 pt-10 pb-8">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-5">
+          {/* Header */}
+          <div className="bg-[#5A5A40] px-8 pt-10 pb-6">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
               <Store size={28} className="text-white" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-white mb-1">HyperMart</h1>
-            <p className="text-white/60 text-sm">Your neighbourhood marketplace</p>
+            <h1 className="font-serif text-3xl font-bold text-white mb-0.5">HyperMart</h1>
+            <p className="text-white/55 text-sm">Your neighbourhood marketplace</p>
           </div>
-          <div className="px-8 py-8">
-            <h2 className="font-serif text-xl font-bold mb-1">Welcome back</h2>
-            <p className="text-sm text-[#1A1A1A]/40 mb-6">Sign in to continue shopping</p>
-            <div className="space-y-3">
-              <input
-                className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
-                placeholder="Email address"
-                type="email"
-                value={email}
-                onChange={e => { setEmail(e.target.value); setError(''); }}
-                onKeyDown={e => e.key === 'Enter' && handleSignIn()}
-                autoComplete="email"
-              />
-              {error && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-xs font-semibold text-red-500 px-1">{error}</motion.p>}
-              <button
-                onClick={() => handleSignIn()}
-                disabled={loading}
-                className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20"
-              >
-                {loading ? <><Loader2 size={16} className="animate-spin" /> Signing in&hellip;</> : <>Continue <ArrowRight size={16} /></>}
+
+          {/* Tabs */}
+          <div className="flex border-b border-[#1A1A1A]/6">
+            {['login', 'register'].map(t => (
+              <button key={t} onClick={() => { setTab(t); setError(''); }}
+                className={`flex-1 py-3.5 text-xs font-bold uppercase tracking-widest transition-all ${tab === t ? 'text-[#5A5A40] border-b-2 border-[#5A5A40] bg-[#5A5A40]/3' : 'text-[#1A1A1A]/35 hover:text-[#1A1A1A]/60'}`}>
+                {t === 'login' ? 'Sign In' : 'Register'}
               </button>
-            </div>
-            <div className="flex items-center gap-3 my-6">
-              <div className="flex-1 h-px bg-[#1A1A1A]/8" />
-              <span className="text-[10px] font-bold text-[#1A1A1A]/25 uppercase tracking-widest">Quick demo</span>
-              <div className="flex-1 h-px bg-[#1A1A1A]/8" />
-            </div>
-            <div className="flex gap-2">
-              {DEMO.map(d => (
-                <button key={d.role} onClick={() => handleSignIn(d.email)} disabled={loading}
-                  className="flex-1 flex flex-col items-center gap-1.5 bg-[#F5F5F0] hover:bg-[#5A5A40]/8 border border-[#1A1A1A]/6 hover:border-[#5A5A40]/25 rounded-2xl px-2 py-3 transition-all disabled:opacity-50">
-                  <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 flex items-center justify-center">
-                    <span className="text-xs font-bold text-[#5A5A40]">{d.label[0]}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-[#1A1A1A]/60 truncate w-full text-center">{d.label}</span>
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
-        </div>
-        <p className="text-center text-[10px] text-[#1A1A1A]/30 mt-5">New here? Just enter your email to get started.</p>
-      </motion.div>
-    </div>
-  );
-}
 
-// ── Role Selection ─────────────────────────────────────────────────
-function RoleSelection() {
-  const { signIn } = useApp();
-  const navigate   = useNavigate();
-  const location   = useLocation();
-  const email      = new URLSearchParams(location.search).get('email') || '';
-  const [name, setName]       = useState('');
-  const [role, setRole]       = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
-
-  const handleCreate = async () => {
-    if (!name.trim()) { setError('Please enter your name.'); return; }
-    if (!role)        { setError('Please choose a role.'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await login({ email, display_name: name.trim(), role });
-      signIn(res.data);
-      navigate(roleHome(res.data.role), { replace: true });
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const ROLES = [
-    { key: 'customer', icon: ShoppingBag, title: 'Shop as Customer', desc: 'Browse local shops & order essentials.' },
-    { key: 'owner',    icon: Store,        title: 'Register my Shop', desc: 'List your shop, manage products & orders.' },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F5F5F0] to-[#E8E8DC] flex items-center justify-center px-4 py-8">
-      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="bg-white rounded-3xl shadow-2xl shadow-[#5A5A40]/10 overflow-hidden">
-          <div className="bg-[#5A5A40] px-8 pt-10 pb-6">
-            <button onClick={() => navigate('/')} className="text-white/60 text-sm font-bold flex items-center gap-1 mb-6 hover:text-white transition-colors">
-              &#8592; Back
-            </button>
-            <h2 className="font-serif text-2xl font-bold text-white mb-1">Create account</h2>
-            <p className="text-white/60 text-sm truncate">{email}</p>
-          </div>
-          <div className="px-8 py-8 space-y-4">
-            <input
-              className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
-              placeholder="Your full name *"
-              value={name}
-              onChange={e => { setName(e.target.value); setError(''); }}
-            />
-            <div className="space-y-3">
-              {ROLES.map(r => (
-                <button key={r.key} onClick={() => { setRole(r.key); setError(''); }}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${role === r.key ? 'border-[#5A5A40] bg-[#5A5A40]/5 shadow-sm' : 'border-[#1A1A1A]/8 hover:border-[#5A5A40]/30'}`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${role === r.key ? 'bg-[#5A5A40] text-white' : 'bg-[#F5F5F0] text-[#5A5A40]'}`}>
-                    <r.icon size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{r.title}</p>
-                    <p className="text-[11px] text-[#1A1A1A]/45 mt-0.5">{r.desc}</p>
-                  </div>
-                  {role === r.key && <CheckCircle2 size={18} className="text-[#5A5A40] shrink-0" />}
+          <div className="px-8 py-7 space-y-3">
+            {tab === 'login' ? (
+              <>
+                <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                  placeholder="Email address" type="email" value={email} autoComplete="email"
+                  onChange={e => { setEmail(e.target.value); setError(''); }} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+                <div className="relative">
+                  <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 pr-11 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                    placeholder="Password" type={showPw ? 'text' : 'password'} value={password} autoComplete="current-password"
+                    onChange={e => { setPassword(e.target.value); setError(''); }} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+                  <button onClick={() => setShowPw(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 hover:text-[#5A5A40] transition-colors">
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-semibold text-red-500 px-1">{error}</motion.p>}
+                <button onClick={() => handleLogin()} disabled={loading}
+                  className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Signing in&hellip;</> : <>Sign In <ArrowRight size={16} /></>}
                 </button>
-              ))}
-            </div>
-            {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-semibold text-red-500 px-1">{error}</motion.p>}
-            <button onClick={handleCreate} disabled={loading}
-              className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
-              {loading ? <><Loader2 size={16} className="animate-spin" /> Creating&hellip;</> : <>Get Started <ArrowRight size={16} /></>}
-            </button>
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-[#1A1A1A]/8" /><span className="text-[10px] font-bold text-[#1A1A1A]/25 uppercase tracking-widest">Quick demo</span><div className="flex-1 h-px bg-[#1A1A1A]/8" />
+                </div>
+                <div className="flex gap-2">
+                  {DEMO.map(d => (
+                    <button key={d.role} onClick={() => handleLogin(d.email, d.password)} disabled={loading}
+                      className="flex-1 flex flex-col items-center gap-1.5 bg-[#F5F5F0] hover:bg-[#5A5A40]/8 border border-[#1A1A1A]/6 hover:border-[#5A5A40]/25 rounded-2xl px-2 py-3 transition-all disabled:opacity-50">
+                      <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 flex items-center justify-center">
+                        <span className="text-xs font-bold text-[#5A5A40]">{d.label[0]}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#1A1A1A]/60 truncate w-full text-center">{d.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                  placeholder="Full name *" value={regName} onChange={e => { setRegName(e.target.value); setError(''); }} />
+                <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                  placeholder="Email address *" type="email" value={regEmail} autoComplete="email"
+                  onChange={e => { setRegEmail(e.target.value); setError(''); }} />
+                <div className="relative">
+                  <Phone size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+                  <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl pl-10 pr-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                    placeholder="Phone number (optional)" type="tel" value={regPhone}
+                    onChange={e => { setRegPhone(e.target.value); setError(''); }} />
+                </div>
+                <div className="relative">
+                  <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 pr-11 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                    placeholder="Password (min 6 chars) *" type={showPw ? 'text' : 'password'} value={regPassword} autoComplete="new-password"
+                    onChange={e => { setRegPassword(e.target.value); setError(''); }} />
+                  <button onClick={() => setShowPw(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 hover:text-[#5A5A40] transition-colors">
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {/* Role selector */}
+                <div className="flex gap-2 pt-0.5">
+                  {ROLES.map(r => (
+                    <button key={r.key} onClick={() => setRegRole(r.key)}
+                      className={`flex-1 p-3 rounded-2xl border-2 text-left transition-all ${regRole === r.key ? 'border-[#5A5A40] bg-[#5A5A40]/5' : 'border-[#1A1A1A]/8 hover:border-[#5A5A40]/25'}`}>
+                      <p className="font-bold text-xs">{r.label}</p>
+                      <p className="text-[10px] text-[#1A1A1A]/40 mt-0.5">{r.desc}</p>
+                      {regRole === r.key && <div className="w-1.5 h-1.5 rounded-full bg-[#5A5A40] mt-1.5" />}
+                    </button>
+                  ))}
+                </div>
+                {regRole === 'owner' && (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2.5">
+                    <span className="text-amber-500 text-xs font-bold mt-0.5">&#8377;</span>
+                    <p className="text-xs text-amber-700"><span className="font-bold">Shop Owner Subscription: &#8377;10/month</span> — required to create and manage shops. Activate after registration.</p>
+                  </div>
+                )}
+                {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-semibold text-red-500 px-1">{error}</motion.p>}
+                <button onClick={handleRegister} disabled={loading}
+                  className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Creating account&hellip;</> : <>Create Account <ArrowRight size={16} /></>}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </motion.div>
@@ -278,7 +278,7 @@ function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isAuth = location.pathname === '/' || location.pathname === '/role-selection';
+  const isAuth = location.pathname === '/';
   if (isAuth) return null;
 
   const isMarketplace = location.pathname === '/marketplace';
@@ -504,9 +504,8 @@ function AppShell() {
       <TopNav />
       <main>
         <Routes>
-          <Route path="/"               element={<SignIn />} />
-          <Route path="/role-selection" element={<RoleSelection />} />
-          <Route path="/marketplace"    element={<Marketplace />} />
+          <Route path="/"            element={<SignIn />} />
+          <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/owner" element={<RequireAuth roles={['owner','admin']}><OwnerDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><AdminPanel /></RequireAuth>} />
           <Route path="/cart"  element={<RequireAuth roles={['customer']}><CartPage /></RequireAuth>} />

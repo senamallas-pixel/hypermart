@@ -53,7 +53,7 @@ TOKEN_EXPIRY  = timedelta(days=30)
 ADMIN_EMAIL   = "senamallas@gmail.com"
 SUBSCRIPTION_AMOUNT = 10.0  # ₹10 per month
 
-pwd_ctx  = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx  = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 

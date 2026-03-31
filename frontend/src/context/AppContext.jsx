@@ -73,28 +73,28 @@ export function AppProvider({ children }) {
     setActiveLocationState(loc);
   }, []);
 
-  // Restore session from stored UID on mount
+  // Restore session from stored JWT token on mount
   useEffect(() => {
-    const uid = localStorage.getItem('hypermart_uid');
-    if (!uid) {
+    const token = localStorage.getItem('hypermart_token');
+    if (!token) {
       authDispatch({ type: 'CLEAR_USER' });
       return;
     }
     getMe()
       .then(res => authDispatch({ type: 'SET_USER', user: res.data }))
       .catch(() => {
-        localStorage.removeItem('hypermart_uid');
+        localStorage.removeItem('hypermart_token');
         authDispatch({ type: 'CLEAR_USER' });
       });
   }, []);
 
-  const signIn = useCallback((userData) => {
-    localStorage.setItem('hypermart_uid', userData.uid);
+  const signIn = useCallback((token, userData) => {
+    localStorage.setItem('hypermart_token', token);
     authDispatch({ type: 'SET_USER', user: userData });
   }, []);
 
   const signOut = useCallback(() => {
-    localStorage.removeItem('hypermart_uid');
+    localStorage.removeItem('hypermart_token');
     authDispatch({ type: 'CLEAR_USER' });
     cartDispatch({ type: 'CLEAR' });
   }, []);
