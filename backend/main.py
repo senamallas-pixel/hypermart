@@ -173,7 +173,7 @@ def list_shops(
     status:   Optional[M.ShopStatus]   = None,
     search:   Optional[str]            = None,
     page:     int = Query(1, ge=1),
-    size:     int = Query(20, ge=1, le=100),
+    size:     int = Query(20, ge=1, le=500),
     current_user: M.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

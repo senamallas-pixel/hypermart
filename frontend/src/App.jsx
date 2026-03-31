@@ -510,7 +510,7 @@ function CartPage() {
 // ── App Shell ─────────────────────────────────────────────────────
 function AppShell() {
   return (
-    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans">
+    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans overflow-x-hidden">
       <TopNav />
       <Routes>
         <Route path="/"               element={<SignIn />} />
