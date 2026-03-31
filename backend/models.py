@@ -66,23 +66,31 @@ class PaymentStatus(str, PyEnum):
     paid    = "paid"
 
 
+class SubscriptionStatus(str, PyEnum):
+    pending = "pending"
+    active  = "active"
+    expired = "expired"
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
 
-    id           = Column(Integer, primary_key=True, autoincrement=True)
-    uid          = Column(String(128), unique=True, nullable=False, index=True)
-    email        = Column(String(255), unique=True, nullable=False, index=True)
-    display_name = Column(String(255), nullable=False)
-    photo_url    = Column(String(1024), nullable=True)
-    role         = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
-    phone        = Column(String(20), nullable=True)
-    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_login   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    uid           = Column(String(128), unique=True, nullable=False, index=True)
+    email         = Column(String(255), unique=True, nullable=False, index=True)
+    display_name  = Column(String(255), nullable=False)
+    photo_url     = Column(String(1024), nullable=True)
+    role          = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
+    phone         = Column(String(20), nullable=True)
+    password_hash = Column(String(256), nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_login    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    shops  = relationship("Shop",  back_populates="owner",    cascade="all, delete-orphan")
-    orders = relationship("Order", back_populates="customer", cascade="all, delete-orphan")
+    shops        = relationship("Shop",         back_populates="owner",    cascade="all, delete-orphan")
+    orders       = relationship("Order",        back_populates="customer", cascade="all, delete-orphan")
+    subscription = relationship("Subscription", back_populates="user",     uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.email} [{self.role}]>"
@@ -177,3 +185,20 @@ class OrderItem(Base):
 
     def __repr__(self):
         return f"<OrderItem {self.name} x{self.quantity}>"
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    user_id      = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    plan_amount  = Column(Float, nullable=False, default=10.0)
+    status       = Column(Enum(SubscriptionStatus), nullable=False, default=SubscriptionStatus.pending)
+    starts_at    = Column(DateTime, nullable=True)
+    expires_at   = Column(DateTime, nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="subscription")
+
+    def __repr__(self):
+        return f"<Subscription user={self.user_id} status={self.status}>"

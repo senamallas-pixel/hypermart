@@ -7,7 +7,7 @@ from typing import Optional, List, ClassVar, Dict
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from models import UserRole, ShopStatus, ShopCategory, ShopLocation
-from models import ProductStatus, OrderStatus, PaymentStatus
+from models import ProductStatus, OrderStatus, PaymentStatus, SubscriptionStatus
 
 
 class OrmBase(BaseModel):
@@ -46,10 +46,37 @@ class UserOut(OrmBase):
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-class LoginRequest(BaseModel):
+class RegisterRequest(BaseModel):
     email:        EmailStr
-    display_name: Optional[str] = None
-    role:         Optional[UserRole] = None
+    password:     str
+    display_name: str
+    phone:        Optional[str] = None
+    role:         UserRole      = UserRole.customer
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v
+
+    @field_validator("display_name")
+    @classmethod
+    def name_min_length(cls, v: str) -> str:
+        if len(v.strip()) < 2:
+            raise ValueError("Name must be at least 2 characters")
+        return v.strip()
+
+
+class LoginRequest(BaseModel):
+    email:    EmailStr
+    password: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+    user:         UserOut
 
 
 # ── Shop ──────────────────────────────────────────────────────────────────────
@@ -266,3 +293,15 @@ class PaginatedOrders(BaseModel):
     total: int
     page:  int
     size:  int
+
+
+# ── Subscription ──────────────────────────────────────────────────────────────
+
+class SubscriptionOut(OrmBase):
+    id:          int
+    user_id:     int
+    plan_amount: float
+    status:      SubscriptionStatus
+    starts_at:   Optional[datetime]
+    expires_at:  Optional[datetime]
+    created_at:  datetime
