@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { login } from './api/client';
+import { placeOrder } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';
@@ -352,14 +353,14 @@ function BottomNav() {
 function TopNav() {
   const { currentUser } = useApp();
   const location = useLocation();
-  const isAuth = location.pathname === '/' || location.pathname === '/role-selection';
-  if (isAuth || !currentUser) return null;
-
   const LOCATIONS = ['Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
   const [loc, setLoc] = useState(localStorage.getItem('hm_location') || LOCATIONS[0]);
   const [open, setOpen] = useState(false);
 
   const handleLoc = (l) => { setLoc(l); localStorage.setItem('hm_location', l); setOpen(false); };
+
+  const isAuth = location.pathname === '/' || location.pathname === '/role-selection';
+  if (isAuth || !currentUser) return null;
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-[#1A1A1A]/5">
@@ -401,7 +402,6 @@ function TopNav() {
 function CartPage() {
   const { cart, cartTotal, updateQuantity, clearCart, currentUser } = useApp();
   const navigate = useNavigate();
-  const { placeOrder } = require('./api/client');
   const [placing, setPlacing] = useState(false);
 
   const handlePlace = async () => {
