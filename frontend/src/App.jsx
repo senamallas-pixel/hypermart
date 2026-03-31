@@ -5,7 +5,7 @@ import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'r
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
-  LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
+  LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight, Search,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { login } from './api/client';
@@ -323,7 +323,7 @@ function BottomNav() {
     CUSTOMER_TABS;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#1A1A1A]/5 safe-bottom">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#1A1A1A]/5 safe-bottom sm:hidden">
       <div className={`grid h-16 px-4 ${tabs.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {tabs.map(tab => {
           const active = location.pathname === tab.path || (tab.path !== '/' && location.pathname.startsWith(tab.path));
@@ -350,51 +350,79 @@ function BottomNav() {
 }
 
 // ── Navbar (Top) ──────────────────────────────────────────────────
-function TopNav() {
-  const { currentUser } = useApp();
-  const location = useLocation();
-  const LOCATIONS = ['Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
-  const [loc, setLoc] = useState(localStorage.getItem('hm_location') || LOCATIONS[0]);
-  const [open, setOpen] = useState(false);
+const LOCATIONS = ['Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
 
-  const handleLoc = (l) => { setLoc(l); localStorage.setItem('hm_location', l); setOpen(false); };
+function TopNav() {
+  const { currentUser, signOut, search, setSearch, activeLocation, setActiveLocation } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const isAuth = location.pathname === '/' || location.pathname === '/role-selection';
   if (isAuth || !currentUser) return null;
 
+  const isMarketplace = location.pathname === '/marketplace';
+  const handleSignOut = () => { signOut(); navigate('/'); };
+
   return (
-    <div className="sticky top-0 z-50 bg-white border-b border-[#1A1A1A]/5">
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white font-serif font-bold text-sm">H</div>
-          <span className="font-serif font-bold text-lg hidden sm:block">HyperMart</span>
+    <header className="sticky top-0 z-50 bg-white border-b border-[#1A1A1A]/5 h-16 flex items-center">
+      <div className="max-w-7xl mx-auto w-full px-4 flex items-center justify-between gap-4">
+        {/* Logo */}
+        <div className="flex items-center gap-2 cursor-pointer shrink-0" onClick={() => navigate(roleHome(currentUser.role))}>
+          <div className="w-8 h-8 bg-[#5A5A40] rounded-full flex items-center justify-center text-white">
+            <Store size={18} />
+          </div>
+          <h1 className="font-serif text-xl font-bold tracking-tight hidden sm:block">HyperMart</h1>
         </div>
-        {currentUser.role === 'customer' && (
-          <div className="relative">
-            <button onClick={() => setOpen(v => !v)}
-              className="flex items-center gap-2 px-3 py-2 bg-[#F5F5F0] rounded-xl text-xs font-bold border border-[#1A1A1A]/5 hover:bg-[#5A5A40]/5 transition-all">
-              <MapPin size={12} className="text-[#5A5A40]" />
-              {loc}
-              <ChevronDown size={12} className="text-[#1A1A1A]/40" />
-            </button>
-            <AnimatePresence>
-              {open && (
-                <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                  className="absolute right-0 mt-2 bg-white border border-[#1A1A1A]/10 rounded-2xl shadow-xl z-50 overflow-hidden min-w-[160px]">
-                  {LOCATIONS.map(l => (
-                    <button key={l} onClick={() => handleLoc(l)}
-                      className={`w-full text-left px-4 py-3 text-xs font-medium hover:bg-[#F5F5F0] transition-colors ${l === loc ? 'font-bold text-[#5A5A40]' : 'text-[#1A1A1A]/70'}`}>{l}</button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
+
+        {/* Search bar — marketplace only */}
+        {isMarketplace && (
+          <div className="flex-1 max-w-md relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30" size={16} />
+            <input
+              type="text"
+              placeholder="Search for shops or categories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-11 pr-4 py-2 bg-[#F5F5F0] rounded-xl focus:outline-none focus:ring-2 ring-[#5A5A40]/10 transition-all text-sm"
+            />
           </div>
         )}
-        {currentUser.role !== 'customer' && (
-          <span className="text-sm text-[#1A1A1A]/40 font-medium hidden sm:block">{currentUser.display_name}</span>
-        )}
+
+        <div className="flex items-center gap-2 md:gap-4 shrink-0">
+          {/* Location pill */}
+          <div className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 bg-[#F5F5F0] rounded-full text-[#5A5A40] border border-[#1A1A1A]/5 hover:bg-[#E5E5E0] transition-all group">
+            <MapPin size={16} className="group-hover:scale-110 transition-transform" />
+            <div className="relative flex items-center">
+              <select
+                value={activeLocation}
+                onChange={(e) => setActiveLocation(e.target.value)}
+                className="appearance-none bg-transparent pr-6 text-[10px] md:text-xs font-bold uppercase tracking-widest focus:outline-none cursor-pointer max-w-[100px] md:max-w-none truncate z-10"
+              >
+                {LOCATIONS.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-0 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* User info + logout */}
+          <div className="flex items-center gap-3">
+            <div className="hidden lg:block text-right">
+              <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest">{currentUser.role}</p>
+              <p className="text-xs font-bold truncate max-w-[100px]">{currentUser.display_name}</p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="p-2 hover:bg-[#F5F5F0] rounded-full transition-colors text-[#5A5A40]"
+              title="Sign out"
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -482,7 +510,7 @@ function CartPage() {
 // ── App Shell ─────────────────────────────────────────────────────
 function AppShell() {
   return (
-    <div className="min-h-screen bg-[#F5F5F0]">
+    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans">
       <TopNav />
       <Routes>
         <Route path="/"               element={<SignIn />} />

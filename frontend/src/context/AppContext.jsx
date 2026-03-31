@@ -1,7 +1,7 @@
 // src/context/AppContext.jsx
 // Global Auth + Cart state (replaces Firebase Auth + Firestore listeners)
 
-import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import { createContext, useContext, useReducer, useCallback, useEffect, useState } from 'react';
 import { getMe } from '../api/client';
 
 // ── Cart ──────────────────────────────────────────────────────────
@@ -64,6 +64,14 @@ export function AppProvider({ children }) {
     error: null,
   });
   const [cart, cartDispatch] = useReducer(cartReducer, cartInitial);
+  const [search, setSearch] = useState('');
+  const [activeLocation, setActiveLocationState] = useState(
+    localStorage.getItem('hm_location') || 'Green Valley'
+  );
+  const setActiveLocation = useCallback((loc) => {
+    localStorage.setItem('hm_location', loc);
+    setActiveLocationState(loc);
+  }, []);
 
   // Restore session from stored UID on mount
   useEffect(() => {
@@ -112,6 +120,7 @@ export function AppProvider({ children }) {
       signIn, signOut,
       cart, cartItemCount, cartTotal,
       addToCart, removeFromCart, updateQuantity, clearCart,
+      search, setSearch, activeLocation, setActiveLocation,
     }}>
       {children}
     </AppContext.Provider>

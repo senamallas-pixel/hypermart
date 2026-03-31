@@ -364,10 +364,7 @@ function MyOrdersView({ onBack }) {
 // ── Main Marketplace ──────────────────────────────────────────────
 
 export default function Marketplace() {
-  const { currentUser } = useApp();
-  const savedLoc = localStorage.getItem('hm_location') || LOCATIONS[0];
-  const [location, setLocation]   = useState(savedLoc);
-  const [search, setSearch]       = useState('');
+  const { currentUser, search, setSearch, activeLocation, setActiveLocation } = useApp();
   const [shops, setShops]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
@@ -380,21 +377,17 @@ export default function Marketplace() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => {
-    localStorage.setItem('hm_location', location);
-  }, [location]);
-
   const fetchShops = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await listShops({ location, size: 100 });
+      const res = await listShops({ location: activeLocation, size: 100 });
       setShops(res.data.items);
     } catch {
       setError('Failed to load shops.');
     } finally {
       setLoading(false);
     }
-  }, [location]);
+  }, [activeLocation]);
 
   useEffect(() => { fetchShops(); }, [fetchShops]);
 
@@ -456,7 +449,7 @@ export default function Marketplace() {
                 <div className="flex justify-between items-end px-2">
                   <div>
                     <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">{cat}</h3>
-                    <p className="text-xs text-[#1A1A1A]/40 font-bold uppercase tracking-widest mt-1">Fresh from {location}</p>
+                    <p className="text-xs text-[#1A1A1A]/40 font-bold uppercase tracking-widest mt-1">Fresh from {activeLocation}</p>
                   </div>
                   {catShops.length > 0 && (
                     <button onClick={() => setSearch(cat)} className="text-[#5A5A40] text-sm font-bold uppercase tracking-widest flex items-center gap-1 hover:underline">
@@ -471,7 +464,7 @@ export default function Marketplace() {
                     ))
                   ) : (
                     <div className="flex-shrink-0 w-full h-32 flex items-center justify-center bg-[#F5F5F0]/50 rounded-3xl border border-dashed border-[#1A1A1A]/10 px-12">
-                      <p className="text-[#1A1A1A]/30 italic text-sm">No shops in {location} yet.</p>
+                      <p className="text-[#1A1A1A]/30 italic text-sm">No shops in {activeLocation} yet.</p>
                     </div>
                   )}
                 </div>
