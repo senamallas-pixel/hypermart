@@ -1,23 +1,24 @@
 // src/pages/OwnerDashboard.jsx
 // Shop owner portal — Analytics, Inventory, Orders, Billing
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package, ShoppingBag, TrendingUp, DollarSign, Plus, Search,
   Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight,
-  Truck, Store, AlertCircle, Loader2, BarChart2, Menu,
+  Truck, Store, AlertCircle, Loader2, BarChart2, Menu, Minus,
+  Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
 } from 'lucide-react';
 import {
   getMyShops, createShop, updateShop,
   listProducts, createProduct, updateProduct, deleteProduct,
   getShopOrders, updateOrderStatus,
-  getShopAnalytics,
+  getShopAnalytics, placeWalkinOrder,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
 
-const TABS      = ['Overview', 'Inventory', 'Orders'];
+const TABS      = ['Overview', 'Analytics', 'Billing', 'Inventory', 'Orders'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
 const LOCATIONS = ['Green Valley','Central Market','Food Plaza','Milk Lane','Old Town'];
 const SHOP_CATS = ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care','General'];
