@@ -22,6 +22,7 @@ const SCHEMA_SQL = `
     photo_url     TEXT,
     role          TEXT    NOT NULL DEFAULT 'customer',
     phone         TEXT,
+    address       TEXT,
     password_hash TEXT,
     created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_login    TEXT

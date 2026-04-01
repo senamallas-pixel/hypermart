@@ -21,10 +21,11 @@ export const login    = (data) => api.post("/auth/login",    data);
 
 // ── Users ─────────────────────────────────────────────────────────
 
-export const getMe      = ()         => api.get("/users/me");
-export const updateMe   = (data)     => api.patch("/users/me",        data);
-export const listUsers  = ()         => api.get("/users");
-export const changeRole = (id, role) => api.patch(`/users/${id}/role`, { role });
+export const getMe            = ()         => api.get("/users/me");
+export const updateMe         = (data)     => api.patch("/users/me",        data);
+export const changePassword   = (data)     => api.post("/users/me/change-password", data);
+export const listUsers        = ()         => api.get("/users");
+export const changeRole       = (id, role) => api.patch(`/users/${id}/role`, { role });
 
 // ── Subscriptions ─────────────────────────────────────────────────
 

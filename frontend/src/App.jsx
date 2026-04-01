@@ -7,10 +7,10 @@ import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
   Search, Package, ChevronRight, CheckCircle2, Eye, EyeOff, Phone,
-  XCircle, Clock, Truck,
+  XCircle, Clock, Truck, Edit3, Save, Lock, AlertCircle, Plus,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
-import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics } from './api/client';
+import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';

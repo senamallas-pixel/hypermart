@@ -153,6 +153,7 @@ function serializeUser(u) {
     photo_url:    u.photo_url || null,
     role:         u.role,
     phone:        u.phone || null,
+    address:      u.address || null,
     created_at:   u.created_at,
     last_login:   u.last_login || null,
   };
@@ -301,12 +302,13 @@ app.get("/users/me", requireAuth, (req, res) => {
 
 // PATCH /users/me
 app.patch("/users/me", requireAuth, (req, res) => {
-  const { display_name, photo_url, role, phone } = req.body;
+  const { display_name, photo_url, role, phone, address } = req.body;
   const u = req.user;
   const updates = {};
   if (display_name !== undefined) updates.display_name = display_name;
   if (photo_url    !== undefined) updates.photo_url    = photo_url;
   if (phone        !== undefined) updates.phone        = phone;
+  if (address      !== undefined) updates.address      = address;
   if (role !== undefined && u.role === "admin") updates.role = role;
 
   if (Object.keys(updates).length) {
@@ -315,6 +317,23 @@ app.patch("/users/me", requireAuth, (req, res) => {
   }
   const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(u.id);
   res.json(serializeUser(updated));
+});
+
+// POST /users/me/change-password
+app.post("/users/me/change-password", requireAuth, (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) {
+    return res.status(422).json({ detail: "current_password and new_password are required" });
+  }
+  if (new_password.length < 6) {
+    return res.status(422).json({ detail: "New password must be at least 6 characters" });
+  }
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  if (!user.password_hash || !verifyPassword(current_password, user.password_hash)) {
+    return res.status(401).json({ detail: "Current password is incorrect" });
+  }
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(new_password), user.id);
+  res.json({ message: "Password changed successfully" });
 });
 
 // GET /users  (admin only)
