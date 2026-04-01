@@ -15,6 +15,7 @@ import {
   getShopAnalytics,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
+import InvoiceModal from '../components/InvoiceModal';
 
 const TABS      = ['Overview', 'Inventory', 'Orders'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
@@ -172,6 +173,7 @@ function OrdersPanel({ shopId }) {
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -255,9 +257,16 @@ function OrdersPanel({ shopId }) {
                 )}
               </div>
             )}
+            <div className={`${transition ? 'mt-3 pt-3 border-t border-[#1A1A1A]/5' : ''}`}>
+              <button onClick={() => setInvoiceOrder(order)}
+                className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] hover:underline">
+                View Invoice
+              </button>
+            </div>
           </div>
         );
       })}
+      {invoiceOrder && <InvoiceModal order={invoiceOrder} shopView onClose={() => setInvoiceOrder(null)} />}
     </div>
   );
 }

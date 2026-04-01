@@ -7,7 +7,7 @@ import {
   ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, Clock,
   Search, Sparkles, TrendingUp,
 } from 'lucide-react';
-import { listShops, listProducts, placeOrder, getMyOrders } from '../api/client';
+import { listShops, listProducts, placeOrder } from '../api/client';
 import { useApp } from '../context/AppContext';
 
 const CATEGORIES = [
@@ -136,6 +136,7 @@ function ShopProductsView({ shop, onBack }) {
   const [placing, setPlacing]   = useState(false);
   const [toast, setToast]       = useState(null);
   const [activeFilter, setActiveFilter] = useState('All');
+  const [needsLogin, setNeedsLogin]     = useState(false);
 
   useEffect(() => {
     listProducts(shop.id)
@@ -167,7 +168,7 @@ function ShopProductsView({ shop, onBack }) {
   };
 
   const handlePlaceOrder = async () => {
-    if (!currentUser) { alert('Please log in to place an order.'); return; }
+    if (!currentUser) { setNeedsLogin(true); return; }
     setPlacing(true);
     try {
       await placeOrder({ shop_id: shop.id, items: shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })), delivery_address: 'Default Address' });
@@ -351,82 +352,33 @@ function ShopProductsView({ shop, onBack }) {
           </div>
         )}
       </AnimatePresence>
-    </motion.div>
-  );
-}
 
-// ── My Orders View ─────────────────────────────────────────────────
-function MyOrdersView({ onBack }) {
-  const [orders, setOrders]   = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getMyOrders()
-      .then(r => setOrders(r.data.items))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const STATUS = {
-    pending:          { cls: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500'   },
-    accepted:         { cls: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-500'    },
-    ready:            { cls: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500'  },
-    out_for_delivery: { cls: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500'  },
-    delivered:        { cls: 'bg-green-100 text-green-700',   dot: 'bg-green-500'   },
-    rejected:         { cls: 'bg-red-100 text-red-700',       dot: 'bg-red-500'     },
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="max-w-2xl mx-auto px-4 pb-28 pt-4 sm:pt-8">
-      <button onClick={onBack} className="flex items-center gap-2 text-[#5A5A40] font-bold text-xs uppercase tracking-widest mb-6 hover:gap-3 transition-all">
-        <ArrowLeft size={16} /> Back to Marketplace
-      </button>
-      <h2 className="font-serif text-2xl font-bold mb-6">My Orders</h2>
-
-      <div className="space-y-3">
-        {loading
-          ? Array(3).fill(0).map((_, i) => <div key={i} className="h-28 bg-white animate-pulse rounded-2xl" />)
-          : orders.length > 0
-            ? orders.map(order => {
-                const s = STATUS[order.status] || { cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' };
-                return (
-                  <div key={order.id} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-[#1A1A1A]/30 uppercase tracking-widest">#{order.id}</span>
-                          <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${s.cls}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                            {order.status.replace(/_/g, ' ')}
-                          </span>
-                        </div>
-                        <p className="font-bold text-sm">{order.shop_name}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-serif text-xl font-bold">&#8377;{order.total}</p>
-                        <p className="text-[9px] text-[#1A1A1A]/35 uppercase tracking-widest font-bold mt-0.5">
-                          {new Date(order.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="border-t border-[#1A1A1A]/5 pt-3 space-y-1">
-                      {order.items.map((item, i) => (
-                        <p key={i} className="text-xs text-[#1A1A1A]/50">{item.name} <span className="text-[#1A1A1A]/30">x {item.quantity}</span></p>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })
-            : (
-              <div className="py-20 text-center bg-white border border-[#1A1A1A]/5 rounded-3xl">
-                <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <ShoppingCart size={28} className="text-[#5A5A40]/25" />
-                </div>
-                <p className="text-[#1A1A1A]/30 italic text-sm">No orders yet.</p>
+      {/* Login Prompt Modal */}
+      <AnimatePresence>
+        {needsLogin && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={e => e.target === e.currentTarget && setNeedsLogin(false)}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setNeedsLogin(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+              <div className="w-16 h-16 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Store size={28} className="text-[#5A5A40]" />
               </div>
-            )
-        }
-      </div>
+              <h3 className="font-serif text-xl font-bold mb-2">Sign in to order</h3>
+              <p className="text-sm text-[#1A1A1A]/50 mb-6">Create an account or sign in to place your order.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setNeedsLogin(false)}
+                  className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0] transition-all">
+                  Cancel
+                </button>
+                <a href="#/login"
+                  className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-lg shadow-[#5A5A40]/20 text-center">
+                  Sign In
+                </a>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -458,7 +410,6 @@ export default function Marketplace() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [selectedShop, setSelectedShop] = useState(null);
-  const [showOrders, setShowOrders]     = useState(false);
   const [debounced, setDebounced]       = useState('');
 
   useEffect(() => {
@@ -489,7 +440,6 @@ export default function Marketplace() {
 
   const totalShops = Object.values(shopsByCategory).flat().length;
 
-  if (showOrders)  return <MyOrdersView onBack={() => setShowOrders(false)} />;
   if (selectedShop) return <ShopProductsView shop={selectedShop} onBack={() => setSelectedShop(null)} />;
 
   return (
@@ -612,18 +562,6 @@ export default function Marketplace() {
           </>
         )}
       </div>
-
-      {/* My Orders FAB */}
-      {currentUser?.role === 'customer' && (
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          onClick={() => setShowOrders(true)}
-          className="fixed bottom-20 sm:bottom-8 left-4 bg-white border border-[#1A1A1A]/10 text-[#5A5A40] px-4 py-3 rounded-2xl shadow-lg font-bold text-xs flex items-center gap-2 hover:shadow-xl hover:bg-[#F5F5F0] active:scale-95 transition-all z-40"
-        >
-          <CheckCircle2 size={15} /> My Orders
-        </motion.button>
-      )}
     </motion.div>
   );
 }

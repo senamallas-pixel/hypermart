@@ -6,7 +6,24 @@ import { getMe } from '../api/client';
 
 // ── Cart ──────────────────────────────────────────────────────────
 
+const CART_STORAGE_KEY = 'hypermart_cart';
+
 const cartInitial = { shopId: null, shopName: null, items: [] };
+
+function loadCart() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.items)) return parsed;
+    }
+  } catch {}
+  return cartInitial;
+}
+
+function saveCart(cart) {
+  try { localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart)); } catch {}
+}
 
 function cartReducer(state, action) {
   switch (action.type) {
@@ -63,7 +80,12 @@ export function AppProvider({ children }) {
     loading: true,
     error: null,
   });
-  const [cart, cartDispatch] = useReducer(cartReducer, cartInitial);
+  const [cart, cartDispatch] = useReducer(cartReducer, null, loadCart);
+
+  // Persist cart to localStorage on every change
+  useEffect(() => {
+    saveCart(cart);
+  }, [cart]);
   const [search, setSearch] = useState('');
   const [activeLocation, setActiveLocationState] = useState(
     localStorage.getItem('hm_location') || 'All'
@@ -96,7 +118,6 @@ export function AppProvider({ children }) {
   const signOut = useCallback(() => {
     localStorage.removeItem('hypermart_token');
     authDispatch({ type: 'CLEAR_USER' });
-    cartDispatch({ type: 'CLEAR' });
   }, []);
 
   const addToCart      = useCallback((shopId, shopName, item) =>

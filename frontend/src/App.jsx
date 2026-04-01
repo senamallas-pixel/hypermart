@@ -1,6 +1,6 @@
 ﻿// src/App.jsx — Root component: auth, nav, cart, shell
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -9,10 +9,11 @@ import {
   Search, Package, ChevronRight, CheckCircle2, Eye, EyeOff, Phone,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
-import { login, register, placeOrder } from './api/client';
+import { login, register, placeOrder, getMyOrders } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';
+import InvoiceModal   from './components/InvoiceModal';
 
 // ── Constants ─────────────────────────────────────────────────────
 const DEMO = [
@@ -40,7 +41,7 @@ function RequireAuth({ children, roles }) {
       </div>
     </div>
   );
-  if (!currentUser) return <Navigate to="/" replace />;
+  if (!currentUser) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(currentUser.role)) return <Navigate to={roleHome(currentUser.role)} replace />;
   return children;
 }
@@ -66,6 +67,11 @@ function SignIn() {
   const [regRole, setRegRole]       = useState('customer');
 
   if (!authLoading && currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
+  if (authLoading) return (
+    <div className="h-screen flex items-center justify-center bg-[#F5F5F0]">
+      <Loader2 size={20} className="animate-spin text-[#5A5A40]/40" />
+    </div>
+  );
 
   const handleLogin = async (emailOvr, pwOvr) => {
     const e = (emailOvr || email).trim().toLowerCase();
@@ -214,7 +220,7 @@ function Profile() {
   const [selLoc, setSelLoc] = useState(localStorage.getItem('hm_location') || LOCATIONS[0]);
 
   const handleLocationChange = loc => { setSelLoc(loc); localStorage.setItem('hm_location', loc); };
-  const handleSignOut = () => { signOut(); navigate('/', { replace: true }); };
+  const handleSignOut = () => { signOut(); navigate('/marketplace', { replace: true }); };
 
   const ROLE_BG = { admin: 'bg-purple-100 text-purple-700 border-purple-200', owner: 'bg-blue-100 text-blue-700 border-blue-200', customer: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
 
@@ -278,7 +284,7 @@ function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isAuth = location.pathname === '/';
+  const isAuth = location.pathname === '/login';
   if (isAuth) return null;
 
   const isMarketplace = location.pathname === '/marketplace';
@@ -327,7 +333,7 @@ function TopNav() {
               </button>
             </div>
           ) : (
-            <button onClick={() => navigate('/')}
+            <button onClick={() => navigate('/login')}
               className="bg-[#5A5A40] text-white px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] active:scale-95 transition-all shadow-sm">
               Login
             </button>
@@ -344,11 +350,16 @@ function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  if (!currentUser) return null;
-
+  const GUEST_TABS = [
+    { path: '/marketplace', icon: ShoppingBag,  label: 'Shop'    },
+    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
+    { path: '/orders',      icon: CheckCircle2,  label: 'Orders'  },
+    { path: '/login',       icon: User,          label: 'Login'   },
+  ];
   const CUSTOMER_TABS = [
     { path: '/marketplace', icon: ShoppingBag,  label: 'Shop'    },
     { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
+    { path: '/orders',      icon: CheckCircle2,  label: 'Orders'  },
     { path: '/profile',     icon: User,          label: 'Profile' },
   ];
   const OWNER_TABS = [
@@ -360,7 +371,7 @@ function BottomNav() {
     { path: '/profile', icon: User,     label: 'Profile' },
   ];
 
-  const tabs = currentUser.role === 'admin' ? ADMIN_TABS : currentUser.role === 'owner' ? OWNER_TABS : CUSTOMER_TABS;
+  const tabs = !currentUser ? GUEST_TABS : currentUser.role === 'admin' ? ADMIN_TABS : currentUser.role === 'owner' ? OWNER_TABS : CUSTOMER_TABS;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#1A1A1A]/8 safe-bottom sm:hidden z-50">
@@ -390,23 +401,24 @@ function BottomNav() {
 
 // ── Cart Page ──────────────────────────────────────────────────────
 function CartPage() {
-  const { cart, cartTotal, updateQuantity, clearCart } = useApp();
+  const { currentUser, cart, cartTotal, updateQuantity, clearCart } = useApp();
   const navigate = useNavigate();
   const [placing, setPlacing] = useState(false);
-  const [placed, setPlaced]   = useState(false);
+  const [placedOrder, setPlacedOrder] = useState(null);
+  const [showInvoice, setShowInvoice] = useState(false);
 
   const handlePlace = async () => {
     if (cart.items.length === 0) return;
+    if (!currentUser) { navigate('/login'); return; }
     setPlacing(true);
     try {
-      await placeOrder({
+      const res = await placeOrder({
         shop_id:          cart.shopId,
         items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
         delivery_address: 'Default Address',
       });
       clearCart();
-      setPlaced(true);
-      setTimeout(() => navigate('/marketplace'), 2000);
+      setPlacedOrder(res.data);
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to place order.');
     } finally {
@@ -414,15 +426,28 @@ function CartPage() {
     }
   };
 
-  if (placed) return (
-    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-      className="min-h-[60vh] flex flex-col items-center justify-center px-8 text-center">
-      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-        <CheckCircle2 size={40} className="text-green-600" />
-      </div>
-      <h2 className="font-serif text-2xl font-bold mb-2">Order Placed!</h2>
-      <p className="text-[#1A1A1A]/40 text-sm">Taking you back to marketplace&hellip;</p>
-    </motion.div>
+  if (placedOrder) return (
+    <>
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+        className="min-h-[60vh] flex flex-col items-center justify-center px-8 text-center">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle2 size={40} className="text-green-600" />
+        </div>
+        <h2 className="font-serif text-2xl font-bold mb-2">Order Placed!</h2>
+        <p className="text-[#1A1A1A]/40 text-sm mb-6">Your order #{placedOrder.id} has been confirmed.</p>
+        <div className="flex gap-3">
+          <button onClick={() => setShowInvoice(true)}
+            className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm flex items-center gap-2">
+            View Invoice
+          </button>
+          <button onClick={() => navigate('/orders')}
+            className="px-6 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0] transition-all">
+            My Orders
+          </button>
+        </div>
+      </motion.div>
+      {showInvoice && <InvoiceModal order={placedOrder} onClose={() => setShowInvoice(false)} />}
+    </>
   );
 
   return (
@@ -497,6 +522,105 @@ function CartPage() {
   );
 }
 
+// ── Orders Page ────────────────────────────────────────────────────
+function OrdersPage() {
+  const { currentUser } = useApp();
+  const navigate = useNavigate();
+  const [orders, setOrders]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    getMyOrders()
+      .then(r => setOrders(r.data.items))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [currentUser]);
+
+  if (!currentUser) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-lg mx-auto px-4 pb-32 pt-12 text-center">
+        <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 size={28} className="text-[#5A5A40]/25" />
+        </div>
+        <h2 className="font-serif text-2xl font-bold mb-2">Track your orders</h2>
+        <p className="text-[#1A1A1A]/40 text-sm mb-6">Sign in to view your order history.</p>
+        <button onClick={() => navigate('/login')}
+          className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm">
+          Sign In
+        </button>
+      </motion.div>
+    );
+  }
+
+  const STATUS = {
+    pending:          { cls: 'bg-amber-100 text-amber-700',   dot: 'bg-amber-500'   },
+    accepted:         { cls: 'bg-blue-100 text-blue-700',     dot: 'bg-blue-500'    },
+    ready:            { cls: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500'  },
+    out_for_delivery: { cls: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500'  },
+    delivered:        { cls: 'bg-green-100 text-green-700',   dot: 'bg-green-500'   },
+    rejected:         { cls: 'bg-red-100 text-red-700',       dot: 'bg-red-500'     },
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto px-4 pb-28 pt-4 sm:pt-8">
+      <h2 className="font-serif text-2xl font-bold mb-6">My Orders</h2>
+      <div className="space-y-3">
+        {loading
+          ? Array(3).fill(0).map((_, i) => <div key={i} className="h-28 bg-white animate-pulse rounded-2xl" />)
+          : orders.length > 0
+            ? orders.map(order => {
+                const s = STATUS[order.status] || { cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' };
+                return (
+                  <div key={order.id} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 hover:shadow-sm transition-shadow">
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-[#1A1A1A]/30 uppercase tracking-widest">#{order.id}</span>
+                          <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${s.cls}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                            {order.status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <p className="font-bold text-sm">{order.shop_name}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-serif text-xl font-bold">&#8377;{order.total}</p>
+                        <p className="text-[9px] text-[#1A1A1A]/35 uppercase tracking-widest font-bold mt-0.5">
+                          {new Date(order.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="border-t border-[#1A1A1A]/5 pt-3 space-y-1">
+                      {order.items.map((item, i) => (
+                        <p key={i} className="text-xs text-[#1A1A1A]/50">{item.name} <span className="text-[#1A1A1A]/30">x {item.quantity}</span></p>
+                      ))}
+                    </div>
+                    <div className="border-t border-[#1A1A1A]/5 pt-3 mt-3">
+                      <button onClick={() => setInvoiceOrder(order)}
+                        className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] hover:underline">
+                        View Invoice
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            : (
+              <div className="py-20 text-center bg-white border border-[#1A1A1A]/5 rounded-3xl">
+                <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <ShoppingCart size={28} className="text-[#5A5A40]/25" />
+                </div>
+                <p className="text-[#1A1A1A]/30 italic text-sm">No orders yet.</p>
+              </div>
+            )
+        }
+      </div>
+      {invoiceOrder && <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />}
+    </motion.div>
+  );
+}
+
 // ── App Shell ──────────────────────────────────────────────────────
 function AppShell() {
   return (
@@ -504,13 +628,15 @@ function AppShell() {
       <TopNav />
       <main>
         <Routes>
-          <Route path="/"            element={<SignIn />} />
+          <Route path="/"            element={<Navigate to="/marketplace" replace />} />
+          <Route path="/login"       element={<SignIn />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/owner" element={<RequireAuth roles={['owner','admin']}><OwnerDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><AdminPanel /></RequireAuth>} />
-          <Route path="/cart"  element={<RequireAuth roles={['customer']}><CartPage /></RequireAuth>} />
+          <Route path="/cart"  element={<CartPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
           <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/marketplace" replace />} />
         </Routes>
       </main>
       <BottomNav />
