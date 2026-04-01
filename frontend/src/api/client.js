@@ -53,6 +53,7 @@ export const deleteProduct = (shopId, productId)       => api.delete(`/shops/${s
 // ── Orders ────────────────────────────────────────────────────────
 
 export const placeOrder        = (data)             => api.post('/orders', data);
+export const placeWalkinOrder  = (shopId, data)     => api.post(`/shops/${shopId}/walkin-order`, data);
 export const getMyOrders       = (page = 1)         => api.get('/orders/me', { params: { page } });
 export const getShopOrders     = (shopId, page = 1) => api.get(`/shops/${shopId}/orders`, { params: { page } });
 export const updateOrderStatus = (orderId, status)  => api.patch(`/orders/${orderId}/status`, { status });

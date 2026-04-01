@@ -679,6 +679,70 @@ app.patch("/orders/:id/status", requireAuth, (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WALK-IN / POS BILLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /shops/:shopId/walkin-order  (owner creates order for walk-in customer)
+app.post("/shops/:shopId/walkin-order", requireRole("owner"), (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  if (shop.status !== "approved") {
+    return res.status(403).json({ detail: "Shop must be approved to create orders" });
+  }
+
+  const { items, customer_name = "Walk-in Customer", payment_status = "paid" } = req.body;
+  if (!items || !items.length) {
+    return res.status(422).json({ detail: "At least one item is required" });
+  }
+  if (!["paid", "pending"].includes(payment_status)) {
+    return res.status(422).json({ detail: "payment_status must be 'paid' or 'pending'" });
+  }
+
+  const placeTx = db.transaction(() => {
+    const orderItems = [];
+    let total = 0;
+    for (const item of items) {
+      if (!item.product_id || item.quantity < 1) {
+        throw Object.assign(new Error("Invalid item"), { status: 422 });
+      }
+      const product = db.prepare("SELECT * FROM products WHERE id = ?").get(item.product_id);
+      if (!product || product.shop_id !== shop.id) {
+        throw Object.assign(new Error(`Product ${item.product_id} not found in this shop`), { status: 422 });
+      }
+      if (product.stock < item.quantity) {
+        throw Object.assign(new Error(`Insufficient stock for '${product.name}'`), { status: 422 });
+      }
+      orderItems.push({ product, quantity: item.quantity });
+      total += product.price * item.quantity;
+      db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity, product.id);
+    }
+
+    const total_rounded = Math.round(total * 100) / 100;
+    const r = db.prepare(
+      "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(shop.id, shop.name, req.user.id, total_rounded, "delivered", payment_status, "Walk-in: " + customer_name);
+    const orderId = r.lastInsertRowid;
+
+    for (const { product, quantity } of orderItems) {
+      db.prepare(
+        "INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?, ?, ?, ?, ?)"
+      ).run(orderId, product.id, product.name, product.price, quantity);
+    }
+
+    return db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  });
+
+  try {
+    const order = placeTx();
+    res.status(201).json(serializeOrder(order));
+  } catch (err) {
+    res.status(err.status || 500).json({ detail: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -714,15 +778,99 @@ app.get("/shops/:shopId/analytics", requireAuth, (req, res) => {
   ).all(shopId, todayStart.toISOString());
 
   const lowStock = db.prepare(
-    "SELECT name FROM products WHERE shop_id = ? AND stock <= 5 AND status = 'active'"
+    "SELECT name, stock FROM products WHERE shop_id = ? AND stock <= 5 AND status = 'active'"
   ).all(shopId);
 
   const todaySales = todayOrders.reduce((sum, o) => sum + o.total, 0);
+
+  // ── Daily sales for last 7 days ──
+  const dailySales = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayStart = new Date(d); dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd   = new Date(d); dayEnd.setUTCHours(23, 59, 59, 999);
+    const row = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue, COUNT(*) as orders FROM orders WHERE shop_id = ? AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    dailySales.push({
+      date: dayStart.toISOString().slice(0, 10),
+      day: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
+      revenue: Math.round(row.revenue * 100) / 100,
+      orders: row.orders,
+    });
+  }
+
+  // ── Revenue by category ──
+  const categoryRevenue = db.prepare(`
+    SELECT p.category, COALESCE(SUM(oi.price * oi.quantity), 0) as revenue, SUM(oi.quantity) as qty
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.shop_id = ?
+    GROUP BY p.category
+    ORDER BY revenue DESC
+  `).all(shopId);
+
+  // ── Top selling products (with revenue) ──
+  const topProducts = db.prepare(`
+    SELECT oi.product_id, oi.name, SUM(oi.quantity) as quantity_sold, 
+           ROUND(SUM(oi.price * oi.quantity), 2) as revenue
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.shop_id = ?
+    GROUP BY oi.product_id
+    ORDER BY quantity_sold DESC
+    LIMIT 10
+  `).all(shopId);
+
+  // ── Orders by status ──
+  const statusRows = db.prepare(
+    "SELECT status, COUNT(*) as count FROM orders WHERE shop_id = ? GROUP BY status"
+  ).all(shopId);
+  const ordersByStatus = {};
+  statusRows.forEach(r => { ordersByStatus[r.status] = r.count; });
+
+  // ── Monthly revenue (last 6 months) ──
+  const monthlyRevenue = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    const mStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const mEnd   = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+    const row = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue, COUNT(*) as orders FROM orders WHERE shop_id = ? AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, mStart.toISOString(), mEnd.toISOString());
+    monthlyRevenue.push({
+      month: mStart.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      revenue: Math.round(row.revenue * 100) / 100,
+      orders: row.orders,
+    });
+  }
+
+  // ── Total all-time metrics ──
+  const allTime = db.prepare(
+    "SELECT COALESCE(SUM(total), 0) as revenue, COUNT(*) as orders FROM orders WHERE shop_id = ?"
+  ).get(shopId);
+
+  const thisMonthStart = new Date(); thisMonthStart.setDate(1); thisMonthStart.setUTCHours(0, 0, 0, 0);
+  const ordersThisMonth = db.prepare(
+    "SELECT COUNT(*) as c FROM orders WHERE shop_id = ? AND created_at >= ?"
+  ).get(shopId, thisMonthStart.toISOString()).c;
+
   res.json({
-    today_sales:     Math.round(todaySales * 100) / 100,
-    today_orders:    todayOrders.length,
-    total_products:  db.prepare("SELECT COUNT(*) as c FROM products WHERE shop_id = ?").get(shopId).c,
-    low_stock_items: lowStock.map(r => r.name),
+    today_sales:      Math.round(todaySales * 100) / 100,
+    today_orders:     todayOrders.length,
+    total_products:   db.prepare("SELECT COUNT(*) as c FROM products WHERE shop_id = ?").get(shopId).c,
+    low_stock_items:  lowStock,
+    total_revenue:    Math.round(allTime.revenue * 100) / 100,
+    total_orders:     allTime.orders,
+    orders_this_month: ordersThisMonth,
+    daily_sales:      dailySales,
+    category_revenue: categoryRevenue,
+    top_products:     topProducts,
+    orders_by_status: ordersByStatus,
+    monthly_revenue:  monthlyRevenue,
   });
 });
 
