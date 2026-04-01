@@ -154,6 +154,433 @@ function ShopRegistrationForm({ onSaved }) {
   );
 }
 
+// ── SVG Chart Helpers ─────────────────────────────────────────────
+const CHART_COLORS = ['#5A5A40', '#7A7A60', '#9A9A80', '#BABA9F', '#D4D4BF', '#8B6914', '#6B8E23', '#4682B4'];
+
+function BarChart({ data, labelKey, valueKey, height = 200, color = '#5A5A40', formatValue = v => v }) {
+  if (!data || !data.length) return null;
+  const maxVal = Math.max(...data.map(d => d[valueKey]), 1);
+  const barW = Math.min(48, Math.floor((100 / data.length) * 0.7));
+  const gap = (100 - barW * data.length) / (data.length + 1);
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 500 ${height + 40}`} className="w-full min-w-[320px]" preserveAspectRatio="xMidYMid meet">
+        {data.map((d, i) => {
+          const barH = (d[valueKey] / maxVal) * height;
+          const x = (gap + (barW + gap) * i) * 5;
+          const y = height - barH;
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW * 5} height={barH} rx={6} fill={color} opacity={0.85} />
+              <text x={x + (barW * 5) / 2} y={y - 6} textAnchor="middle" fontSize="11" fill="#1A1A1A" fontWeight="700">
+                {formatValue(d[valueKey])}
+              </text>
+              <text x={x + (barW * 5) / 2} y={height + 18} textAnchor="middle" fontSize="10" fill="#999">
+                {d[labelKey]}
+              </text>
+            </g>
+          );
+        })}
+        <line x1="0" y1={height} x2="500" y2={height} stroke="#e5e5e0" strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}
+
+function DonutChart({ data, labelKey, valueKey, size = 180 }) {
+  if (!data || !data.length) return null;
+  const total = data.reduce((s, d) => s + d[valueKey], 0);
+  if (!total) return null;
+  const cx = size / 2, cy = size / 2, r = size * 0.35, strokeW = size * 0.18;
+  let cumAngle = -90;
+  const arcs = data.map((d, i) => {
+    const pct = d[valueKey] / total;
+    const angle = pct * 360;
+    const startAngle = cumAngle;
+    cumAngle += angle;
+    const endAngle = cumAngle;
+    const largeArc = angle > 180 ? 1 : 0;
+    const toRad = a => (a * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(toRad(startAngle));
+    const y1 = cy + r * Math.sin(toRad(startAngle));
+    const x2 = cx + r * Math.cos(toRad(endAngle));
+    const y2 = cy + r * Math.sin(toRad(endAngle));
+    return { ...d, pct, path: `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`, color: CHART_COLORS[i % CHART_COLORS.length] };
+  });
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {arcs.map((a, i) => (
+          <path key={i} d={a.path} fill="none" stroke={a.color} strokeWidth={strokeW} strokeLinecap="round" />
+        ))}
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="20" fontWeight="800" fill="#1A1A1A">{total}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="10" fill="#999">Total</text>
+      </svg>
+      <div className="flex flex-col gap-1.5 text-xs">
+        {arcs.map((a, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
+            <span className="text-[#1A1A1A]/60">{a[labelKey]}</span>
+            <span className="font-bold ml-auto">{a[valueKey]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniLineChart({ data, valueKey, height = 60, width = 200, color = '#5A5A40' }) {
+  if (!data || data.length < 2) return null;
+  const vals = data.map(d => d[valueKey]);
+  const maxV = Math.max(...vals, 1);
+  const minV = Math.min(...vals, 0);
+  const range = maxV - minV || 1;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * width;
+    const y = height - ((v - minV) / range) * (height - 10) - 5;
+    return `${x},${y}`;
+  });
+  const areaPath = `M0,${height} L${pts.join(' L')} L${width},${height} Z`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill="url(#areaGrad)" />
+      <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {vals.map((v, i) => {
+        const x = (i / (vals.length - 1)) * width;
+        const y = height - ((v - minV) / range) * (height - 10) - 5;
+        return <circle key={i} cx={x} cy={y} r="3" fill="white" stroke={color} strokeWidth="2" />;
+      })}
+    </svg>
+  );
+}
+
+// ── Billing Panel (Walk-in POS) ───────────────────────────────────
+function BillingPanel({ shopId }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState('');
+  const [bill, setBill]         = useState([]);        // { product, quantity }
+  const [customerName, setCustomerName] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState('paid');
+  const [placing, setPlacing]   = useState(false);
+  const [lastOrder, setLastOrder] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    listProducts(shopId)
+      .then(r => setProducts(r.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [shopId]);
+
+  const addToBill = (product) => {
+    setBill(prev => {
+      const existing = prev.find(b => b.product.id === product.id);
+      if (existing) {
+        if (existing.quantity >= product.stock) return prev;
+        return prev.map(b => b.product.id === product.id ? { ...b, quantity: b.quantity + 1 } : b);
+      }
+      if (product.stock < 1) return prev;
+      return [...prev, { product, quantity: 1 }];
+    });
+  };
+
+  const updateQty = (productId, delta) => {
+    setBill(prev => prev.map(b => {
+      if (b.product.id !== productId) return b;
+      const newQty = b.quantity + delta;
+      if (newQty < 1) return b;
+      if (newQty > b.product.stock) return b;
+      return { ...b, quantity: newQty };
+    }));
+  };
+
+  const removeFromBill = (productId) => {
+    setBill(prev => prev.filter(b => b.product.id !== productId));
+  };
+
+  const billTotal = bill.reduce((s, b) => s + b.product.price * b.quantity, 0);
+
+  const handlePlaceOrder = async () => {
+    if (!bill.length) return;
+    setPlacing(true);
+    try {
+      const res = await placeWalkinOrder(shopId, {
+        items: bill.map(b => ({ product_id: b.product.id, quantity: b.quantity })),
+        customer_name: customerName || 'Walk-in Customer',
+        payment_status: paymentStatus,
+      });
+      setLastOrder(res.data);
+      setBill([]);
+      setCustomerName('');
+      // refresh products to reflect stock changes
+      const pRes = await listProducts(shopId);
+      setProducts(pRes.data);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to place order');
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const filtered = products.filter(p => p.status === 'active' && p.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (loading) return <div className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-[#5A5A40]" /></div>;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Product Grid */}
+      <div className="lg:col-span-3 space-y-4">
+        <div className="relative">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30" />
+          <input className="w-full pl-11 pr-4 py-3 bg-white border border-[#1A1A1A]/10 rounded-2xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors"
+            placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {filtered.map(p => {
+            const inBill = bill.find(b => b.product.id === p.id);
+            return (
+              <button key={p.id} onClick={() => addToBill(p)} disabled={p.stock < 1}
+                className={`text-left bg-white border rounded-2xl p-4 transition-all hover:shadow-md disabled:opacity-40 ${inBill ? 'border-[#5A5A40] ring-1 ring-[#5A5A40]/20' : 'border-[#1A1A1A]/10'}`}>
+                {p.image && <img src={p.image} alt={p.name} className="w-full h-20 object-cover rounded-xl mb-2" referrerPolicy="no-referrer" />}
+                <p className="font-bold text-sm line-clamp-1">{p.name}</p>
+                <p className="text-xs text-[#1A1A1A]/40">{p.unit} · Stock: {p.stock}</p>
+                <p className="font-bold text-[#5A5A40] mt-1">₹{p.price}</p>
+                {inBill && <span className="text-[10px] font-bold text-[#5A5A40] bg-[#5A5A40]/10 px-2 py-0.5 rounded-full mt-1 inline-block">×{inBill.quantity}</span>}
+              </button>
+            );
+          })}
+          {filtered.length === 0 && <p className="col-span-full text-center text-[#1A1A1A]/30 py-10 italic">No products found</p>}
+        </div>
+      </div>
+
+      {/* Bill Summary */}
+      <div className="lg:col-span-2">
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6 sticky top-4">
+          <div className="flex items-center gap-2 mb-5">
+            <Receipt size={20} className="text-[#5A5A40]" />
+            <h3 className="font-serif text-xl font-bold">Current Bill</h3>
+          </div>
+
+          {/* Customer Name */}
+          <input className="w-full bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#5A5A40] transition-colors mb-4"
+            placeholder="Customer name (optional)" value={customerName} onChange={e => setCustomerName(e.target.value)} />
+
+          {bill.length === 0 ? (
+            <div className="py-10 text-center">
+              <ShoppingBag size={32} className="mx-auto text-[#1A1A1A]/15 mb-2" />
+              <p className="text-sm text-[#1A1A1A]/30 italic">Tap products to add</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[40vh] overflow-y-auto mb-4">
+              {bill.map(b => (
+                <div key={b.product.id} className="flex items-center gap-3 bg-[#F5F5F0] rounded-xl p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm line-clamp-1">{b.product.name}</p>
+                    <p className="text-xs text-[#1A1A1A]/40">₹{b.product.price} × {b.quantity}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => updateQty(b.product.id, -1)} className="w-7 h-7 flex items-center justify-center bg-white rounded-lg border border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/5"><Minus size={12} /></button>
+                    <span className="w-8 text-center text-sm font-bold">{b.quantity}</span>
+                    <button onClick={() => updateQty(b.product.id, 1)} className="w-7 h-7 flex items-center justify-center bg-white rounded-lg border border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/5"><Plus size={12} /></button>
+                  </div>
+                  <p className="font-bold text-sm w-16 text-right">₹{(b.product.price * b.quantity).toFixed(2)}</p>
+                  <button onClick={() => removeFromBill(b.product.id)} className="p-1 hover:bg-red-100 rounded-lg text-red-500"><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {bill.length > 0 && (
+            <>
+              <div className="border-t border-[#1A1A1A]/10 pt-4 mb-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-[#1A1A1A]/50">Items</span>
+                  <span className="font-bold">{bill.reduce((s, b) => s + b.quantity, 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-bold text-lg">Total</span>
+                  <span className="font-serif text-2xl font-bold text-[#5A5A40]">₹{billTotal.toFixed(2)}</span>
+                </div>
+              </div>
+              {/* Payment Status */}
+              <div className="flex gap-2 mb-4">
+                {['paid', 'pending'].map(s => (
+                  <button key={s} onClick={() => setPaymentStatus(s)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border ${paymentStatus === s ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/50 border-[#1A1A1A]/10 hover:border-[#5A5A40]'}`}>
+                    {s === 'paid' ? '✓ Paid' : '⏳ Pending'}
+                  </button>
+                ))}
+              </div>
+              <button onClick={handlePlaceOrder} disabled={placing}
+                className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {placing ? <><Loader2 size={18} className="animate-spin" /> Processing...</> : <><Receipt size={18} /> Bill ₹{billTotal.toFixed(2)}</>}
+              </button>
+            </>
+          )}
+
+          {/* Last Order Success */}
+          <AnimatePresence>
+            {lastOrder && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="mt-4 bg-green-50 border border-green-200 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 size={18} className="text-green-600" />
+                  <span className="font-bold text-green-800 text-sm">Order #{lastOrder.id} placed!</span>
+                </div>
+                <p className="text-xs text-green-700 mb-3">₹{lastOrder.total} · {lastOrder.delivery_address}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setInvoiceOrder(lastOrder)}
+                    className="flex-1 text-xs font-bold uppercase tracking-widest text-[#5A5A40] border border-[#5A5A40]/30 py-2 rounded-xl hover:bg-[#5A5A40]/5 transition-all">
+                    View Invoice
+                  </button>
+                  <button onClick={() => setLastOrder(null)}
+                    className="px-4 py-2 text-xs font-bold text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70 transition-colors">
+                    Dismiss
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        {invoiceOrder && <InvoiceModal order={invoiceOrder} shopView onClose={() => setInvoiceOrder(null)} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Analytics Panel ───────────────────────────────────────────────
+function AnalyticsPanel({ analytics }) {
+  if (!analytics) return (
+    <div className="py-20 text-center">
+      <BarChart2 size={48} className="mx-auto text-[#5A5A40]/20 mb-4" />
+      <p className="text-[#1A1A1A]/30 italic">Analytics available after shop is approved.</p>
+    </div>
+  );
+
+  const dailySales = analytics.daily_sales || [];
+  const categoryRevenue = analytics.category_revenue || [];
+  const topProducts = analytics.top_products || [];
+  const monthlyRevenue = analytics.monthly_revenue || [];
+  const lowStock = analytics.low_stock_items || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Daily Sales Chart */}
+      <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Activity size={18} className="text-[#5A5A40]" />
+          <h4 className="font-serif text-lg font-bold">Daily Sales (Last 7 days)</h4>
+        </div>
+        <p className="text-xs text-[#1A1A1A]/40 mb-4">Revenue per day</p>
+        {dailySales.length > 0 ? (
+          <BarChart data={dailySales} labelKey="day" valueKey="revenue" color="#5A5A40" formatValue={v => `₹${v}`} />
+        ) : <p className="text-sm text-[#1A1A1A]/30 italic py-8 text-center">No data yet</p>}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monthly Revenue Trend */}
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp size={18} className="text-[#5A5A40]" />
+            <h4 className="font-serif text-lg font-bold">Revenue Trend</h4>
+          </div>
+          <p className="text-xs text-[#1A1A1A]/40 mb-4">Last 6 months</p>
+          {monthlyRevenue.length > 0 ? (
+            <>
+              <MiniLineChart data={monthlyRevenue} valueKey="revenue" height={100} width={400} color="#5A5A40" />
+              <div className="flex justify-between mt-2 text-[10px] text-[#1A1A1A]/40">
+                {monthlyRevenue.map(m => <span key={m.month}>{m.month}</span>)}
+              </div>
+            </>
+          ) : <p className="text-sm text-[#1A1A1A]/30 italic py-8 text-center">No data yet</p>}
+        </div>
+
+        {/* Category Revenue */}
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <PieChart size={18} className="text-[#5A5A40]" />
+            <h4 className="font-serif text-lg font-bold">Revenue by Category</h4>
+          </div>
+          <p className="text-xs text-[#1A1A1A]/40 mb-4">All time distribution</p>
+          {categoryRevenue.length > 0 ? (
+            <DonutChart data={categoryRevenue} labelKey="category" valueKey="revenue" size={180} />
+          ) : <p className="text-sm text-[#1A1A1A]/30 italic py-8 text-center">No data yet</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Products */}
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-[#5A5A40]" />
+            <h4 className="font-serif text-lg font-bold">Top Selling Products</h4>
+          </div>
+          {topProducts.length > 0 ? (
+            <div className="space-y-3">
+              {topProducts.slice(0, 8).map((p, i) => {
+                const maxQty = topProducts[0]?.quantity_sold || 1;
+                return (
+                  <div key={p.product_id}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-[#1A1A1A]/70 font-medium">{i + 1}. {p.name}</span>
+                      <span className="font-bold">{p.quantity_sold} sold · ₹{p.revenue}</span>
+                    </div>
+                    <div className="h-2 bg-[#F5F5F0] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#5A5A40]" style={{ width: `${(p.quantity_sold / maxQty) * 100}%`, opacity: 1 - i * 0.08 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <p className="text-sm text-[#1A1A1A]/30 italic py-8 text-center">No sales yet</p>}
+        </div>
+
+        {/* Low Stock Alert */}
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertCircle size={18} className="text-amber-600" />
+            <h4 className="font-serif text-lg font-bold">Low Stock Alerts</h4>
+          </div>
+          {lowStock.length > 0 ? (
+            <div className="space-y-2">
+              {lowStock.map((item, i) => (
+                <div key={i} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                  <span className="text-sm font-medium text-amber-800">{item.name}</span>
+                  <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{item.stock} left</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <CheckCircle2 size={32} className="mx-auto text-green-400 mb-2" />
+              <p className="text-sm text-[#1A1A1A]/30">All products well stocked!</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Orders by Status */}
+      <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+        <h4 className="font-serif text-lg font-bold mb-4">Orders by Status</h4>
+        {Object.keys(analytics.orders_by_status || {}).length > 0 ? (
+          <BarChart
+            data={Object.entries(analytics.orders_by_status).map(([status, count]) => ({ status: status.replace('_', ' '), count }))}
+            labelKey="status" valueKey="count" height={140} color="#7A7A60"
+          />
+        ) : <p className="text-sm text-[#1A1A1A]/30 italic py-8 text-center">No orders yet</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── Orders Panel ──────────────────────────────────────────────────
 const ORDER_TRANSITIONS = {
   pending:          { next: 'accepted',         label: 'Accept Order',       icon: CheckCircle2, color: 'bg-blue-600' },
@@ -499,10 +926,10 @@ export default function OwnerDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-8 bg-[#F5F5F0] p-1 rounded-2xl w-fit border border-[#1A1A1A]/5">
+      <div className="flex gap-1 mb-8 bg-[#F5F5F0] p-1 rounded-2xl w-fit max-w-full overflow-x-auto border border-[#1A1A1A]/5">
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-widest transition-all ${tab === t ? 'bg-white text-[#5A5A40] shadow-sm' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70'}`}>
+            className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all whitespace-nowrap ${tab === t ? 'bg-white text-[#5A5A40] shadow-sm' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70'}`}>
             {t}
           </button>
         ))}
@@ -515,11 +942,21 @@ export default function OwnerDashboard() {
         ) : analytics ? (
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon={DollarSign} label="Total Revenue"   value={`₹${analytics.total_revenue?.toLocaleString() || 0}`} sub="All time" />
-              <StatCard icon={ShoppingBag} label="Total Orders"   value={analytics.total_orders || 0} sub="All time" />
-              <StatCard icon={TrendingUp}  label="Orders This Month" value={analytics.orders_this_month || 0} sub={new Date().toLocaleString('default',{month:'long'})} />
-              <StatCard icon={Package}    label="Products"         value={analytics.product_count || 0} sub="In inventory" />
+              <StatCard icon={DollarSign} label="Today's Sales"     value={`₹${(analytics.today_sales || 0).toLocaleString()}`} sub="Today" accent="bg-green-100" />
+              <StatCard icon={ShoppingBag} label="Today's Orders"    value={analytics.today_orders || 0} sub="Today" accent="bg-blue-100" />
+              <StatCard icon={TrendingUp}  label="Total Revenue"     value={`₹${(analytics.total_revenue || 0).toLocaleString()}`} sub="All time" />
+              <StatCard icon={Package}    label="Products"           value={analytics.total_products || 0} sub="In inventory" />
             </div>
+            {/* Mini trend line */}
+            {(analytics.daily_sales || []).length > 1 && (
+              <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+                <h4 className="font-serif text-lg font-bold mb-2">Weekly Revenue Trend</h4>
+                <MiniLineChart data={analytics.daily_sales} valueKey="revenue" height={80} width={500} />
+                <div className="flex justify-between mt-2 text-[10px] text-[#1A1A1A]/40 px-1">
+                  {analytics.daily_sales.map(d => <span key={d.date}>{d.day}</span>)}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
                 <h4 className="font-serif text-lg font-bold mb-4">Orders by Status</h4>
@@ -530,6 +967,9 @@ export default function OwnerDashboard() {
                       <span className="font-bold">{count}</span>
                     </div>
                   ))}
+                  {Object.keys(analytics.orders_by_status || {}).length === 0 && (
+                    <p className="text-sm text-[#1A1A1A]/30 italic">No orders yet</p>
+                  )}
                 </div>
               </div>
               <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
@@ -541,9 +981,28 @@ export default function OwnerDashboard() {
                       <span className="font-bold">{p.quantity_sold} sold</span>
                     </div>
                   ))}
+                  {(analytics.top_products || []).length === 0 && (
+                    <p className="text-sm text-[#1A1A1A]/30 italic">No sales yet</p>
+                  )}
                 </div>
               </div>
             </div>
+            {/* Low Stock Warnings */}
+            {(analytics.low_stock_items || []).length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle size={18} className="text-amber-600" />
+                  <h4 className="font-bold text-amber-800">Low Stock Items</h4>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {analytics.low_stock_items.map((item, i) => (
+                    <span key={i} className="text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+                      {item.name} ({item.stock})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-20 text-center">
@@ -551,6 +1010,16 @@ export default function OwnerDashboard() {
             <p className="text-[#1A1A1A]/30 italic">Analytics available after shop is approved.</p>
           </div>
         )
+      )}
+
+      {tab === 'Analytics' && (
+        analyticsLoading ? (
+          <div className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-[#5A5A40]" /></div>
+        ) : <AnalyticsPanel analytics={analytics} />
+      )}
+
+      {tab === 'Billing' && selectedShop && (
+        <BillingPanel shopId={selectedShop.id} />
       )}
 
       {tab === 'Inventory' && selectedShop && (
