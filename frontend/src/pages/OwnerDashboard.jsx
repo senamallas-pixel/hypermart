@@ -185,7 +185,7 @@ function OrdersPanel({ shopId }) {
 
   const advance = async (orderId, nextStatus) => {
     setUpdating(orderId);
-    try { await updateOrderStatus(shopId, orderId, { status: nextStatus }); reload(); }
+    try { await updateOrderStatus(orderId, nextStatus); reload(); }
     catch (err) { alert(err.response?.data?.detail || 'Failed to update order.'); }
     finally { setUpdating(null); }
   };
@@ -193,7 +193,7 @@ function OrdersPanel({ shopId }) {
   const reject = async (orderId) => {
     if (!window.confirm('Reject this order?')) return;
     setUpdating(orderId);
-    try { await updateOrderStatus(shopId, orderId, { status: 'rejected' }); reload(); }
+    try { await updateOrderStatus(orderId, 'rejected'); reload(); }
     catch (err) { alert(err.response?.data?.detail || 'Failed to reject order.'); }
     finally { setUpdating(null); }
   };
