@@ -7,9 +7,10 @@ import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
   Search, Package, ChevronRight, CheckCircle2, Eye, EyeOff, Phone,
+  XCircle, Clock, Truck,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
-import { login, register, placeOrder, getMyOrders } from './api/client';
+import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';
@@ -218,54 +219,182 @@ function Profile() {
   const { currentUser, signOut } = useApp();
   const navigate = useNavigate();
   const [selLoc, setSelLoc] = useState(localStorage.getItem('hm_location') || LOCATIONS[0]);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [shops, setShops] = useState([]);
+  const [shopAnalytics, setShopAnalytics] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (currentUser.role === 'customer') {
+      setOrdersLoading(true);
+      getMyOrders().then(r => setOrders(r.data.items)).catch(console.error).finally(() => setOrdersLoading(false));
+    }
+    if (currentUser.role === 'owner') {
+      getMyShops().then(r => {
+        setShops(r.data);
+        if (r.data.length > 0 && r.data[0].status === 'approved') {
+          getShopAnalytics(r.data[0].id).then(a => setShopAnalytics(a.data)).catch(console.error);
+        }
+      }).catch(console.error);
+    }
+  }, [currentUser]);
 
   const handleLocationChange = loc => { setSelLoc(loc); localStorage.setItem('hm_location', loc); };
   const handleSignOut = () => { signOut(); navigate('/marketplace', { replace: true }); };
 
   const ROLE_BG = { admin: 'bg-purple-100 text-purple-700 border-purple-200', owner: 'bg-blue-100 text-blue-700 border-blue-200', customer: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+  const STATUS_CLS = {
+    pending: 'bg-amber-100 text-amber-700', accepted: 'bg-blue-100 text-blue-700', ready: 'bg-indigo-100 text-indigo-700',
+    out_for_delivery: 'bg-purple-100 text-purple-700', delivered: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700',
+  };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-lg mx-auto px-4 pb-28 pt-4 sm:pt-8 space-y-3">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto px-4 pb-28 pt-4 sm:pt-8 space-y-4">
+      {/* User Card */}
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#1A1A1A]/5">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 bg-gradient-to-br from-[#5A5A40] to-[#3A3A28] rounded-2xl flex items-center justify-center text-white font-serif text-2xl font-bold flex-shrink-0">
             {currentUser?.display_name?.[0]?.toUpperCase() || '?'}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="font-serif text-xl font-bold truncate">{currentUser?.display_name || 'Guest'}</h2>
             <p className="text-sm text-[#1A1A1A]/40 truncate">{currentUser?.email}</p>
-            <span className={`inline-block mt-1 text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded-full ${ROLE_BG[currentUser?.role] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-              {currentUser?.role}
-            </span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-block text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded-full ${ROLE_BG[currentUser?.role] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                {currentUser?.role}
+              </span>
+              {currentUser?.phone && <span className="text-xs text-[#1A1A1A]/40">{currentUser.phone}</span>}
+            </div>
           </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-[#1A1A1A]/5">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Member Since</p>
+            <p className="text-sm font-bold">{currentUser?.created_at ? new Date(currentUser.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">User ID</p>
+            <p className="text-xs font-mono text-[#1A1A1A]/50">{currentUser?.uid?.slice(0, 8)}…</p>
+          </div>
+          {currentUser?.role === 'customer' && (
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Total Orders</p>
+              <p className="text-sm font-bold">{orders.length}</p>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Owner: Shop Summary */}
+      {currentUser?.role === 'owner' && shops.length > 0 && (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#1A1A1A]/5">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-4 flex items-center gap-2">
+            <Store size={12} /> My Shops
+          </h3>
+          <div className="space-y-3">
+            {shops.map(s => (
+              <div key={s.id} className="flex items-center gap-3 bg-[#F5F5F0] rounded-2xl px-4 py-3">
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-white flex-shrink-0">
+                  {s.logo ? <img src={s.logo} alt={s.name} className="w-full h-full object-cover" /> : <Store size={16} className="m-auto mt-3 text-[#5A5A40]/30" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">{s.name}</p>
+                  <p className="text-xs text-[#1A1A1A]/40">{s.category} · {s.location_name}</p>
+                </div>
+                <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${s.status === 'approved' ? 'bg-green-100 text-green-700' : s.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  {s.status}
+                </span>
+              </div>
+            ))}
+          </div>
+          {shopAnalytics && (
+            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-[#1A1A1A]/5">
+              <div className="bg-[#F5F5F0] rounded-xl px-4 py-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Revenue</p>
+                <p className="font-serif text-lg font-bold">₹{(shopAnalytics.total_revenue || 0).toLocaleString()}</p>
+              </div>
+              <div className="bg-[#F5F5F0] rounded-xl px-4 py-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Orders</p>
+                <p className="font-serif text-lg font-bold">{shopAnalytics.total_orders || 0}</p>
+              </div>
+              <div className="bg-[#F5F5F0] rounded-xl px-4 py-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Products</p>
+                <p className="font-serif text-lg font-bold">{shopAnalytics.total_products || 0}</p>
+              </div>
+              <div className="bg-[#F5F5F0] rounded-xl px-4 py-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Today Sales</p>
+                <p className="font-serif text-lg font-bold">₹{(shopAnalytics.today_sales || 0).toLocaleString()}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Customer: Location */}
       {currentUser?.role === 'customer' && (
         <div className="bg-white rounded-3xl px-6 py-5 shadow-sm border border-[#1A1A1A]/5">
           <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-4 flex items-center gap-2">
             <MapPin size={12} /> Delivery Location
           </h3>
-          <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
             {LOCATIONS.map(loc => (
               <button key={loc} onClick={() => handleLocationChange(loc)}
-                className={`w-full flex justify-between items-center px-4 py-3 rounded-2xl border transition-all text-sm font-medium ${selLoc === loc ? 'bg-[#5A5A40]/5 border-[#5A5A40] text-[#5A5A40] font-bold' : 'bg-[#F5F5F0] border-transparent text-[#1A1A1A]/60 hover:border-[#5A5A40]/20'}`}>
+                className={`px-4 py-2 rounded-xl border text-sm font-medium transition-all ${selLoc === loc ? 'bg-[#5A5A40]/10 border-[#5A5A40] text-[#5A5A40] font-bold' : 'bg-[#F5F5F0] border-transparent text-[#1A1A1A]/50 hover:border-[#5A5A40]/20'}`}>
                 {loc}
-                {selLoc === loc && <div className="w-2 h-2 rounded-full bg-[#5A5A40]" />}
               </button>
             ))}
           </div>
         </div>
       )}
 
+      {/* Customer: Recent Orders */}
+      {currentUser?.role === 'customer' && (
+        <div className="bg-white rounded-3xl px-6 py-5 shadow-sm border border-[#1A1A1A]/5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 flex items-center gap-2">
+              <Package size={12} /> Recent Orders
+            </h3>
+            {orders.length > 0 && (
+              <button onClick={() => navigate('/orders')} className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] hover:underline">
+                View All →
+              </button>
+            )}
+          </div>
+          {ordersLoading ? (
+            <div className="py-8 text-center"><Loader2 size={20} className="animate-spin mx-auto text-[#5A5A40]/30" /></div>
+          ) : orders.length > 0 ? (
+            <div className="space-y-2">
+              {orders.slice(0, 5).map(order => (
+                <div key={order.id} className="flex items-center justify-between bg-[#F5F5F0] rounded-xl px-4 py-3 hover:bg-[#EBEBDB] transition-colors cursor-pointer"
+                  onClick={() => setInvoiceOrder(order)}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div>
+                      <p className="font-bold text-sm">#{order.id} · {order.shop_name}</p>
+                      <p className="text-xs text-[#1A1A1A]/40">{new Date(order.created_at).toLocaleDateString('en-IN')} · {order.items.length} items</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${STATUS_CLS[order.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {order.status.replace(/_/g, ' ')}
+                    </span>
+                    <span className="font-bold text-sm">₹{order.total}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#1A1A1A]/30 italic py-4 text-center">No orders yet</p>
+          )}
+        </div>
+      )}
+
+      {/* App Info */}
       <div className="bg-white rounded-3xl px-6 py-4 shadow-sm border border-[#1A1A1A]/5 divide-y divide-[#1A1A1A]/5">
         <div className="flex items-center justify-between py-3">
           <span className="text-sm text-[#1A1A1A]/60">Version</span>
           <span className="text-xs font-bold text-[#5A5A40]">HyperMart v2</span>
-        </div>
-        <div className="flex items-center justify-between py-3">
-          <span className="text-sm text-[#1A1A1A]/60">User ID</span>
-          <span className="text-xs font-mono text-[#1A1A1A]/40">{currentUser?.uid?.slice(0, 12)}&hellip;</span>
         </div>
       </div>
 
@@ -274,6 +403,8 @@ function Profile() {
         <span className="flex items-center gap-3 text-sm"><LogOut size={16} /> Sign Out</span>
         <ChevronRight size={16} className="opacity-40" />
       </button>
+
+      {invoiceOrder && <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />}
     </motion.div>
   );
 }
@@ -523,15 +654,56 @@ function CartPage() {
 }
 
 // ── Orders Page ────────────────────────────────────────────────────
+const ORDER_STEPS = ['pending', 'accepted', 'ready', 'out_for_delivery', 'delivered'];
+const STEP_LABELS = { pending: 'Order Placed', accepted: 'Accepted', ready: 'Ready', out_for_delivery: 'Out for Delivery', delivered: 'Delivered' };
+const STEP_ICONS = { pending: Clock, accepted: CheckCircle2, ready: Package, out_for_delivery: Truck, delivered: CheckCircle2 };
+
+function OrderTracker({ status }) {
+  if (status === 'rejected') {
+    return (
+      <div className="flex items-center gap-2 bg-red-50 rounded-xl px-4 py-2.5 mt-3">
+        <XCircle size={16} className="text-red-500" />
+        <span className="text-xs font-bold text-red-600 uppercase tracking-widest">Order Rejected</span>
+      </div>
+    );
+  }
+  const currentIdx = ORDER_STEPS.indexOf(status);
+  return (
+    <div className="mt-3 pt-3 border-t border-[#1A1A1A]/5">
+      <div className="flex items-center justify-between relative">
+        {/* Connecting line */}
+        <div className="absolute top-3 left-4 right-4 h-0.5 bg-[#F5F5F0]" />
+        <div className="absolute top-3 left-4 h-0.5 bg-[#5A5A40] transition-all" style={{ width: currentIdx >= 0 ? `${Math.min((currentIdx / (ORDER_STEPS.length - 1)) * 100, 100)}%` : '0%' }} />
+        {ORDER_STEPS.map((step, i) => {
+          const done = i <= currentIdx;
+          const active = i === currentIdx;
+          const StepIcon = STEP_ICONS[step];
+          return (
+            <div key={step} className="flex flex-col items-center relative z-10">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${done ? 'bg-[#5A5A40] text-white' : 'bg-[#F5F5F0] text-[#1A1A1A]/25'} ${active ? 'ring-2 ring-[#5A5A40]/30 ring-offset-1' : ''}`}>
+                <StepIcon size={12} />
+              </div>
+              <span className={`text-[8px] font-bold uppercase tracking-widest mt-1.5 text-center leading-tight max-w-[56px] ${done ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/25'}`}>
+                {STEP_LABELS[step]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function OrdersPage() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
+  const [expandedOrder, setExpandedOrder] = useState(null);
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) { setLoading(false); return; }
     getMyOrders()
       .then(r => setOrders(r.data.items))
       .catch(console.error)
@@ -572,9 +744,10 @@ function OrdersPage() {
           : orders.length > 0
             ? orders.map(order => {
                 const s = STATUS[order.status] || { cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' };
+                const isExpanded = expandedOrder === order.id;
                 return (
                   <div key={order.id} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="flex items-start justify-between gap-4 mb-3 cursor-pointer" onClick={() => setExpandedOrder(isExpanded ? null : order.id)}>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-bold text-[#1A1A1A]/30 uppercase tracking-widest">#{order.id}</span>
@@ -584,25 +757,44 @@ function OrdersPage() {
                           </span>
                         </div>
                         <p className="font-bold text-sm">{order.shop_name}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-serif text-xl font-bold">&#8377;{order.total}</p>
                         <p className="text-[9px] text-[#1A1A1A]/35 uppercase tracking-widest font-bold mt-0.5">
-                          {new Date(order.created_at).toLocaleDateString()}
+                          {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-serif text-xl font-bold">₹{order.total}</p>
+                        <p className="text-xs text-[#1A1A1A]/30">{order.items.length} item{order.items.length > 1 ? 's' : ''}</p>
+                      </div>
                     </div>
-                    <div className="border-t border-[#1A1A1A]/5 pt-3 space-y-1">
-                      {order.items.map((item, i) => (
-                        <p key={i} className="text-xs text-[#1A1A1A]/50">{item.name} <span className="text-[#1A1A1A]/30">x {item.quantity}</span></p>
-                      ))}
-                    </div>
-                    <div className="border-t border-[#1A1A1A]/5 pt-3 mt-3">
-                      <button onClick={() => setInvoiceOrder(order)}
-                        className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] hover:underline">
-                        View Invoice
-                      </button>
-                    </div>
+
+                    {/* Order Tracking Timeline */}
+                    <OrderTracker status={order.status} />
+
+                    {/* Expanded: Items + Actions */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                          <div className="border-t border-[#1A1A1A]/5 pt-3 mt-3 space-y-1">
+                            {order.items.map((item, i) => (
+                              <div key={i} className="flex justify-between text-xs">
+                                <span className="text-[#1A1A1A]/50">{item.name} <span className="text-[#1A1A1A]/30">× {item.quantity}</span></span>
+                                <span className="font-bold">₹{item.line_total ?? item.price * item.quantity}</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between text-sm font-bold pt-2 border-t border-[#1A1A1A]/5 mt-2">
+                              <span>Total</span>
+                              <span>₹{order.total}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-3 pt-3 border-t border-[#1A1A1A]/5">
+                            <button onClick={() => setInvoiceOrder(order)}
+                              className="flex-1 text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] border border-[#5A5A40]/20 py-2.5 rounded-xl hover:bg-[#5A5A40]/5 transition-all text-center">
+                              View Invoice
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 );
               })
@@ -611,7 +803,11 @@ function OrdersPage() {
                 <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center mx-auto mb-4">
                   <ShoppingCart size={28} className="text-[#5A5A40]/25" />
                 </div>
-                <p className="text-[#1A1A1A]/30 italic text-sm">No orders yet.</p>
+                <p className="text-[#1A1A1A]/30 italic text-sm mb-4">No orders yet.</p>
+                <button onClick={() => navigate('/marketplace')}
+                  className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm">
+                  Browse Shops
+                </button>
               </div>
             )
         }
