@@ -469,7 +469,8 @@ export default function Marketplace() {
   const fetchShops = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res = await listShops({ location: activeLocation, size: 100 });
+      const params = activeLocation === 'All' ? { size: 100 } : { location: activeLocation, size: 100 };
+      const res = await listShops(params);
       setShops(res.data.items);
     } catch {
       setError('Failed to load shops.');

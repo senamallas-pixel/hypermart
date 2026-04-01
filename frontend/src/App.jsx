@@ -21,7 +21,7 @@ const DEMO = [
   { label: 'Admin',      email: 'senamallas@gmail.com', password: 'Admin@123',  role: 'admin'    },
 ];
 
-const LOCATIONS = ['Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
+const LOCATIONS = ['All', 'Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
 
 function roleHome(role) {
   if (role === 'admin') return '/admin';

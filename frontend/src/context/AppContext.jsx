@@ -66,7 +66,7 @@ export function AppProvider({ children }) {
   const [cart, cartDispatch] = useReducer(cartReducer, cartInitial);
   const [search, setSearch] = useState('');
   const [activeLocation, setActiveLocationState] = useState(
-    localStorage.getItem('hm_location') || 'Green Valley'
+    localStorage.getItem('hm_location') || 'All'
   );
   const setActiveLocation = useCallback((loc) => {
     localStorage.setItem('hm_location', loc);
