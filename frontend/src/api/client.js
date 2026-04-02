@@ -36,6 +36,8 @@ export const listSubscriptions    = ()  => api.get("/subscriptions");
 // ── Shops ─────────────────────────────────────────────────────────
 
 export const listShops        = (params = {}) => api.get("/shops",              { params });
+export const nearbyShops      = (lat, lng, radius = 2, params = {}) =>
+  api.get("/shops/nearby", { params: { lat, lng, radius, ...params } });
 export const createShop       = (data)        => api.post("/shops",              data);
 export const getShop          = (id)          => api.get(`/shops/${id}`);
 export const updateShop       = (id, data)    => api.patch(`/shops/${id}`,       data);

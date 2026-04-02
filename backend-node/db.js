@@ -28,20 +28,23 @@ const SCHEMA_SQL = `
     last_login    TEXT
   );
   CREATE TABLE IF NOT EXISTS shops (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name          TEXT    NOT NULL,
-    address       TEXT    NOT NULL,
-    category      TEXT    NOT NULL,
-    location_name TEXT    NOT NULL,
-    status        TEXT    NOT NULL DEFAULT 'pending',
-    logo          TEXT,
-    timings       TEXT,
-    lat           REAL,
-    lng           REAL,
-    rating        REAL    NOT NULL DEFAULT 4.5,
-    review_count  INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name             TEXT    NOT NULL,
+    address          TEXT    NOT NULL,
+    category         TEXT    NOT NULL,
+    location_name    TEXT    NOT NULL,
+    status           TEXT    NOT NULL DEFAULT 'pending',
+    logo             TEXT,
+    timings          TEXT,
+    lat              REAL,
+    lng              REAL,
+    rating           REAL    NOT NULL DEFAULT 4.5,
+    review_count     INTEGER NOT NULL DEFAULT 0,
+    is_open          INTEGER NOT NULL DEFAULT 1,
+    schedule         TEXT,
+    unavailable_dates TEXT,
+    created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
   CREATE TABLE IF NOT EXISTS products (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,6 +122,10 @@ class DB {
 
   createSchema() {
     this._db.exec(SCHEMA_SQL);
+    // Migrations: add new columns if missing
+    try { this._db.run("ALTER TABLE shops ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
+    try { this._db.run("ALTER TABLE shops ADD COLUMN schedule TEXT"); } catch (_) {}
+    try { this._db.run("ALTER TABLE shops ADD COLUMN unavailable_dates TEXT"); } catch (_) {}
     this._save();
   }
 

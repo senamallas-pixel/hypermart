@@ -133,12 +133,16 @@ export function AppProvider({ children }) {
     cart.items.reduce((s, i) => s + i.price * i.quantity, 0) * 100
   ) / 100;
 
+  const setCurrentUser = useCallback((userData) => {
+    authDispatch({ type: 'SET_USER', user: userData });
+  }, []);
+
   return (
     <AppContext.Provider value={{
       currentUser: auth.user,
       authLoading: auth.loading,
       authError:   auth.error,
-      signIn, signOut,
+      signIn, signOut, setCurrentUser,
       cart, cartItemCount, cartTotal,
       addToCart, removeFromCart, updateQuantity, clearCart,
       search, setSearch, activeLocation, setActiveLocation,

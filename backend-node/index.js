@@ -192,20 +192,23 @@ function serializeUser(u) {
 
 function serializeShop(s) {
   return {
-    id:            s.id,
-    owner_id:      s.owner_id,
-    name:          s.name,
-    address:       s.address,
-    category:      s.category,
-    location_name: s.location_name,
-    status:        s.status,
-    logo:          s.logo || null,
-    timings:       s.timings || null,
-    lat:           s.lat ?? null,
-    lng:           s.lng ?? null,
-    rating:        s.rating,
-    review_count:  s.review_count,
-    created_at:    s.created_at,
+    id:               s.id,
+    owner_id:         s.owner_id,
+    name:             s.name,
+    address:          s.address,
+    category:         s.category,
+    location_name:    s.location_name,
+    status:           s.status,
+    logo:             s.logo || null,
+    timings:          s.timings || null,
+    lat:              s.lat ?? null,
+    lng:              s.lng ?? null,
+    rating:           s.rating,
+    review_count:     s.review_count,
+    is_open:          s.is_open ?? 1,
+    schedule:         s.schedule ? JSON.parse(s.schedule) : null,
+    unavailable_dates: s.unavailable_dates ? JSON.parse(s.unavailable_dates) : [],
+    created_at:       s.created_at,
   };
 }
 
@@ -495,11 +498,18 @@ app.patch("/shops/:id", requireAuth, (req, res) => {
   if (!shop) return res.status(404).json({ detail: "Shop not found" });
   if (!assertShopOwnership(shop, req.user, res)) return;
 
-  const allowed = ["name", "address", "category", "location_name", "logo", "timings", "lat", "lng"];
+  const allowed = ["name", "address", "category", "location_name", "logo", "timings", "lat", "lng", "is_open", "schedule", "unavailable_dates"];
   if (req.user.role === "admin") allowed.push("status");
   const updates = {};
   for (const k of allowed) {
-    if (req.body[k] !== undefined) updates[k] = req.body[k];
+    if (req.body[k] !== undefined) {
+      // JSON-stringify objects for storage
+      if ((k === "schedule" || k === "unavailable_dates") && typeof req.body[k] === "object") {
+        updates[k] = JSON.stringify(req.body[k]);
+      } else {
+        updates[k] = req.body[k];
+      }
+    }
   }
   if (Object.keys(updates).length) {
     const sets = Object.keys(updates).map(k => `${k} = ?`).join(", ");
@@ -532,6 +542,45 @@ app.delete("/shops/:id", requireRole("admin"), (req, res) => {
 app.get("/owners/me/shops", requireRole("owner", "admin"), (req, res) => {
   const shops = db.prepare("SELECT * FROM shops WHERE owner_id = ?").all(req.user.id);
   res.json(shops.map(serializeShop));
+});
+
+// GET /shops/nearby  — find shops within a radius using Haversine formula
+app.get("/shops/nearby", (req, res) => {
+  const { lat, lng, radius = 2, category, search } = req.query;
+  if (!lat || !lng) return res.status(422).json({ detail: "lat and lng query parameters are required" });
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+  const maxKm   = parseFloat(radius);
+  if (isNaN(userLat) || isNaN(userLng) || isNaN(maxKm)) {
+    return res.status(422).json({ detail: "lat, lng, and radius must be valid numbers" });
+  }
+
+  let sql = "SELECT * FROM shops WHERE status = 'approved' AND lat IS NOT NULL AND lng IS NOT NULL";
+  const args = [];
+  if (category) { sql += " AND category = ?"; args.push(category); }
+  if (search) { sql += " AND (name LIKE ? OR category LIKE ?)"; args.push(`%${search}%`, `%${search}%`); }
+
+  const allShops = db.prepare(sql).all(...args);
+
+  // Haversine distance in km
+  const toRad = deg => deg * Math.PI / 180;
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  const nearby = allShops
+    .map(s => {
+      const dist = haversine(userLat, userLng, s.lat, s.lng);
+      return { ...serializeShop(s), distance_km: Math.round(dist * 100) / 100 };
+    })
+    .filter(s => s.distance_km <= maxKm)
+    .sort((a, b) => a.distance_km - b.distance_km);
+
+  res.json({ items: nearby, total: nearby.length, radius_km: maxKm, center: { lat: userLat, lng: userLng } });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

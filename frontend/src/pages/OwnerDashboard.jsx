@@ -8,7 +8,7 @@ import {
   Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight,
   Truck, Store, AlertCircle, Loader2, BarChart2, Menu, Minus,
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
-  MapPin, Upload, Navigation, Image,
+  MapPin, Upload, Navigation, Image, Calendar, Power, Save,
 } from 'lucide-react';
 import {
   getMyShops, createShop, updateShop,
@@ -20,7 +20,7 @@ import {
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
 
-const TABS      = ['Overview', 'Analytics', 'Billing', 'Inventory', 'Orders'];
+const TABS      = ['Overview', 'Analytics', 'Billing', 'Inventory', 'Orders', 'Settings'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
 const LOCATIONS = ['Green Valley','Central Market','Food Plaza','Milk Lane','Old Town'];
 const SHOP_CATS = ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care','General'];
@@ -1183,6 +1183,318 @@ function InventoryPanel({ shopId }) {
   );
 }
 
+// ── Shop Settings Panel ────────────────────────────────────────────
+function ShopSettingsPanel({ shop, onUpdated }) {
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [isOpen, setIsOpen] = useState(shop?.is_open ?? 1);
+  const [timings, setTimings] = useState(shop?.timings || '');
+  const [schedule, setSchedule] = useState(shop?.schedule || {
+    monday: { open: '09:00', close: '21:00', closed: false },
+    tuesday: { open: '09:00', close: '21:00', closed: false },
+    wednesday: { open: '09:00', close: '21:00', closed: false },
+    thursday: { open: '09:00', close: '21:00', closed: false },
+    friday: { open: '09:00', close: '21:00', closed: false },
+    saturday: { open: '09:00', close: '21:00', closed: false },
+    sunday: { open: '10:00', close: '18:00', closed: true },
+  });
+  const [unavailableDates, setUnavailableDates] = useState(shop?.unavailable_dates || []);
+  const [newDate, setNewDate] = useState('');
+
+  // Products for stock management
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [stockUpdating, setStockUpdating] = useState(null);
+
+  const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const DAY_LABELS = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
+  const inp = 'w-full bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors';
+
+  useEffect(() => {
+    if (!shop) return;
+    setIsOpen(shop.is_open ?? 1);
+    setTimings(shop.timings || '');
+    setSchedule(shop.schedule || schedule);
+    setUnavailableDates(shop.unavailable_dates || []);
+  }, [shop?.id]);
+
+  useEffect(() => {
+    if (!shop) return;
+    setProductsLoading(true);
+    listProducts(shop.id, false)
+      .then(r => setProducts(r.data))
+      .catch(console.error)
+      .finally(() => setProductsLoading(false));
+  }, [shop?.id]);
+
+  const handleToggleOpen = async () => {
+    setSaving(true); setError('');
+    try {
+      const newVal = isOpen ? 0 : 1;
+      await updateShop(shop.id, { is_open: newVal });
+      setIsOpen(newVal);
+      setSuccess(newVal ? 'Shop is now Open' : 'Shop is now Closed');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update');
+    } finally { setSaving(false); }
+  };
+
+  const handleSaveTimings = async () => {
+    setSaving(true); setError('');
+    try {
+      await updateShop(shop.id, { timings });
+      setSuccess('Timings updated');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update');
+    } finally { setSaving(false); }
+  };
+
+  const handleSaveSchedule = async () => {
+    setSaving(true); setError('');
+    try {
+      await updateShop(shop.id, { schedule });
+      setSuccess('Weekly schedule saved');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update');
+    } finally { setSaving(false); }
+  };
+
+  const handleAddUnavailableDate = async () => {
+    if (!newDate) return;
+    const updated = [...unavailableDates.filter(d => d !== newDate), newDate].sort();
+    setSaving(true); setError('');
+    try {
+      await updateShop(shop.id, { unavailable_dates: updated });
+      setUnavailableDates(updated);
+      setNewDate('');
+      setSuccess('Non-availability date added');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update');
+    } finally { setSaving(false); }
+  };
+
+  const handleRemoveDate = async (date) => {
+    const updated = unavailableDates.filter(d => d !== date);
+    setSaving(true); setError('');
+    try {
+      await updateShop(shop.id, { unavailable_dates: updated });
+      setUnavailableDates(updated);
+      setSuccess('Date removed');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update');
+    } finally { setSaving(false); }
+  };
+
+  const handleToggleStock = async (product) => {
+    const newStatus = product.status === 'active' ? 'out_of_stock' : 'active';
+    setStockUpdating(product.id);
+    try {
+      await updateProduct(shop.id, product.id, { status: newStatus });
+      setProducts(ps => ps.map(p => p.id === product.id ? { ...p, status: newStatus } : p));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to update stock');
+    } finally { setStockUpdating(null); }
+  };
+
+  const handleUpdateStock = async (product, newStock) => {
+    setStockUpdating(product.id);
+    try {
+      await updateProduct(shop.id, product.id, { stock: newStock });
+      setProducts(ps => ps.map(p => p.id === product.id ? { ...p, stock: newStock } : p));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to update stock');
+    } finally { setStockUpdating(null); }
+  };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const futureUnavail = unavailableDates.filter(d => d >= todayStr);
+  const pastUnavail = unavailableDates.filter(d => d < todayStr);
+
+  return (
+    <div className="space-y-6">
+      {/* Success / Error messages */}
+      <AnimatePresence>
+        {success && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-green-600" />
+            <span className="text-sm font-medium text-green-700">{success}</span>
+          </motion.div>
+        )}
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600" />
+            <span className="text-sm font-medium text-red-700">{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Shop Open/Close Toggle */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
+          <Power size={18} className="text-[#5A5A40]" /> Shop Availability
+        </h3>
+        <div className="flex items-center justify-between bg-[#F5F5F0] rounded-2xl px-5 py-4">
+          <div>
+            <p className="font-bold text-sm">Shop Status</p>
+            <p className="text-xs text-[#1A1A1A]/40">Customers will see your shop as {isOpen ? 'open' : 'closed'}</p>
+          </div>
+          <button onClick={handleToggleOpen} disabled={saving}
+            className={`relative w-14 h-7 rounded-full transition-all ${isOpen ? 'bg-emerald-500' : 'bg-[#1A1A1A]/20'}`}>
+            <motion.div animate={{ x: isOpen ? 28 : 4 }}
+              className="absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm" />
+          </button>
+        </div>
+      </div>
+
+      {/* Timings */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
+          <Clock size={18} className="text-[#5A5A40]" /> Shop Timings
+        </h3>
+        <div className="space-y-3">
+          <input className={inp} placeholder="e.g. 9:00 AM – 9:00 PM" value={timings} onChange={e => setTimings(e.target.value)} />
+          <button onClick={handleSaveTimings} disabled={saving}
+            className="bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Timings
+          </button>
+        </div>
+      </div>
+
+      {/* Weekly Schedule */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
+          <Calendar size={18} className="text-[#5A5A40]" /> Weekly Schedule
+        </h3>
+        <div className="space-y-2">
+          {DAYS.map(day => (
+            <div key={day} className="flex items-center gap-3 bg-[#F5F5F0] rounded-xl px-4 py-2.5">
+              <span className="font-bold text-sm w-10">{DAY_LABELS[day]}</span>
+              <button onClick={() => setSchedule(s => ({ ...s, [day]: { ...s[day], closed: !s[day].closed } }))}
+                className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full transition-colors ${schedule[day]?.closed ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-700'}`}>
+                {schedule[day]?.closed ? 'Closed' : 'Open'}
+              </button>
+              {!schedule[day]?.closed && (
+                <div className="flex items-center gap-2 ml-auto">
+                  <input type="time" value={schedule[day]?.open || '09:00'}
+                    onChange={e => setSchedule(s => ({ ...s, [day]: { ...s[day], open: e.target.value } }))}
+                    className="bg-white border border-[#1A1A1A]/10 rounded-lg px-2 py-1 text-xs font-medium" />
+                  <span className="text-xs text-[#1A1A1A]/30">to</span>
+                  <input type="time" value={schedule[day]?.close || '21:00'}
+                    onChange={e => setSchedule(s => ({ ...s, [day]: { ...s[day], close: e.target.value } }))}
+                    className="bg-white border border-[#1A1A1A]/10 rounded-lg px-2 py-1 text-xs font-medium" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <button onClick={handleSaveSchedule} disabled={saving}
+          className="mt-4 bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Schedule
+        </button>
+      </div>
+
+      {/* Non-Availability Calendar */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
+          <Calendar size={18} className="text-[#5A5A40]" /> Non-Availability Dates
+        </h3>
+        <p className="text-xs text-[#1A1A1A]/40 mb-4">Mark specific dates when your shop will be closed (holidays, maintenance, etc.)</p>
+        <div className="flex gap-2 mb-4">
+          <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} min={todayStr}
+            className={`${inp} flex-1`} />
+          <button onClick={handleAddUnavailableDate} disabled={saving || !newDate}
+            className="bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+            <Plus size={14} /> Add
+          </button>
+        </div>
+        {futureUnavail.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Upcoming Closures</p>
+            <div className="flex flex-wrap gap-2">
+              {futureUnavail.map(date => (
+                <div key={date} className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-xl px-3 py-1.5">
+                  <span className="text-xs font-bold text-red-700">
+                    {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                  <button onClick={() => handleRemoveDate(date)} className="text-red-400 hover:text-red-600">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[#1A1A1A]/30 italic">No upcoming closure dates set</p>
+        )}
+        {pastUnavail.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-[#1A1A1A]/5">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/25 mb-1">Past Dates</p>
+            <div className="flex flex-wrap gap-1.5">
+              {pastUnavail.slice(-5).map(date => (
+                <span key={date} className="text-[10px] text-[#1A1A1A]/30 bg-[#F5F5F0] rounded px-2 py-0.5">
+                  {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Stock Management */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
+          <Package size={18} className="text-[#5A5A40]" /> Stock Management
+        </h3>
+        {productsLoading ? (
+          <div className="py-8 text-center"><Loader2 size={20} className="animate-spin mx-auto text-[#5A5A40]/30" /></div>
+        ) : products.length > 0 ? (
+          <div className="space-y-2">
+            {products.map(p => (
+              <div key={p.id} className="flex items-center gap-3 bg-[#F5F5F0] rounded-xl px-4 py-3">
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex-shrink-0">
+                  {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <Package size={14} className="m-auto mt-3 text-[#5A5A40]/20" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">{p.name}</p>
+                  <p className="text-[10px] text-[#1A1A1A]/40">₹{p.price} · {p.category}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center bg-white rounded-lg border border-[#1A1A1A]/10 overflow-hidden">
+                    <button onClick={() => handleUpdateStock(p, Math.max(0, p.stock - 1))} disabled={stockUpdating === p.id}
+                      className="w-7 h-7 flex items-center justify-center text-[#5A5A40] hover:bg-[#F5F5F0] disabled:opacity-50"><Minus size={12} /></button>
+                    <span className="w-8 text-center text-xs font-bold">{p.stock}</span>
+                    <button onClick={() => handleUpdateStock(p, p.stock + 1)} disabled={stockUpdating === p.id}
+                      className="w-7 h-7 flex items-center justify-center text-[#5A5A40] hover:bg-[#F5F5F0] disabled:opacity-50"><Plus size={12} /></button>
+                  </div>
+                  <button onClick={() => handleToggleStock(p)} disabled={stockUpdating === p.id}
+                    className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg transition-colors ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
+                    {stockUpdating === p.id ? '…' : p.status === 'active' ? 'In Stock' : 'Out of Stock'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#1A1A1A]/30 italic py-4 text-center">No products yet. Add products in the Inventory tab.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────
 export default function OwnerDashboard() {
   const { currentUser } = useApp();
@@ -1401,6 +1713,10 @@ export default function OwnerDashboard() {
 
       {tab === 'Orders' && selectedShop && (
         <OrdersPanel shopId={selectedShop.id} />
+      )}
+
+      {tab === 'Settings' && selectedShop && (
+        <ShopSettingsPanel shop={selectedShop} onUpdated={loadShops} />
       )}
     </motion.div>
   );

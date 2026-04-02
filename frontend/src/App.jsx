@@ -10,7 +10,7 @@ import {
   XCircle, Clock, Truck, Edit3, Save, Lock, AlertCircle, Plus,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
-import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts } from './api/client';
+import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts, uploadFile } from './api/client';
 import Marketplace    from './pages/Marketplace';
 import OwnerDashboard from './pages/OwnerDashboard';
 import AdminPanel     from './pages/AdminPanel';
@@ -216,7 +216,7 @@ function SignIn() {
 
 // ── Profile ────────────────────────────────────────────────────────
 function Profile() {
-  const { currentUser, signOut } = useApp();
+  const { currentUser, signOut, setCurrentUser } = useApp();
   const navigate = useNavigate();
   const [selLoc, setSelLoc] = useState(localStorage.getItem('hm_location') || LOCATIONS[0]);
   const [orders, setOrders] = useState([]);
@@ -225,8 +225,26 @@ function Profile() {
   const [shopAnalytics, setShopAnalytics] = useState(null);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
 
+  // Profile editing state
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ display_name: '', phone: '', address: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Password change state
+  const [showPwForm, setShowPwForm] = useState(false);
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+
   useEffect(() => {
     if (!currentUser) return;
+    setEditForm({ display_name: currentUser.display_name || '', phone: currentUser.phone || '', address: currentUser.address || '' });
     if (currentUser.role === 'customer') {
       setOrdersLoading(true);
       getMyOrders().then(r => setOrders(r.data.items)).catch(console.error).finally(() => setOrdersLoading(false));
@@ -244,19 +262,87 @@ function Profile() {
   const handleLocationChange = loc => { setSelLoc(loc); localStorage.setItem('hm_location', loc); };
   const handleSignOut = () => { signOut(); navigate('/marketplace', { replace: true }); };
 
+  const handleProfileSave = async () => {
+    setEditSaving(true); setEditError(''); setEditSuccess('');
+    try {
+      const res = await updateMe({ display_name: editForm.display_name.trim(), phone: editForm.phone.trim() || null, address: editForm.address.trim() || null });
+      setCurrentUser(res.data);
+      setEditing(false);
+      setEditSuccess('Profile updated successfully');
+      setTimeout(() => setEditSuccess(''), 3000);
+    } catch (err) {
+      setEditError(err.response?.data?.detail || 'Failed to update profile');
+    } finally { setEditSaving(false); }
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const res = await uploadFile(file);
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const photoUrl = `${baseUrl}${res.data.url}`;
+      const updated = await updateMe({ photo_url: photoUrl });
+      setCurrentUser(updated.data);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to upload photo');
+    } finally { setUploadingPhoto(false); }
+  };
+
+  const handlePasswordChange = async () => {
+    setPwError(''); setPwSuccess('');
+    if (!pwForm.current_password || !pwForm.new_password) { setPwError('All fields are required'); return; }
+    if (pwForm.new_password.length < 6) { setPwError('New password must be at least 6 characters'); return; }
+    if (pwForm.new_password !== pwForm.confirm_password) { setPwError('Passwords do not match'); return; }
+    setPwSaving(true);
+    try {
+      await changePassword({ current_password: pwForm.current_password, new_password: pwForm.new_password });
+      setPwSuccess('Password changed successfully');
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' });
+      setShowPwForm(false);
+      setTimeout(() => setPwSuccess(''), 3000);
+    } catch (err) {
+      setPwError(err.response?.data?.detail || 'Failed to change password');
+    } finally { setPwSaving(false); }
+  };
+
   const ROLE_BG = { admin: 'bg-purple-100 text-purple-700 border-purple-200', owner: 'bg-blue-100 text-blue-700 border-blue-200', customer: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
   const STATUS_CLS = {
     pending: 'bg-amber-100 text-amber-700', accepted: 'bg-blue-100 text-blue-700', ready: 'bg-indigo-100 text-indigo-700',
     out_for_delivery: 'bg-purple-100 text-purple-700', delivered: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700',
   };
+  const inp = 'w-full bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors';
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto px-4 pb-28 pt-4 sm:pt-8 space-y-4">
-      {/* User Card */}
+      {/* Success Messages */}
+      <AnimatePresence>
+        {(editSuccess || pwSuccess) && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-green-600" />
+            <span className="text-sm font-medium text-green-700">{editSuccess || pwSuccess}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* User Card with Photo */}
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#1A1A1A]/5">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#5A5A40] to-[#3A3A28] rounded-2xl flex items-center justify-center text-white font-serif text-2xl font-bold flex-shrink-0">
-            {currentUser?.display_name?.[0]?.toUpperCase() || '?'}
+          <div className="relative group">
+            {currentUser?.photo_url ? (
+              <img src={currentUser.photo_url} alt={currentUser.display_name}
+                className="w-16 h-16 rounded-2xl object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-[#5A5A40] to-[#3A3A28] rounded-2xl flex items-center justify-center text-white font-serif text-2xl font-bold flex-shrink-0">
+                {currentUser?.display_name?.[0]?.toUpperCase() || '?'}
+              </div>
+            )}
+            <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              {uploadingPhoto ? <Loader2 size={18} className="text-white animate-spin" /> : <Edit3 size={14} className="text-white" />}
+              <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+            </label>
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="font-serif text-xl font-bold truncate">{currentUser?.display_name || 'Guest'}</h2>
@@ -268,6 +354,11 @@ function Profile() {
               {currentUser?.phone && <span className="text-xs text-[#1A1A1A]/40">{currentUser.phone}</span>}
             </div>
           </div>
+          {!editing && (
+            <button onClick={() => setEditing(true)} className="p-2 hover:bg-[#F5F5F0] rounded-xl transition-colors" title="Edit Profile">
+              <Edit3 size={16} className="text-[#5A5A40]" />
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-5 border-t border-[#1A1A1A]/5">
           <div>
@@ -285,6 +376,77 @@ function Profile() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Edit Profile Form */}
+      <AnimatePresence>
+        {editing && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-[#1A1A1A]/5 space-y-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 flex items-center gap-2">
+                  <Edit3 size={12} /> Edit Profile
+                </h3>
+                <button onClick={() => { setEditing(false); setEditError(''); }} className="text-xs font-bold text-[#1A1A1A]/40 hover:text-[#1A1A1A]/60">Cancel</button>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">Display Name</label>
+                <input className={inp} value={editForm.display_name} onChange={e => setEditForm(f => ({ ...f, display_name: e.target.value }))} placeholder="Your name" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">Phone</label>
+                <input className={inp} value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone number" type="tel" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">Address</label>
+                <textarea className={`${inp} resize-none`} rows={2} value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="Your delivery address" />
+              </div>
+              {editError && <p className="text-xs font-semibold text-red-500">{editError}</p>}
+              <button onClick={handleProfileSave} disabled={editSaving}
+                className="w-full bg-[#5A5A40] text-white py-3 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {editSaving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : <><Save size={14} /> Save Changes</>}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Change Password */}
+      <div className="bg-white rounded-3xl shadow-sm border border-[#1A1A1A]/5 overflow-hidden">
+        <button onClick={() => { setShowPwForm(v => !v); setPwError(''); setPwSuccess(''); }}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#F5F5F0]/50 transition-colors">
+          <span className="flex items-center gap-3 text-sm font-bold text-[#1A1A1A]/70"><Lock size={16} className="text-[#5A5A40]" /> Change Password</span>
+          <ChevronRight size={16} className={`text-[#1A1A1A]/30 transition-transform ${showPwForm ? 'rotate-90' : ''}`} />
+        </button>
+        <AnimatePresence>
+          {showPwForm && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <div className="px-6 pb-5 space-y-3 border-t border-[#1A1A1A]/5 pt-4">
+                <div className="relative">
+                  <input className={inp} type={showCurrentPw ? 'text' : 'password'} placeholder="Current password"
+                    value={pwForm.current_password} onChange={e => setPwForm(f => ({ ...f, current_password: e.target.value }))} />
+                  <button onClick={() => setShowCurrentPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 hover:text-[#5A5A40]">
+                    {showCurrentPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input className={inp} type={showNewPw ? 'text' : 'password'} placeholder="New password (min 6 chars)"
+                    value={pwForm.new_password} onChange={e => setPwForm(f => ({ ...f, new_password: e.target.value }))} />
+                  <button onClick={() => setShowNewPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 hover:text-[#5A5A40]">
+                    {showNewPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+                <input className={inp} type="password" placeholder="Confirm new password"
+                  value={pwForm.confirm_password} onChange={e => setPwForm(f => ({ ...f, confirm_password: e.target.value }))} />
+                {pwError && <p className="text-xs font-semibold text-red-500 flex items-center gap-1"><AlertCircle size={12} /> {pwError}</p>}
+                <button onClick={handlePasswordChange} disabled={pwSaving}
+                  className="w-full bg-[#5A5A40] text-white py-3 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  {pwSaving ? <><Loader2 size={14} className="animate-spin" /> Changing…</> : 'Update Password'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Owner: Shop Summary */}

@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
   ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, Clock,
-  Search, Sparkles, TrendingUp,
+  Search, Sparkles, TrendingUp, Navigation, Loader2, Sliders,
 } from 'lucide-react';
-import { listShops, listProducts, placeOrder } from '../api/client';
+import { listShops, listProducts, placeOrder, nearbyShops } from '../api/client';
 import { useApp } from '../context/AppContext';
 
 const CATEGORIES = [
@@ -383,6 +383,159 @@ function ShopProductsView({ shop, onBack }) {
   );
 }
 
+// ── Nearby Shops Section ───────────────────────────────────────────
+function NearbyShopsSection({ onSelectShop }) {
+  const [nearbyList, setNearbyList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const [radius, setRadius] = useState(2);
+  const [showRadiusPicker, setShowRadiusPicker] = useState(false);
+  const [locationRequested, setLocationRequested] = useState(false);
+  const RADIUS_OPTIONS = [1, 2, 3, 5, 10, 15, 25];
+
+  const fetchNearby = useCallback(async (lat, lng, r) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await nearbyShops(lat, lng, r);
+      setNearbyList(res.data.items);
+    } catch {
+      setError('Failed to load nearby shops.');
+    } finally { setLoading(false); }
+  }, []);
+
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) { setError('Geolocation is not supported by your browser.'); return; }
+    setLoading(true); setError(null); setLocationRequested(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(loc);
+        fetchNearby(loc.lat, loc.lng, radius);
+      },
+      (err) => {
+        setLoading(false);
+        if (err.code === 1) setError('Location access denied. Please allow location access in your browser settings.');
+        else setError('Unable to retrieve your location. Please try again.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [radius, fetchNearby]);
+
+  useEffect(() => {
+    if (userLocation) fetchNearby(userLocation.lat, userLocation.lng, radius);
+  }, [radius, userLocation, fetchNearby]);
+
+  return (
+    <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-serif text-lg font-bold flex items-center gap-2">
+          <Navigation size={16} className="text-[#5A5A40]" /> Shops Near You
+        </h3>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowRadiusPicker(v => !v)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-[#F5F5F0] rounded-full text-xs font-bold border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-colors">
+            <Sliders size={12} className="text-[#5A5A40]" /> {radius} km
+          </button>
+          {userLocation && (
+            <button onClick={() => fetchNearby(userLocation.lat, userLocation.lng, radius)}
+              className="p-1.5 hover:bg-[#F5F5F0] rounded-lg transition-colors" title="Refresh">
+              <Navigation size={14} className="text-[#5A5A40]" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Radius picker */}
+      <AnimatePresence>
+        {showRadiusPicker && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-3">
+            <div className="flex flex-wrap gap-1.5 bg-[#F5F5F0] rounded-2xl p-3">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 w-full mb-1">Search Radius</span>
+              {RADIUS_OPTIONS.map(r => (
+                <button key={r} onClick={() => { setRadius(r); setShowRadiusPicker(false); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${radius === r ? 'bg-[#5A5A40] text-white shadow-sm' : 'bg-white text-[#1A1A1A]/60 border border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                  {r} km
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!locationRequested ? (
+        <div className="text-center py-8">
+          <div className="w-14 h-14 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <MapPin size={24} className="text-[#5A5A40]" />
+          </div>
+          <p className="text-sm text-[#1A1A1A]/50 mb-4">Find shops near your current location</p>
+          <button onClick={requestLocation}
+            className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm inline-flex items-center gap-2">
+            <Navigation size={14} /> Use My Location
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="py-8 text-center">
+          <Loader2 size={24} className="animate-spin mx-auto text-[#5A5A40]/40 mb-2" />
+          <p className="text-sm text-[#1A1A1A]/40">Finding nearby shops…</p>
+        </div>
+      ) : error ? (
+        <div className="py-6 text-center">
+          <p className="text-sm text-red-500 mb-3">{error}</p>
+          <button onClick={requestLocation}
+            className="text-xs font-bold text-[#5A5A40] uppercase tracking-widest hover:underline">
+            Try Again
+          </button>
+        </div>
+      ) : nearbyList.length > 0 ? (
+        <div className="space-y-2">
+          {nearbyList.map(shop => (
+            <motion.div key={shop.id} whileTap={{ scale: 0.98 }} onClick={() => onSelectShop(shop)}
+              className="flex items-center gap-3 bg-[#F5F5F0] rounded-2xl px-4 py-3 cursor-pointer hover:bg-[#EBEBDB] transition-colors">
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-white flex-shrink-0">
+                {shop.logo ? <img src={shop.logo} alt={shop.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Store size={18} className="m-auto mt-3.5 text-[#5A5A40]/30" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-sm truncate">{shop.name}</p>
+                  {shop.is_open ? (
+                    <span className="text-[7px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />open
+                    </span>
+                  ) : (
+                    <span className="text-[7px] font-bold uppercase tracking-widest bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">closed</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-[#1A1A1A]/40">{shop.category} · {shop.address}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="font-bold text-sm text-[#5A5A40]">{shop.distance_km} km</p>
+                <div className="flex items-center gap-0.5 text-[9px] text-amber-600">
+                  <Star size={8} fill="currentColor" />{shop.rating}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-6 text-center">
+          <p className="text-sm text-[#1A1A1A]/40">No shops found within {radius} km</p>
+          <button onClick={() => setRadius(r => Math.min(r + 3, 25))}
+            className="text-xs font-bold text-[#5A5A40] uppercase tracking-widest hover:underline mt-2">
+            Expand radius
+          </button>
+        </div>
+      )}
+
+      {userLocation && nearbyList.length > 0 && (
+        <p className="text-[9px] text-[#1A1A1A]/30 text-center mt-3 uppercase tracking-widest">
+          Showing {nearbyList.length} shop{nearbyList.length !== 1 ? 's' : ''} within {radius} km
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Banner / Hero ──────────────────────────────────────────────────
 function MarketplaceBanner({ location }) {
   return (
@@ -513,6 +666,11 @@ export default function Marketplace() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Nearby Shops - GPS based */}
+            {!debounced && (
+              <NearbyShopsSection onSelectShop={(shop) => setSelectedShop(shop)} />
             )}
 
             {/* Category sections */}
