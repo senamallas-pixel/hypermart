@@ -485,6 +485,46 @@ app.post("/shops", requireRole("owner", "admin"), (req, res) => {
   res.status(201).json(serializeShop(shop));
 });
 
+// GET /shops/nearby  — find shops within a radius using Haversine formula
+// IMPORTANT: must be defined before /shops/:id to avoid route collision
+app.get("/shops/nearby", (req, res) => {
+  const { lat, lng, radius = 2, category, search } = req.query;
+  if (!lat || !lng) return res.status(422).json({ detail: "lat and lng query parameters are required" });
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+  const maxKm   = parseFloat(radius);
+  if (isNaN(userLat) || isNaN(userLng) || isNaN(maxKm)) {
+    return res.status(422).json({ detail: "lat, lng, and radius must be valid numbers" });
+  }
+
+  let sql = "SELECT * FROM shops WHERE status = 'approved' AND lat IS NOT NULL AND lng IS NOT NULL";
+  const args = [];
+  if (category) { sql += " AND category = ?"; args.push(category); }
+  if (search) { sql += " AND (name LIKE ? OR category LIKE ?)"; args.push(`%${search}%`, `%${search}%`); }
+
+  const allShops = db.prepare(sql).all(...args);
+
+  // Haversine distance in km
+  const toRad = deg => deg * Math.PI / 180;
+  function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  const nearby = allShops
+    .map(s => {
+      const dist = haversine(userLat, userLng, s.lat, s.lng);
+      return { ...serializeShop(s), distance_km: Math.round(dist * 100) / 100 };
+    })
+    .filter(s => s.distance_km <= maxKm)
+    .sort((a, b) => a.distance_km - b.distance_km);
+
+  res.json({ items: nearby, total: nearby.length, radius_km: maxKm, center: { lat: userLat, lng: userLng } });
+});
+
 // GET /shops/:id
 app.get("/shops/:id", (req, res) => {
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(Number(req.params.id));
@@ -542,45 +582,6 @@ app.delete("/shops/:id", requireRole("admin"), (req, res) => {
 app.get("/owners/me/shops", requireRole("owner", "admin"), (req, res) => {
   const shops = db.prepare("SELECT * FROM shops WHERE owner_id = ?").all(req.user.id);
   res.json(shops.map(serializeShop));
-});
-
-// GET /shops/nearby  — find shops within a radius using Haversine formula
-app.get("/shops/nearby", (req, res) => {
-  const { lat, lng, radius = 2, category, search } = req.query;
-  if (!lat || !lng) return res.status(422).json({ detail: "lat and lng query parameters are required" });
-  const userLat = parseFloat(lat);
-  const userLng = parseFloat(lng);
-  const maxKm   = parseFloat(radius);
-  if (isNaN(userLat) || isNaN(userLng) || isNaN(maxKm)) {
-    return res.status(422).json({ detail: "lat, lng, and radius must be valid numbers" });
-  }
-
-  let sql = "SELECT * FROM shops WHERE status = 'approved' AND lat IS NOT NULL AND lng IS NOT NULL";
-  const args = [];
-  if (category) { sql += " AND category = ?"; args.push(category); }
-  if (search) { sql += " AND (name LIKE ? OR category LIKE ?)"; args.push(`%${search}%`, `%${search}%`); }
-
-  const allShops = db.prepare(sql).all(...args);
-
-  // Haversine distance in km
-  const toRad = deg => deg * Math.PI / 180;
-  function haversine(lat1, lng1, lat2, lng2) {
-    const R = 6371;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  const nearby = allShops
-    .map(s => {
-      const dist = haversine(userLat, userLng, s.lat, s.lng);
-      return { ...serializeShop(s), distance_km: Math.round(dist * 100) / 100 };
-    })
-    .filter(s => s.distance_km <= maxKm)
-    .sort((a, b) => a.distance_km - b.distance_km);
-
-  res.json({ items: nearby, total: nearby.length, radius_km: maxKm, center: { lat: userLat, lng: userLng } });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
