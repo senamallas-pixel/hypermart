@@ -1,19 +1,21 @@
 // src/pages/OwnerDashboard.jsx
 // Shop owner portal — Analytics, Inventory, Orders, Billing
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package, ShoppingBag, TrendingUp, DollarSign, Plus, Search,
   Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight,
   Truck, Store, AlertCircle, Loader2, BarChart2, Menu, Minus,
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
+  MapPin, Upload, Navigation, Image,
 } from 'lucide-react';
 import {
   getMyShops, createShop, updateShop,
   listProducts, createProduct, updateProduct, deleteProduct,
   getShopOrders, updateOrderStatus,
   getShopAnalytics, placeWalkinOrder,
+  uploadFile,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -51,7 +53,23 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     image: product?.image || '',
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await uploadFile(file);
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      setForm(f => ({ ...f, image: `${baseUrl}${res.data.url}` }));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to upload image.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -94,13 +112,31 @@ function ProductModal({ shopId, product, onSave, onClose }) {
           <select className={sel} value={form.category} onChange={set('category')}>
             {CATEGORIES.map(c => <option key={c}>{c}</option>)}
           </select>
-          <input className={inp} placeholder="Image URL (optional)" value={form.image} onChange={set('image')} />
+
+          {/* Image Upload */}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40 mb-2 block">Product Image</label>
+            <div className="flex gap-3">
+              <label className={`flex-1 flex items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-[#1A1A1A]/15 rounded-2xl py-4 px-4 hover:border-[#5A5A40] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {uploading ? <Loader2 size={18} className="animate-spin text-[#5A5A40]" /> : <Upload size={18} className="text-[#5A5A40]" />}
+                <span className="text-sm font-medium text-[#1A1A1A]/50">{uploading ? 'Uploading...' : 'Upload Image'}</span>
+                <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+              </label>
+            </div>
+            <input className={`${inp} mt-2`} placeholder="Or paste image URL" value={form.image} onChange={set('image')} />
+          </div>
+
           {form.image && (
-            <div className="w-full aspect-video rounded-2xl overflow-hidden bg-[#F5F5F0] border border-[#1A1A1A]/5">
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[#F5F5F0] border border-[#1A1A1A]/5">
               <img src={form.image} alt="preview" className="w-full h-full object-cover" referrerPolicy="no-referrer"
                 onError={e => { e.target.style.display = 'none'; }} />
+              <button type="button" onClick={() => setForm(f => ({ ...f, image: '' }))}
+                className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm">
+                <X size={14} />
+              </button>
             </div>
           )}
+
           <button type="submit" disabled={saving}
             className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
             {saving ? <><Loader2 size={18} className="animate-spin" /> Saving...</> : 'Save Product'}
@@ -116,14 +152,55 @@ function ShopRegistrationForm({ onSaved }) {
   const [form, setForm] = useState({
     name: '', address: '', category: SHOP_CATS[0],
     location_name: LOCATIONS[0], timings: '9:00 AM – 9:00 PM', logo: '',
+    lat: '', lng: '',
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
   const inp = 'w-full bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors';
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await uploadFile(file);
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      setForm(f => ({ ...f, logo: `${baseUrl}${res.data.url}` }));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to upload image.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm(f => ({ ...f, lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) }));
+        setLocating(false);
+      },
+      (err) => {
+        alert('Unable to get current location: ' + err.message);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setSaving(true);
-    try { await createShop(form); onSaved(); }
+    try {
+      const payload = { ...form, lat: form.lat ? +form.lat : null, lng: form.lng ? +form.lng : null };
+      await createShop(payload); onSaved();
+    }
     catch (err) { alert(err.response?.data?.detail || 'Failed to register shop.'); }
     finally { setSaving(false); }
   };
@@ -144,12 +221,308 @@ function ShopRegistrationForm({ onSaved }) {
           </select>
         </div>
         <input className={inp} placeholder="Timings (e.g. 9:00 AM – 9:00 PM)" value={form.timings} onChange={set('timings')} />
-        <input className={inp} placeholder="Logo URL (optional)" value={form.logo} onChange={set('logo')} />
+
+        {/* Location (Lat/Lng) */}
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40 mb-2 block">Shop Location</label>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <input className={inp} placeholder="Latitude" type="number" step="any" value={form.lat} onChange={set('lat')} />
+            <input className={inp} placeholder="Longitude" type="number" step="any" value={form.lng} onChange={set('lng')} />
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={getCurrentLocation} disabled={locating}
+              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all disabled:opacity-50">
+              {locating ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}
+              {locating ? 'Getting location...' : 'Use Current Location'}
+            </button>
+            <button type="button" onClick={() => setMapPickerOpen(true)}
+              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all">
+              <MapPin size={16} /> Pick on Map
+            </button>
+          </div>
+          {form.lat && form.lng && (
+            <div className="mt-3 bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2">
+              <MapPin size={14} className="text-green-600" />
+              <span className="text-xs text-green-800 font-medium">Location set: {form.lat}, {form.lng}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Shop Logo Upload */}
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40 mb-2 block">Shop Photo / Logo</label>
+          <label className={`flex items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-[#1A1A1A]/15 rounded-2xl py-5 hover:border-[#5A5A40] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {uploading ? <Loader2 size={18} className="animate-spin text-[#5A5A40]" /> : <Upload size={18} className="text-[#5A5A40]" />}
+            <span className="text-sm font-medium text-[#1A1A1A]/50">{uploading ? 'Uploading...' : 'Upload Shop Photo'}</span>
+            <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleLogoUpload} disabled={uploading} />
+          </label>
+          <input className={`${inp} mt-2`} placeholder="Or paste logo URL" value={form.logo} onChange={set('logo')} />
+          {form.logo && (
+            <div className="relative mt-3 w-full aspect-video rounded-2xl overflow-hidden bg-[#F5F5F0] border border-[#1A1A1A]/5">
+              <img src={form.logo} alt="Shop logo preview" className="w-full h-full object-cover" referrerPolicy="no-referrer"
+                onError={e => { e.target.style.display = 'none'; }} />
+              <button type="button" onClick={() => setForm(f => ({ ...f, logo: '' }))}
+                className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+
         <button type="submit" disabled={saving}
           className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
           {saving ? <><Loader2 size={18} className="animate-spin" /> Registering...</> : 'Submit for Approval'}
         </button>
       </form>
+
+      {/* Map Picker Modal */}
+      <AnimatePresence>
+        {mapPickerOpen && (
+          <MapPickerModal
+            initialLat={form.lat ? +form.lat : null}
+            initialLng={form.lng ? +form.lng : null}
+            onConfirm={(lat, lng) => {
+              setForm(f => ({ ...f, lat: lat.toFixed(6), lng: lng.toFixed(6) }));
+              setMapPickerOpen(false);
+            }}
+            onClose={() => setMapPickerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Map Picker Modal (uses OpenStreetMap + Leaflet-like click-to-pick) ──────
+function MapPickerModal({ initialLat, initialLng, onConfirm, onClose }) {
+  const [pin, setPin] = useState({
+    lat: initialLat || 17.385,
+    lng: initialLng || 78.4867,
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const mapRef = useRef(null);
+  const [mapCenter, setMapCenter] = useState({
+    lat: initialLat || 17.385,
+    lng: initialLng || 78.4867,
+  });
+  const [zoom, setZoom] = useState(14);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef(null);
+  const centerStart = useRef(null);
+
+  // Tile math helpers for OSM
+  const lon2tile = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z);
+  const lat2tile = (lat, z) => ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * Math.pow(2, z);
+  const tile2lon = (x, z) => (x / Math.pow(2, z)) * 360 - 180;
+  const tile2lat = (y, z) => {
+    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  };
+
+  const handleMapClick = (e) => {
+    if (dragging) return;
+    const rect = mapRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const w = rect.width;
+    const h = rect.height;
+
+    const centerTileX = lon2tile(mapCenter.lng, zoom);
+    const centerTileY = lat2tile(mapCenter.lat, zoom);
+    const tileSize = 256;
+    const scale = Math.pow(2, zoom);
+
+    const pixelOffsetX = (x - w / 2);
+    const pixelOffsetY = (y - h / 2);
+
+    const tileX = centerTileX + pixelOffsetX / tileSize;
+    const tileY = centerTileY + pixelOffsetY / tileSize;
+
+    const clickLng = tile2lon(tileX, zoom);
+    const clickLat = tile2lat(tileY, zoom);
+
+    setPin({ lat: clickLat, lng: clickLng });
+  };
+
+  const handleMouseDown = (e) => {
+    setDragging(false);
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    centerStart.current = { ...mapCenter };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) setDragging(true);
+    const scale = Math.pow(2, zoom);
+    const tileSize = 256;
+    const newCenterTileX = lon2tile(centerStart.current.lng, zoom) - dx / tileSize;
+    const newCenterTileY = lat2tile(centerStart.current.lat, zoom) - dy / tileSize;
+    setMapCenter({
+      lat: tile2lat(newCenterTileY, zoom),
+      lng: tile2lon(newCenterTileX, zoom),
+    });
+  };
+
+  const handleMouseUp = () => {
+    dragStart.current = null;
+    centerStart.current = null;
+  };
+
+  // Search using Nominatim (free OSM geocoder)
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const data = await resp.json();
+      if (data.length > 0) {
+        const { lat, lon } = data[0];
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lon);
+        setPin({ lat: parsedLat, lng: parsedLng });
+        setMapCenter({ lat: parsedLat, lng: parsedLng });
+      } else {
+        alert('Location not found. Try a different search term.');
+      }
+    } catch {
+      alert('Search failed. Please try again.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Render tiles
+  const renderTiles = () => {
+    if (!mapRef.current) return null;
+    const rect = mapRef.current.getBoundingClientRect();
+    const w = rect.width || 500;
+    const h = rect.height || 400;
+    const tileSize = 256;
+
+    const centerTileX = lon2tile(mapCenter.lng, zoom);
+    const centerTileY = lat2tile(mapCenter.lat, zoom);
+
+    const tilesX = Math.ceil(w / tileSize) + 2;
+    const tilesY = Math.ceil(h / tileSize) + 2;
+
+    const startTileX = Math.floor(centerTileX - tilesX / 2);
+    const startTileY = Math.floor(centerTileY - tilesY / 2);
+
+    const offsetX = (centerTileX - startTileX) * tileSize - w / 2;
+    const offsetY = (centerTileY - startTileY) * tileSize - h / 2;
+
+    const tiles = [];
+    for (let ty = 0; ty < tilesY; ty++) {
+      for (let tx = 0; tx < tilesX; tx++) {
+        const tileXIdx = startTileX + tx;
+        const tileYIdx = startTileY + ty;
+        const maxTile = Math.pow(2, zoom);
+        if (tileYIdx < 0 || tileYIdx >= maxTile) continue;
+        const wrappedX = ((tileXIdx % maxTile) + maxTile) % maxTile;
+        tiles.push(
+          <img
+            key={`${zoom}-${wrappedX}-${tileYIdx}`}
+            src={`https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileYIdx}.png`}
+            alt=""
+            draggable={false}
+            style={{
+              position: 'absolute',
+              left: tx * tileSize - offsetX,
+              top: ty * tileSize - offsetY,
+              width: tileSize,
+              height: tileSize,
+              imageRendering: 'auto',
+            }}
+          />
+        );
+      }
+    }
+
+    // Pin marker position
+    const pinTileX = lon2tile(pin.lng, zoom);
+    const pinTileY = lat2tile(pin.lat, zoom);
+    const pinPixelX = (pinTileX - startTileX) * tileSize - offsetX;
+    const pinPixelY = (pinTileY - startTileY) * tileSize - offsetY;
+
+    tiles.push(
+      <div key="pin" style={{ position: 'absolute', left: pinPixelX - 12, top: pinPixelY - 32, zIndex: 10, pointerEvents: 'none' }}>
+        <div className="flex flex-col items-center">
+          <div className="w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
+            <div className="w-2 h-2 bg-white rounded-full" />
+          </div>
+          <div className="w-0.5 h-3 bg-red-500" />
+        </div>
+      </div>
+    );
+
+    return tiles;
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl"
+      >
+        <div className="flex justify-between items-center p-5 border-b border-[#1A1A1A]/5">
+          <h3 className="font-serif text-xl font-bold flex items-center gap-2"><MapPin size={20} className="text-[#5A5A40]" /> Pick Location</h3>
+          <button onClick={onClose} className="p-2 hover:bg-[#F5F5F0] rounded-full"><X size={20} /></button>
+        </div>
+
+        <div className="p-4">
+          {/* Search bar */}
+          <div className="flex gap-2 mb-3">
+            <input
+              className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#5A5A40] transition-colors"
+              placeholder="Search for a place..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            />
+            <button onClick={handleSearch} disabled={searching}
+              className="px-4 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+              {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+              Search
+            </button>
+          </div>
+
+          {/* Map area */}
+          <div
+            ref={mapRef}
+            className="relative w-full rounded-2xl overflow-hidden border border-[#1A1A1A]/10 cursor-crosshair select-none"
+            style={{ height: 350 }}
+            onClick={handleMapClick}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {renderTiles()}
+            {/* Zoom controls */}
+            <div className="absolute top-3 right-3 z-20 flex flex-col gap-1">
+              <button type="button" onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(z + 1, 18)); }}
+                className="w-8 h-8 bg-white rounded-lg shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50">+</button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(z - 1, 2)); }}
+                className="w-8 h-8 bg-white rounded-lg shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50">−</button>
+            </div>
+            {/* Attribution */}
+            <div className="absolute bottom-0 right-0 z-20 text-[8px] text-[#1A1A1A]/40 bg-white/80 px-1">© OpenStreetMap</div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-xs text-[#1A1A1A]/50">
+              📍 {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
+            </p>
+            <button type="button" onClick={() => onConfirm(pin.lat, pin.lng)}
+              className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all flex items-center gap-2">
+              <CheckCircle2 size={16} /> Confirm Location
+            </button>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

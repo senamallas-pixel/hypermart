@@ -14,10 +14,40 @@ const cors       = require("cors");
 const bcrypt     = require("bcryptjs");
 const jwt        = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
+const multer     = require("multer");
+const path       = require("path");
+const fs         = require("fs");
 const db         = require("./db");
 
 const app  = express();
 const PORT = process.env.PORT || 8000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// File upload setup (multer)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${uuidv4()}${ext}`);
+  },
+});
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, GIF, and WebP images are allowed"));
+  },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -34,6 +64,7 @@ const SUBSCRIPTION_AMOUNT = 10.0;
 
 app.use(cors({ origin: "*", credentials: true }));
 app.use(express.json());
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums (for validation)
@@ -890,6 +921,30 @@ app.get("/shops/:shopId/analytics", requireAuth, (req, res) => {
     top_products:     topProducts,
     orders_by_status: ordersByStatus,
     monthly_revenue:  monthlyRevenue,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FILE UPLOAD
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /upload  — upload a single image file, returns { url: "/uploads/<filename>" }
+app.post("/upload", requireAuth, (req, res) => {
+  upload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ detail: "File too large. Maximum size is 5 MB." });
+      }
+      return res.status(400).json({ detail: err.message });
+    }
+    if (err) {
+      return res.status(400).json({ detail: err.message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ detail: "No file provided" });
+    }
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ url, filename: req.file.filename });
   });
 });
 
