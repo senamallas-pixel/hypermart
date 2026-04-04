@@ -10,6 +10,8 @@ import {
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
   MapPin, Upload, Navigation, Image, Calendar, Power, Save,
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import {
   getMyShops, createShop, updateShop,
   listProducts, createProduct, updateProduct, deleteProduct,
@@ -20,6 +22,14 @@ import {
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
 import DailySalesCalendar from '../components/DailySalesCalendar';
+
+// Fix Leaflet default marker icon (broken in bundlers)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const TABS      = ['Overview', 'Analytics', 'Billing', 'Inventory', 'Orders', 'Settings'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
@@ -316,231 +326,142 @@ function ShopRegistrationForm({ onSaved }) {
   );
 }
 
-// ── Map Picker Modal (uses OpenStreetMap + Leaflet-like click-to-pick) ──────
-function MapPickerModal({ initialLat, initialLng, onConfirm, onClose }) {
-  const [pin, setPin] = useState({
-    lat: initialLat || 17.385,
-    lng: initialLng || 78.4867,
+// ── Map Picker Modal (Leaflet / OpenStreetMap) ───────────────────
+function LocationMarker({ position, onMove }) {
+  const map = useMapEvents({
+    click(e) {
+      onMove(e.latlng.lat, e.latlng.lng);
+    },
   });
+
+  useEffect(() => {
+    if (position) map.flyTo([position.lat, position.lng], map.getZoom(), { animate: true, duration: 0.5 });
+  }, [position]);
+
+  return position ? <Marker position={[position.lat, position.lng]} /> : null;
+}
+
+function MapPickerModal({ initialLat, initialLng, onConfirm, onClose }) {
+  const defaultLat = initialLat || 17.385;
+  const defaultLng = initialLng || 78.4867;
+  const [pin, setPin] = useState({ lat: defaultLat, lng: defaultLng });
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const mapRef = useRef(null);
-  const [mapCenter, setMapCenter] = useState({
-    lat: initialLat || 17.385,
-    lng: initialLng || 78.4867,
-  });
-  const [zoom, setZoom] = useState(14);
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef(null);
-  const centerStart = useRef(null);
+  const [address, setAddress] = useState('');
 
-  // Tile math helpers for OSM
-  const lon2tile = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z);
-  const lat2tile = (lat, z) => ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * Math.pow(2, z);
-  const tile2lon = (x, z) => (x / Math.pow(2, z)) * 360 - 180;
-  const tile2lat = (y, z) => {
-    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  };
-
-  const handleMapClick = (e) => {
-    if (dragging) return;
-    const rect = mapRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const w = rect.width;
-    const h = rect.height;
-
-    const centerTileX = lon2tile(mapCenter.lng, zoom);
-    const centerTileY = lat2tile(mapCenter.lat, zoom);
-    const tileSize = 256;
-    const scale = Math.pow(2, zoom);
-
-    const pixelOffsetX = (x - w / 2);
-    const pixelOffsetY = (y - h / 2);
-
-    const tileX = centerTileX + pixelOffsetX / tileSize;
-    const tileY = centerTileY + pixelOffsetY / tileSize;
-
-    const clickLng = tile2lon(tileX, zoom);
-    const clickLat = tile2lat(tileY, zoom);
-
-    setPin({ lat: clickLat, lng: clickLng });
-  };
-
-  const handleMouseDown = (e) => {
-    setDragging(false);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    centerStart.current = { ...mapCenter };
-  };
-
-  const handleMouseMove = (e) => {
-    if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) setDragging(true);
-    const scale = Math.pow(2, zoom);
-    const tileSize = 256;
-    const newCenterTileX = lon2tile(centerStart.current.lng, zoom) - dx / tileSize;
-    const newCenterTileY = lat2tile(centerStart.current.lat, zoom) - dy / tileSize;
-    setMapCenter({
-      lat: tile2lat(newCenterTileY, zoom),
-      lng: tile2lon(newCenterTileX, zoom),
-    });
-  };
-
-  const handleMouseUp = () => {
-    dragStart.current = null;
-    centerStart.current = null;
-  };
-
-  // Search using Nominatim (free OSM geocoder)
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearching(true);
     try {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
       const data = await resp.json();
       if (data.length > 0) {
-        const { lat, lon } = data[0];
-        const parsedLat = parseFloat(lat);
-        const parsedLng = parseFloat(lon);
-        setPin({ lat: parsedLat, lng: parsedLng });
-        setMapCenter({ lat: parsedLat, lng: parsedLng });
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        setPin({ lat, lng });
+        setAddress(data[0].display_name);
       } else {
-        alert('Location not found. Try a different search term.');
+        alert('Location not found. Try a different search.');
       }
     } catch {
-      alert('Search failed. Please try again.');
+      alert('Search failed, check your connection.');
     } finally {
       setSearching(false);
     }
   };
 
-  // Render tiles
-  const renderTiles = () => {
-    if (!mapRef.current) return null;
-    const rect = mapRef.current.getBoundingClientRect();
-    const w = rect.width || 500;
-    const h = rect.height || 400;
-    const tileSize = 256;
-
-    const centerTileX = lon2tile(mapCenter.lng, zoom);
-    const centerTileY = lat2tile(mapCenter.lat, zoom);
-
-    const tilesX = Math.ceil(w / tileSize) + 2;
-    const tilesY = Math.ceil(h / tileSize) + 2;
-
-    const startTileX = Math.floor(centerTileX - tilesX / 2);
-    const startTileY = Math.floor(centerTileY - tilesY / 2);
-
-    const offsetX = (centerTileX - startTileX) * tileSize - w / 2;
-    const offsetY = (centerTileY - startTileY) * tileSize - h / 2;
-
-    const tiles = [];
-    for (let ty = 0; ty < tilesY; ty++) {
-      for (let tx = 0; tx < tilesX; tx++) {
-        const tileXIdx = startTileX + tx;
-        const tileYIdx = startTileY + ty;
-        const maxTile = Math.pow(2, zoom);
-        if (tileYIdx < 0 || tileYIdx >= maxTile) continue;
-        const wrappedX = ((tileXIdx % maxTile) + maxTile) % maxTile;
-        tiles.push(
-          <img
-            key={`${zoom}-${wrappedX}-${tileYIdx}`}
-            src={`https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileYIdx}.png`}
-            alt=""
-            draggable={false}
-            style={{
-              position: 'absolute',
-              left: tx * tileSize - offsetX,
-              top: ty * tileSize - offsetY,
-              width: tileSize,
-              height: tileSize,
-              imageRendering: 'auto',
-            }}
-          />
-        );
-      }
-    }
-
-    // Pin marker position
-    const pinTileX = lon2tile(pin.lng, zoom);
-    const pinTileY = lat2tile(pin.lat, zoom);
-    const pinPixelX = (pinTileX - startTileX) * tileSize - offsetX;
-    const pinPixelY = (pinTileY - startTileY) * tileSize - offsetY;
-
-    tiles.push(
-      <div key="pin" style={{ position: 'absolute', left: pinPixelX - 12, top: pinPixelY - 32, zIndex: 10, pointerEvents: 'none' }}>
-        <div className="flex flex-col items-center">
-          <div className="w-6 h-6 bg-red-500 rounded-full border-2 border-white shadow-lg flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-full" />
-          </div>
-          <div className="w-0.5 h-3 bg-red-500" />
-        </div>
-      </div>
-    );
-
-    return tiles;
+  const handleMove = async (lat, lng) => {
+    setPin({ lat, lng });
+    // Reverse geocode for nice address label
+    try {
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await resp.json();
+      setAddress(data.display_name || '');
+    } catch { /* silent */ }
   };
 
   return (
-    <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+        style={{ maxHeight: '90vh' }}
       >
-        <div className="flex justify-between items-center p-5 border-b border-[#1A1A1A]/5">
-          <h3 className="font-serif text-xl font-bold flex items-center gap-2"><MapPin size={20} className="text-[#5A5A40]" /> Pick Location</h3>
-          <button onClick={onClose} className="p-2 hover:bg-[#F5F5F0] rounded-full"><X size={20} /></button>
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-[#1A1A1A]/5">
+          <h3 className="font-serif text-xl font-bold flex items-center gap-2">
+            <MapPin size={20} className="text-[#5A5A40]" /> Pick Shop Location
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-[#F5F5F0] rounded-full transition-colors">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="p-4">
-          {/* Search bar */}
-          <div className="flex gap-2 mb-3">
+        {/* Search */}
+        <div className="px-6 pt-4 pb-3">
+          <div className="flex gap-2">
             <input
-              className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#5A5A40] transition-colors"
-              placeholder="Search for a place..."
+              className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#5A5A40] transition-colors"
+              placeholder="Search for city, area, street..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
             />
-            <button onClick={handleSearch} disabled={searching}
-              className="px-4 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+            <button
+              onClick={handleSearch}
+              disabled={searching}
+              className="px-5 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold hover:bg-[#4A4A30] active:scale-[0.97] transition-all disabled:opacity-60 flex items-center gap-2 shadow-sm"
+            >
               {searching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
               Search
             </button>
           </div>
+          <p className="text-[11px] text-[#1A1A1A]/40 mt-2 flex items-center gap-1">
+            <MapPin size={11} /> Click anywhere on the map to drop a pin
+          </p>
+        </div>
 
-          {/* Map area */}
-          <div
-            ref={mapRef}
-            className="relative w-full rounded-2xl overflow-hidden border border-[#1A1A1A]/10 cursor-crosshair select-none"
-            style={{ height: 350 }}
-            onClick={handleMapClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+        {/* Map */}
+        <div className="flex-1 relative" style={{ minHeight: 340 }}>
+          <MapContainer
+            center={[defaultLat, defaultLng]}
+            zoom={14}
+            style={{ height: '100%', width: '100%', minHeight: 340 }}
+            className="z-0"
           >
-            {renderTiles()}
-            {/* Zoom controls */}
-            <div className="absolute top-3 right-3 z-20 flex flex-col gap-1">
-              <button type="button" onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(z + 1, 18)); }}
-                className="w-8 h-8 bg-white rounded-lg shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50">+</button>
-              <button type="button" onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(z - 1, 2)); }}
-                className="w-8 h-8 bg-white rounded-lg shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50">−</button>
-            </div>
-            {/* Attribution */}
-            <div className="absolute bottom-0 right-0 z-20 text-[8px] text-[#1A1A1A]/40 bg-white/80 px-1">© OpenStreetMap</div>
-          </div>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <LocationMarker position={pin} onMove={handleMove} />
+          </MapContainer>
+        </div>
 
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-xs text-[#1A1A1A]/50">
-              📍 {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
-            </p>
-            <button type="button" onClick={() => onConfirm(pin.lat, pin.lng)}
-              className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all flex items-center gap-2">
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[#1A1A1A]/5 bg-[#F9F9F6]">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#1A1A1A]/50 uppercase tracking-widest mb-0.5">Selected</p>
+              <p className="text-sm font-semibold text-[#1A1A1A] tabular-nums">
+                {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
+              </p>
+              {address && (
+                <p className="text-[11px] text-[#1A1A1A]/40 mt-0.5 truncate max-w-xs">{address}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onConfirm(pin.lat, pin.lng)}
+              className="shrink-0 flex items-center gap-2 px-6 py-3 bg-[#5A5A40] text-white rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-[#4A4A30] active:scale-[0.97] transition-all shadow-md hover:shadow-lg"
+            >
               <CheckCircle2 size={16} /> Confirm Location
             </button>
           </div>
