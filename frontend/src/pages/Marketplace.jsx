@@ -6,9 +6,9 @@ import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
   ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, Clock,
   Search, Sparkles, TrendingUp, Navigation, Loader2, Sliders,
-  Route, X,
+  Route, X, List, Map,
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { listShops, listProducts, placeOrder, nearbyShops } from '../api/client';
 import { useApp } from '../context/AppContext';
@@ -21,6 +21,48 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
+
+// ── Nearby map helpers ────────────────────────────────────────────────────────
+function shopMapIcon(isOpen) {
+  const bg = isOpen ? '#10B981' : '#9CA3AF';
+  const svg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22" fill="white"/></svg>`;
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;">
+      <div style="width:30px;height:30px;background:${bg};border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;">${svg}</div>
+      <div style="width:2px;height:7px;background:${bg};"></div>
+      <div style="width:8px;height:4px;background:${bg}33;border-radius:50%;"></div>
+    </div>`,
+    iconSize: [30, 44],
+    iconAnchor: [15, 44],
+    popupAnchor: [0, -46],
+  });
+}
+
+function userNearbyIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:20px;height:20px;background:#3B82F6;border:3px solid white;border-radius:50%;box-shadow:0 0 0 7px rgba(59,130,246,0.18),0 2px 8px rgba(59,130,246,0.4);"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+function NearbyMapFitter({ userLoc, shops }) {
+  const map = useMap();
+  useEffect(() => {
+    const pts = [
+      [userLoc.lat, userLoc.lng],
+      ...shops.filter(s => s.lat && s.lng).map(s => [parseFloat(s.lat), parseFloat(s.lng)]),
+    ];
+    if (pts.length > 1) {
+      map.fitBounds(L.latLngBounds(pts), { padding: [50, 50] });
+    } else {
+      map.setView([userLoc.lat, userLoc.lng], 14);
+    }
+  }, [shops]);
+  return null;
+}
 
 const CATEGORIES = [
   'Grocery', 'Dairy', 'Vegetables & Fruits', 'Meat',
@@ -606,6 +648,7 @@ function NearbyShopsSection({ onSelectShop }) {
   const [showRadiusPicker, setShowRadiusPicker] = useState(false);
   const [locationRequested, setLocationRequested] = useState(false);
   const [trackingShop, setTrackingShop] = useState(null);
+  const [mapView, setMapView] = useState(false);
   const RADIUS_OPTIONS = [1, 2, 3, 5, 10, 15, 25];
 
   const fetchNearby = useCallback(async (lat, lng, r) => {
@@ -625,6 +668,7 @@ function NearbyShopsSection({ onSelectShop }) {
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
+        setMapView(true);
         fetchNearby(loc.lat, loc.lng, radius);
       },
       (err) => {
@@ -635,6 +679,9 @@ function NearbyShopsSection({ onSelectShop }) {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, [radius, fetchNearby, t]);
+
+  // Auto-request location on mount
+  useEffect(() => { requestLocation(); }, []);
 
   useEffect(() => {
     if (userLocation) fetchNearby(userLocation.lat, userLocation.lng, radius);
@@ -647,6 +694,23 @@ function NearbyShopsSection({ onSelectShop }) {
           <Navigation size={16} className="text-[#5A5A40]" /> {t('marketplace.shopsNearYou')}
         </h3>
         <div className="flex items-center gap-2">
+          {/* List / Map toggle */}
+          {userLocation && nearbyList.length > 0 && (
+            <div className="flex bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/8 p-0.5">
+              <button onClick={() => setMapView(false)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                  !mapView ? 'bg-white shadow-sm text-[#5A5A40]' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/60'
+                }`}>
+                <List size={11} /> List
+              </button>
+              <button onClick={() => setMapView(true)}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                  mapView ? 'bg-white shadow-sm text-[#5A5A40]' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/60'
+                }`}>
+                <Map size={11} /> Map
+              </button>
+            </div>
+          )}
           <button onClick={() => setShowRadiusPicker(v => !v)}
             className="flex items-center gap-1 px-3 py-1.5 bg-[#F5F5F0] rounded-full text-xs font-bold border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-colors">
             <Sliders size={12} className="text-[#5A5A40]" /> {radius} km
@@ -700,6 +764,79 @@ function NearbyShopsSection({ onSelectShop }) {
             className="text-xs font-bold text-[#5A5A40] uppercase tracking-widest hover:underline">
             {t('common.retry')}
           </button>
+        </div>
+      ) : mapView && userLocation && nearbyList.length > 0 ? (
+        /* ── MAP VIEW ── */
+        <div>
+          <div className="rounded-2xl overflow-hidden border border-[#1A1A1A]/8" style={{ height: 380 }}>
+            <MapContainer
+              center={[userLocation.lat, userLocation.lng]}
+              zoom={13}
+              style={{ width: '100%', height: '100%' }}
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              />
+              <NearbyMapFitter userLoc={userLocation} shops={nearbyList} />
+              {/* User location */}
+              <Marker position={[userLocation.lat, userLocation.lng]} icon={userNearbyIcon()}>
+                <Popup>
+                  <div style={{ fontFamily: 'sans-serif', fontSize: 12, minWidth: 100 }}>
+                    <strong>📍 You are here</strong>
+                  </div>
+                </Popup>
+              </Marker>
+              {/* Shop markers */}
+              {nearbyList.map(shop =>
+                shop.lat && shop.lng ? (
+                  <Marker
+                    key={shop.id}
+                    position={[parseFloat(shop.lat), parseFloat(shop.lng)]}
+                    icon={shopMapIcon(shop.is_open)}
+                  >
+                    <Popup>
+                      <div style={{ fontFamily: 'sans-serif', minWidth: 160 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{shop.name}</div>
+                        <div style={{ fontSize: 10, color: '#6B7280', marginBottom: 4 }}>{shop.category} · {shop.address}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
+                            background: shop.is_open ? '#D1FAE5' : '#FEE2E2',
+                            color: shop.is_open ? '#065F46' : '#991B1B',
+                          }}>{shop.is_open ? '● OPEN' : '● CLOSED'}</span>
+                          <span style={{ fontSize: 10, color: '#5A5A40', fontWeight: 700 }}>{shop.distance_km} km</span>
+                          <span style={{ fontSize: 10, color: '#D97706' }}>★ {shop.rating}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => setTrackingShop(shop)}
+                            style={{
+                              flex: 1, fontSize: 10, fontWeight: 700, padding: '5px 0',
+                              background: '#5A5A40', color: 'white', border: 'none',
+                              borderRadius: 8, cursor: 'pointer',
+                            }}
+                          >🗺 Track</button>
+                          <button
+                            onClick={() => onSelectShop(shop)}
+                            style={{
+                              flex: 1, fontSize: 10, fontWeight: 700, padding: '5px 0',
+                              background: '#F5F5F0', color: '#1A1A1A', border: '1px solid #E5E5E0',
+                              borderRadius: 8, cursor: 'pointer',
+                            }}
+                          >View Shop</button>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ) : null
+              )}
+            </MapContainer>
+          </div>
+          <p className="text-[9px] text-[#1A1A1A]/30 text-center mt-2 uppercase tracking-widest">
+            Showing {nearbyList.length} {nearbyList.length === 1 ? 'shop' : 'shops'} within {radius} km · tap a pin for details
+          </p>
         </div>
       ) : nearbyList.length > 0 ? (
         <div className="space-y-2">
