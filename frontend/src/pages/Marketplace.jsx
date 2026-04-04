@@ -6,11 +6,21 @@ import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
   ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, Clock,
   Search, Sparkles, TrendingUp, Navigation, Loader2, Sliders,
-  Route, X, LocateFixed,
+  Route, X,
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { listShops, listProducts, placeOrder, nearbyShops } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
+
+// Fix Leaflet default marker icon (bundler issue)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const CATEGORIES = [
   'Grocery', 'Dairy', 'Vegetables & Fruits', 'Meat',
@@ -388,73 +398,42 @@ function ShopProductsView({ shop, onBack }) {
 
 // ── Nearby Shops Section ───────────────────────────────────────────
 // ── Route Map Modal (Rapido/Ola-style tracking) ───────────────────
-function RouteMapModal({ userLocation, shop, onClose }) {
-  const mapRef = useRef(null);
-  const [mapCenter, setMapCenter] = useState({
-    lat: (userLocation.lat + (shop.lat || userLocation.lat)) / 2,
-    lng: (userLocation.lng + (shop.lng || userLocation.lng)) / 2,
+// Sub-component: auto-fits the map to show the full route
+function RouteFitter({ routePoints, startPt, endPt }) {
+  const map = useMap();
+  useEffect(() => {
+    if (routePoints.length > 1) {
+      const bounds = L.latLngBounds(routePoints.map(p => [p.lat, p.lng]));
+      map.fitBounds(bounds, { padding: [48, 48] });
+    } else {
+      map.fitBounds(
+        L.latLngBounds([[startPt.lat, startPt.lng], [endPt.lat, endPt.lng]]),
+        { padding: [64, 64] }
+      );
+    }
+  }, [routePoints]);
+  return null;
+}
+
+// Custom colored icon factory
+function coloredIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;background:${color};border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.35)"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
   });
-  const [zoom, setZoom] = useState(14);
+}
+
+function RouteMapModal({ userLocation, shop, onClose }) {
   const [routePoints, setRoutePoints] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(true);
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef(null);
-  const centerStart = useRef(null);
 
   const startPt = { lat: userLocation.lat, lng: userLocation.lng };
   const endPt = { lat: shop.lat || userLocation.lat, lng: shop.lng || userLocation.lng };
 
-  // Tile math
-  const lon2tile = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z);
-  const lat2tile = (lat, z) => ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * Math.pow(2, z);
-  const tile2lon = (x, z) => (x / Math.pow(2, z)) * 360 - 180;
-  const tile2lat = (y, z) => {
-    const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-    return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  };
-
-  // Fetch route from OSRM (free, no API key needed)
-  useEffect(() => {
-    setLoadingRoute(true);
-    fetch(`https://router.project-osrm.org/route/v1/driving/${startPt.lng},${startPt.lat};${endPt.lng},${endPt.lat}?overview=full&geometries=geojson`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.routes && data.routes.length > 0) {
-          const route = data.routes[0];
-          const coords = route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-          setRoutePoints(coords);
-          setRouteInfo({
-            distance: (route.distance / 1000).toFixed(1),
-            duration: Math.ceil(route.duration / 60),
-          });
-          // Auto-fit: set center and zoom to encompass route
-          if (coords.length > 0) {
-            const lats = coords.map(c => c.lat);
-            const lngs = coords.map(c => c.lng);
-            const minLat = Math.min(...lats, startPt.lat, endPt.lat);
-            const maxLat = Math.max(...lats, startPt.lat, endPt.lat);
-            const minLng = Math.min(...lngs, startPt.lng, endPt.lng);
-            const maxLng = Math.max(...lngs, startPt.lng, endPt.lng);
-            setMapCenter({ lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 });
-            const latDiff = maxLat - minLat;
-            const lngDiff = maxLng - minLng;
-            const maxDiff = Math.max(latDiff, lngDiff);
-            const z = maxDiff < 0.005 ? 16 : maxDiff < 0.01 ? 15 : maxDiff < 0.02 ? 14 : maxDiff < 0.05 ? 13 : maxDiff < 0.1 ? 12 : maxDiff < 0.2 ? 11 : maxDiff < 0.5 ? 10 : 9;
-            setZoom(z);
-          }
-        }
-      })
-      .catch(() => {
-        // Fallback: straight line
-        setRoutePoints([startPt, endPt]);
-        const dist = haversine(startPt.lat, startPt.lng, endPt.lat, endPt.lng);
-        setRouteInfo({ distance: dist.toFixed(1), duration: Math.ceil(dist * 3) });
-      })
-      .finally(() => setLoadingRoute(false));
-  }, []);
-
-  // Haversine for fallback
+  // Haversine straight-line fallback
   function haversine(lat1, lng1, lat2, lng2) {
     const R = 6371;
     const toRad = d => d * Math.PI / 180;
@@ -464,139 +443,36 @@ function RouteMapModal({ userLocation, shop, onClose }) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // Map interaction handlers
-  const handleMouseDown = (e) => {
-    setDragging(false);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    centerStart.current = { ...mapCenter };
-  };
-  const handleMouseMove = (e) => {
-    if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) setDragging(true);
-    const tileSize = 256;
-    const newCenterTileX = lon2tile(centerStart.current.lng, zoom) - dx / tileSize;
-    const newCenterTileY = lat2tile(centerStart.current.lat, zoom) - dy / tileSize;
-    setMapCenter({ lat: tile2lat(newCenterTileY, zoom), lng: tile2lon(newCenterTileX, zoom) });
-  };
-  const handleMouseUp = () => { dragStart.current = null; centerStart.current = null; };
-
-  // Convert lat/lng to pixel position on map
-  const latLngToPixel = (lat, lng, rect) => {
-    const w = rect.width;
-    const h = rect.height;
-    const tileSize = 256;
-    const centerTileX = lon2tile(mapCenter.lng, zoom);
-    const centerTileY = lat2tile(mapCenter.lat, zoom);
-    const ptTileX = lon2tile(lng, zoom);
-    const ptTileY = lat2tile(lat, zoom);
-    return {
-      x: w / 2 + (ptTileX - centerTileX) * tileSize,
-      y: h / 2 + (ptTileY - centerTileY) * tileSize,
-    };
-  };
-
-  // Render tiles + route + markers
-  const renderMap = () => {
-    if (!mapRef.current) return null;
-    const rect = mapRef.current.getBoundingClientRect();
-    const w = rect.width || 600;
-    const h = rect.height || 450;
-    const tileSize = 256;
-    const centerTileX = lon2tile(mapCenter.lng, zoom);
-    const centerTileY = lat2tile(mapCenter.lat, zoom);
-    const tilesX = Math.ceil(w / tileSize) + 2;
-    const tilesY = Math.ceil(h / tileSize) + 2;
-    const startTileX = Math.floor(centerTileX - tilesX / 2);
-    const startTileY = Math.floor(centerTileY - tilesY / 2);
-    const offsetX = (centerTileX - startTileX) * tileSize - w / 2;
-    const offsetY = (centerTileY - startTileY) * tileSize - h / 2;
-    const elements = [];
-
-    // Tiles
-    for (let ty = 0; ty < tilesY; ty++) {
-      for (let tx = 0; tx < tilesX; tx++) {
-        const tileXIdx = startTileX + tx;
-        const tileYIdx = startTileY + ty;
-        const maxTile = Math.pow(2, zoom);
-        if (tileYIdx < 0 || tileYIdx >= maxTile) continue;
-        const wrappedX = ((tileXIdx % maxTile) + maxTile) % maxTile;
-        elements.push(
-          <img key={`tile-${zoom}-${wrappedX}-${tileYIdx}`}
-            src={`https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileYIdx}.png`}
-            alt="" draggable={false}
-            style={{ position: 'absolute', left: tx * tileSize - offsetX, top: ty * tileSize - offsetY, width: tileSize, height: tileSize }}
-          />
-        );
-      }
-    }
-
-    // Route line (SVG overlay)
-    if (routePoints.length > 1) {
-      const svgPoints = routePoints.map(pt => {
-        const px = latLngToPixel(pt.lat, pt.lng, rect);
-        return px;
-      });
-      const pathD = svgPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-      elements.push(
-        <svg key="route-svg" style={{ position: 'absolute', top: 0, left: 0, width: w, height: h, pointerEvents: 'none', zIndex: 5 }}>
-          {/* Shadow */}
-          <path d={pathD} fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-          {/* Main route */}
-          <path d={pathD} fill="none" stroke="#3B82F6" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-          {/* Animated dash overlay */}
-          <path d={pathD} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            strokeDasharray="12 8">
-            <animate attributeName="stroke-dashoffset" values="0;-20" dur="1s" repeatCount="indefinite" />
-          </path>
-        </svg>
-      );
-    }
-
-    // Start marker (You)
-    const startPixel = latLngToPixel(startPt.lat, startPt.lng, rect);
-    elements.push(
-      <div key="start-marker" style={{ position: 'absolute', left: startPixel.x - 20, top: startPixel.y - 50, zIndex: 10, pointerEvents: 'none' }}>
-        <div className="flex flex-col items-center">
-          <div className="bg-blue-500 text-white text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg shadow-lg mb-1 whitespace-nowrap">You</div>
-          <div className="w-5 h-5 bg-blue-500 rounded-full border-[3px] border-white shadow-lg flex items-center justify-center">
-            <div className="w-1.5 h-1.5 bg-white rounded-full" />
-          </div>
-          <div className="w-0.5 h-2 bg-blue-500" />
-          <div className="w-3 h-1.5 bg-blue-500/30 rounded-full" />
-        </div>
-      </div>
-    );
-
-    // End marker (Shop)
-    const endPixel = latLngToPixel(endPt.lat, endPt.lng, rect);
-    elements.push(
-      <div key="end-marker" style={{ position: 'absolute', left: endPixel.x - 20, top: endPixel.y - 50, zIndex: 10, pointerEvents: 'none' }}>
-        <div className="flex flex-col items-center">
-          <div className="bg-red-500 text-white text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg shadow-lg mb-1 whitespace-nowrap max-w-[100px] truncate">{shop.name}</div>
-          <div className="w-5 h-5 bg-red-500 rounded-full border-[3px] border-white shadow-lg flex items-center justify-center">
-            <Store size={10} className="text-white" />
-          </div>
-          <div className="w-0.5 h-2 bg-red-500" />
-          <div className="w-3 h-1.5 bg-red-500/30 rounded-full" />
-        </div>
-      </div>
-    );
-
-    // Pulsing circle around user location
-    elements.push(
-      <div key="user-pulse" style={{ position: 'absolute', left: startPixel.x - 30, top: startPixel.y - 30, zIndex: 4, pointerEvents: 'none' }}>
-        <div className="w-[60px] h-[60px] rounded-full bg-blue-400/20 animate-ping" style={{ animationDuration: '2s' }} />
-      </div>
-    );
-
-    return elements;
-  };
+  useEffect(() => {
+    setLoadingRoute(true);
+    fetch(
+      `https://router.project-osrm.org/route/v1/driving/${startPt.lng},${startPt.lat};${endPt.lng},${endPt.lat}?overview=full&geometries=geojson`
+    )
+      .then(r => r.json())
+      .then(data => {
+        if (data.routes?.length > 0) {
+          const route = data.routes[0];
+          setRoutePoints(route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })));
+          setRouteInfo({
+            distance: (route.distance / 1000).toFixed(1),
+            duration: Math.ceil(route.duration / 60),
+          });
+        }
+      })
+      .catch(() => {
+        setRoutePoints([startPt, endPt]);
+        const dist = haversine(startPt.lat, startPt.lng, endPt.lat, endPt.lng);
+        setRouteInfo({ distance: dist.toFixed(1), duration: Math.ceil(dist * 3) });
+      })
+      .finally(() => setLoadingRoute(false));
+  }, []);
 
   const openInGoogleMaps = () => {
     window.open(`https://www.google.com/maps/dir/${startPt.lat},${startPt.lng}/${endPt.lat},${endPt.lng}`, '_blank');
   };
+
+  const midLat = (startPt.lat + endPt.lat) / 2;
+  const midLng = (startPt.lng + endPt.lng) / 2;
 
   return (
     <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
@@ -643,43 +519,49 @@ function RouteMapModal({ userLocation, shop, onClose }) {
           </div>
         </div>
 
-        {/* Map */}
-        <div
-          ref={mapRef}
-          className="relative flex-1 cursor-grab active:cursor-grabbing select-none"
-          style={{ minHeight: 380 }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
+        {/* Leaflet Map */}
+        <div className="relative flex-1" style={{ minHeight: 380 }}>
           {loadingRoute && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+            <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/70 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-2">
                 <Loader2 size={28} className="animate-spin text-[#5A5A40]" />
                 <p className="text-sm font-medium text-[#1A1A1A]/50">Calculating route…</p>
               </div>
             </div>
           )}
-          {renderMap()}
-          {/* Zoom controls */}
-          <div className="absolute top-3 right-3 z-20 flex flex-col gap-1">
-            <button onClick={() => setZoom(z => Math.min(z + 1, 18))}
-              className="w-9 h-9 bg-white rounded-xl shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50 transition-colors">+</button>
-            <button onClick={() => setZoom(z => Math.max(z - 1, 2))}
-              className="w-9 h-9 bg-white rounded-xl shadow-md flex items-center justify-center font-bold text-lg hover:bg-gray-50 transition-colors">−</button>
-          </div>
-          {/* Recenter button */}
-          <div className="absolute bottom-3 right-3 z-20">
-            <button onClick={() => {
-              setMapCenter({ lat: (startPt.lat + endPt.lat) / 2, lng: (startPt.lng + endPt.lng) / 2 });
-            }}
-              className="w-9 h-9 bg-white rounded-xl shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors">
-              <LocateFixed size={16} className="text-[#5A5A40]" />
-            </button>
-          </div>
-          {/* Attribution */}
-          <div className="absolute bottom-0 left-0 z-20 text-[8px] text-[#1A1A1A]/40 bg-white/80 px-1">© OpenStreetMap · OSRM</div>
+          <MapContainer
+            center={[midLat, midLng]}
+            zoom={13}
+            style={{ width: '100%', height: '100%', minHeight: 380 }}
+            zoomControl={true}
+            scrollWheelZoom={true}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            />
+            {/* Route polyline */}
+            {routePoints.length > 1 && (
+              <>
+                {/* Shadow */}
+                <Polyline
+                  positions={routePoints.map(p => [p.lat, p.lng])}
+                  pathOptions={{ color: 'rgba(0,0,0,0.15)', weight: 8, lineCap: 'round', lineJoin: 'round' }}
+                />
+                {/* Main route */}
+                <Polyline
+                  positions={routePoints.map(p => [p.lat, p.lng])}
+                  pathOptions={{ color: '#3B82F6', weight: 5, lineCap: 'round', lineJoin: 'round' }}
+                />
+              </>
+            )}
+            {/* User marker */}
+            <Marker position={[startPt.lat, startPt.lng]} icon={coloredIcon('#3B82F6')} />
+            {/* Shop marker */}
+            <Marker position={[endPt.lat, endPt.lng]} icon={coloredIcon('#EF4444')} />
+            {/* Auto-fit bounds */}
+            <RouteFitter routePoints={routePoints} startPt={startPt} endPt={endPt} />
+          </MapContainer>
         </div>
 
         {/* Bottom action bar */}

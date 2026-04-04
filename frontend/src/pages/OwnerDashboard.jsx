@@ -1148,14 +1148,20 @@ function ShopSettingsPanel({ shop, onUpdated }) {
   });
   const [unavailableDates, setUnavailableDates] = useState(shop?.unavailable_dates || []);
   const [newDate, setNewDate] = useState('');
-  const [periodType, setPeriodType] = useState('day'); // day, week, month, year
-  const [expandDatesTable, setExpandDatesTable] = useState(false); // Collapsible table state
+  const [periodType, setPeriodType] = useState('day');
+  const [expandDatesTable, setExpandDatesTable] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [filterType, setFilterType] = useState('all'); // all, unavailable, available, past
-  const [dayOfWeekFilter, setDayOfWeekFilter] = useState(null); // Filter by day of week (0=Sun to 6=Sat)
+  const [filterType, setFilterType] = useState('all');
+  const [dayOfWeekFilter, setDayOfWeekFilter] = useState(null);
   const [selectedDates, setSelectedDates] = useState(new Set());
-  const [selectMode, setSelectMode] = useState('single'); // single, week, month, all-weekday
+  const [selectMode, setSelectMode] = useState('single');
+
+  // --- Location state ---
+  const [shopLat, setShopLat] = useState(shop?.lat ?? null);
+  const [shopLng, setShopLng] = useState(shop?.lng ?? null);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   // Products for stock management
   const [products, setProducts] = useState([]);
@@ -1172,6 +1178,8 @@ function ShopSettingsPanel({ shop, onUpdated }) {
     setTimings(shop.timings || '');
     setSchedule(shop.schedule || schedule);
     setUnavailableDates(shop.unavailable_dates || []);
+    setShopLat(shop.lat ?? null);
+    setShopLng(shop.lng ?? null);
   }, [shop?.id]);
 
   useEffect(() => {
@@ -1207,6 +1215,33 @@ function ShopSettingsPanel({ shop, onUpdated }) {
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update');
     } finally { setSaving(false); }
+  };
+
+  const handleSaveLocation = async () => {
+    if (!shopLat || !shopLng) { setError('Please set a location first using the map or GPS.'); return; }
+    setSaving(true); setError('');
+    try {
+      await updateShop(shop.id, { lat: parseFloat(shopLat), lng: parseFloat(shopLng) });
+      setSuccess('Location saved! Customers can now find your shop on the map.');
+      onUpdated?.();
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save location');
+    } finally { setSaving(false); }
+  };
+
+  const getCurrentLocationForShop = () => {
+    if (!navigator.geolocation) { setError('Geolocation is not supported by your browser.'); return; }
+    setLocating(true); setError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setShopLat(pos.coords.latitude.toFixed(6));
+        setShopLng(pos.coords.longitude.toFixed(6));
+        setLocating(false);
+      },
+      (err) => { setError('Could not get location: ' + err.message); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleSaveSchedule = async () => {
@@ -1381,6 +1416,112 @@ function ShopSettingsPanel({ shop, onUpdated }) {
           </button>
         </div>
       </div>
+
+      {/* Shop Location */}
+      <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 className="font-serif text-lg font-bold flex items-center gap-2">
+              <MapPin size={18} className="text-[#5A5A40]" /> Shop Location
+            </h3>
+            <p className="text-xs text-[#1A1A1A]/40 mt-1">
+              Setting your location lets customers find you on the map and see distance.
+            </p>
+          </div>
+          {shopLat && shopLng && (
+            <span className="shrink-0 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+              <CheckCircle2 size={12} /> Location Set
+            </span>
+          )}
+        </div>
+
+        {/* Current coordinates */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">Latitude</label>
+            <input
+              className={inp}
+              placeholder="e.g. 17.385044"
+              type="number"
+              step="any"
+              value={shopLat ?? ''}
+              onChange={e => setShopLat(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">Longitude</label>
+            <input
+              className={inp}
+              placeholder="e.g. 78.486671"
+              type="number"
+              step="any"
+              value={shopLng ?? ''}
+              onChange={e => setShopLng(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Map mini-preview if location is set */}
+        {shopLat && shopLng && (
+          <div className="mb-4 rounded-2xl overflow-hidden border border-[#1A1A1A]/10 shadow-inner" style={{ height: 200 }}>
+            <MapContainer
+              key={`${shopLat}-${shopLng}`}
+              center={[parseFloat(shopLat), parseFloat(shopLng)]}
+              zoom={15}
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+              dragging={false}
+              scrollWheelZoom={false}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+              <Marker position={[parseFloat(shopLat), parseFloat(shopLng)]} />
+            </MapContainer>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setMapPickerOpen(true)}
+            className="flex items-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-2.5 px-4 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 active:scale-[0.98] transition-all hover:shadow-md cursor-pointer"
+          >
+            <MapPin size={16} /> Pick on Map
+          </button>
+          <button
+            type="button"
+            onClick={getCurrentLocationForShop}
+            disabled={locating}
+            className="flex items-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-2.5 px-4 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 active:scale-[0.98] transition-all hover:shadow-md cursor-pointer disabled:opacity-50"
+          >
+            {locating ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}
+            {locating ? 'Getting GPS...' : 'Use My GPS'}
+          </button>
+          <button
+            onClick={handleSaveLocation}
+            disabled={saving || !shopLat || !shopLng}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 shadow-sm hover:shadow-md"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Location
+          </button>
+        </div>
+      </div>
+
+      {/* Map Picker Modal */}
+      <AnimatePresence>
+        {mapPickerOpen && (
+          <MapPickerModal
+            initialLat={shopLat ? +shopLat : null}
+            initialLng={shopLng ? +shopLng : null}
+            onConfirm={(lat, lng) => {
+              setShopLat(lat.toFixed(6));
+              setShopLng(lng.toFixed(6));
+              setMapPickerOpen(false);
+            }}
+            onClose={() => setMapPickerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Weekly Schedule */}
       <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 shadow-sm">
