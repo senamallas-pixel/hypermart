@@ -59,13 +59,24 @@ export default function DailySalesCalendar({ analytics }) {
 
   // Create calendar grid
   const days = [];
-  // Empty cells for days before month starts
-  for (let i = 0; i < firstDay; i++) {
-    days.push(null);
+  
+  // Previous month cells
+  const prevMonthDays = getDaysInMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  for (let i = firstDay - 1; i >= 0; i--) {
+    days.push({ day: prevMonthDays - i, isCurrentMonth: false, date: null });
   }
-  // Days of the month
+  
+  // Current month cells
   for (let i = 1; i <= daysInMonth; i++) {
-    days.push(i);
+    const dateKey = getDayKey(i);
+    days.push({ day: i, isCurrentMonth: true, date: dateKey });
+  }
+
+  // Next month cells to fill grid (always 42 cells or just enough to complete the week?)
+  // 6 rows * 7 days = 42 cells length
+  const remainingCells = 42 - days.length;
+  for (let i = 1; i <= remainingCells; i++) {
+    days.push({ day: i, isCurrentMonth: false, date: null });
   }
 
   return (
@@ -142,16 +153,14 @@ export default function DailySalesCalendar({ analytics }) {
         </div>
 
         {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-2">
-          {days.map((day, idx) => {
-            if (day === null) {
-              return <div key={`empty-${idx}`} className="aspect-square" />;
-            }
+        <div className="grid grid-cols-7 gap-[2px] bg-[#1A1A1A]/5 rounded-2xl overflow-hidden border border-[#1A1A1A]/10">
+          {days.map((cell, idx) => {
+            const isCurrentMonth = cell.isCurrentMonth;
+            const dayKey = cell.date;
 
-            const dayKey = getDayKey(day);
-            const dayData = dailySalesMap[dayKey];
+            const dayData = isCurrentMonth ? dailySalesMap[dayKey] : null;
             const hasData = dayData && dayData.total > 0;
-            const isToday = new Date().toISOString().split('T')[0] === dayKey;
+            const isToday = isCurrentMonth && new Date().toISOString().split('T')[0] === dayKey;
 
             // Calculate percentage for walk-in vs online
             const walkInPercent = dayData?.total > 0 ? (dayData.walkIn / dayData.total) * 100 : 0;
@@ -159,66 +168,80 @@ export default function DailySalesCalendar({ analytics }) {
 
             return (
               <motion.div
-                key={day}
-                whileHover={hasData ? { scale: 1.05 } : {}}
-                className={`aspect-square rounded-2xl border-2 p-3 flex flex-col justify-between transition-all cursor-pointer group ${
+                key={`day-${idx}-${cell.day}`}
+                whileHover={hasData ? { scale: 1.02, zIndex: 10 } : {}}
+                className={`bg-white min-h-[100px] p-3 flex flex-col justify-between transition-all relative group ${
                   isToday
-                    ? 'border-[#5A5A40] bg-[#5A5A40]/5'
-                    : hasData
-                    ? 'border-[#1A1A1A]/10 bg-white hover:border-[#5A5A40]/30'
-                    : 'border-[#1A1A1A]/5 bg-[#F5F5F0]'
+                    ? 'ring-2 ring-inset ring-[#5A5A40]'
+                    : ''
                 }`}
               >
                 {/* Day Number */}
-                <div className={`text-sm font-bold ${isToday ? 'text-[#5A5A40]' : 'text-[#1A1A1A]'}`}>
-                  {day}
+                <div className={`text-sm font-semibold transition-colors ${
+                  isToday ? 'text-[#5A5A40]' : isCurrentMonth ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/30 font-medium'
+                }`}>
+                  {cell.day}
                 </div>
 
-                {hasData ? (
-                  <>
+                {hasData && isCurrentMonth ? (
+                  <div className="space-y-2 select-none">
                     {/* Total Amount */}
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-[#1A1A1A] leading-tight">
-                        ₹{(dayData.total / 1000).toFixed(0)}k
+                    <div>
+                      <p className="text-xs font-bold text-[#1A1A1A]">
+                        ₹{(dayData.total / 1000).toFixed(1)}k
                       </p>
 
                       {/* Progress Bar showing Walk-in vs Online */}
-                      <div className="flex gap-0.5 h-1 bg-[#E8E8DC] rounded-full overflow-hidden">
+                      <div className="flex gap-0.5 h-1.5 mt-1 bg-[#E8E8DC] rounded-full overflow-hidden opacity-80 group-hover:opacity-100 transition-opacity">
                         {walkInPercent > 0 && (
                           <div
                             className="bg-[#5A5A40] transition-all"
                             style={{ width: `${walkInPercent}%` }}
-                            title={`Walk-in: ₹${dayData.walkIn.toLocaleString()}`}
                           />
                         )}
                         {onlinePercent > 0 && (
                           <div
                             className="bg-blue-500 transition-all"
                             style={{ width: `${onlinePercent}%` }}
-                            title={`Online: ₹${dayData.online.toLocaleString()}`}
                           />
                         )}
                       </div>
 
-                      {/* Breakdown - shown on hover */}
-                      <div className="hidden group-hover:flex flex-col text-[8px] text-[#1A1A1A]/60">
-                        {dayData.walkIn > 0 && (
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#5A5A40]" />
-                            ₹{(dayData.walkIn / 1000).toFixed(1)}k walk-in
-                          </span>
-                        )}
-                        {dayData.online > 0 && (
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                            ₹{(dayData.online / 1000).toFixed(1)}k online
-                          </span>
-                        )}
+                      {/* Hover Tooltip */}
+                      <div className="absolute left-1/2 bottom-[calc(100%+8px)] -translate-x-1/2 w-max max-w-[140px] bg-[#1A1A1A] text-white text-[10px] p-2 rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all shadow-2xl z-20 pointer-events-none">
+                        <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-white/10 gap-3">
+                          <span className="font-medium text-white/50">{new Date(dayKey).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</span>
+                          <span className="font-bold text-[11px]">₹{dayData.total.toLocaleString()}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {dayData.walkIn > 0 && (
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-1.5 text-white/80">
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#E8E8DC]" /> Walk-in
+                              </span>
+                              <span className="font-medium">₹{dayData.walkIn.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {dayData.online > 0 && (
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-1.5 text-white/80">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" /> Online
+                              </span>
+                              <span className="font-medium">₹{dayData.online.toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Tooltip Arrow */}
+                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#1A1A1A] rotate-45 border-r border-b border-white/5" />
                       </div>
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="text-[10px] text-[#1A1A1A]/20">No sales</div>
+                  <div className={`mt-auto text-[10px] uppercase font-bold tracking-widest transition-opacity ${
+                    isCurrentMonth ? 'text-[#1A1A1A]/10 group-hover:text-[#1A1A1A]/30' : 'opacity-0'
+                  }`}>
+                    No sales
+                  </div>
                 )}
               </motion.div>
             );
