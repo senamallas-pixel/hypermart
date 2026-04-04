@@ -700,8 +700,8 @@ app.post("/orders", requireRole("customer"), (req, res) => {
 
     const total_rounded = Math.round(total * 100) / 100;
     const r = db.prepare(
-      "INSERT INTO orders (shop_id, shop_name, customer_id, total, delivery_address) VALUES (?, ?, ?, ?, ?)"
-    ).run(shop.id, shop.name, req.user.id, total_rounded, delivery_address);
+      "INSERT INTO orders (shop_id, shop_name, customer_id, total, delivery_address, order_type) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(shop.id, shop.name, req.user.id, total_rounded, delivery_address, "online");
     const orderId = r.lastInsertRowid;
 
     for (const { product, quantity } of orderItems) {
@@ -821,8 +821,8 @@ app.post("/shops/:shopId/walkin-order", requireRole("owner"), (req, res) => {
 
     const total_rounded = Math.round(total * 100) / 100;
     const r = db.prepare(
-      "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(shop.id, shop.name, req.user.id, total_rounded, "delivered", payment_status, "Walk-in: " + customer_name);
+      "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, order_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(shop.id, shop.name, req.user.id, total_rounded, "delivered", payment_status, "Walk-in: " + customer_name, "walk_in");
     const orderId = r.lastInsertRowid;
 
     for (const { product, quantity } of orderItems) {
@@ -890,13 +890,66 @@ app.get("/shops/:shopId/analytics", requireAuth, (req, res) => {
     d.setDate(d.getDate() - i);
     const dayStart = new Date(d); dayStart.setUTCHours(0, 0, 0, 0);
     const dayEnd   = new Date(d); dayEnd.setUTCHours(23, 59, 59, 999);
+    
+    // Get total sales for the day
     const row = db.prepare(
       "SELECT COALESCE(SUM(total), 0) as revenue, COUNT(*) as orders FROM orders WHERE shop_id = ? AND created_at >= ? AND created_at <= ?"
     ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
+    // Get walk-in sales for the day
+    const walkInRow = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE shop_id = ? AND order_type = 'walk_in' AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
+    // Get online sales for the day
+    const onlineRow = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE shop_id = ? AND order_type = 'online' AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
     dailySales.push({
       date: dayStart.toISOString().slice(0, 10),
       day: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
       revenue: Math.round(row.revenue * 100) / 100,
+      walk_in: Math.round(walkInRow.revenue * 100) / 100,
+      online: Math.round(onlineRow.revenue * 100) / 100,
+      orders: row.orders,
+    });
+  }
+
+  // ── Daily sales for current month (for calendar view) ──
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const daysInMonth = monthEnd.getDate();
+  
+  const monthlyDailySales = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+    const dayStart = new Date(d); dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd   = new Date(d); dayEnd.setUTCHours(23, 59, 59, 999);
+    
+    // Get total sales for the day
+    const row = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue, COUNT(*) as orders FROM orders WHERE shop_id = ? AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
+    // Get walk-in sales for the day
+    const walkInRow = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE shop_id = ? AND order_type = 'walk_in' AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
+    // Get online sales for the day
+    const onlineRow = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE shop_id = ? AND order_type = 'online' AND created_at >= ? AND created_at <= ?"
+    ).get(shopId, dayStart.toISOString(), dayEnd.toISOString());
+    
+    monthlyDailySales.push({
+      date: dayStart.toISOString().slice(0, 10),
+      day: day,
+      dayName: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
+      revenue: Math.round(row.revenue * 100) / 100,
+      walk_in: Math.round(walkInRow.revenue * 100) / 100,
+      online: Math.round(onlineRow.revenue * 100) / 100,
       orders: row.orders,
     });
   }
@@ -967,6 +1020,7 @@ app.get("/shops/:shopId/analytics", requireAuth, (req, res) => {
     total_orders:     allTime.orders,
     orders_this_month: ordersThisMonth,
     daily_sales:      dailySales,
+    monthly_daily_sales: monthlyDailySales,
     category_revenue: categoryRevenue,
     top_products:     topProducts,
     orders_by_status: ordersByStatus,

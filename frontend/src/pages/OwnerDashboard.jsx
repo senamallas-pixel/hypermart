@@ -19,6 +19,7 @@ import {
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
+import DailySalesCalendar from '../components/DailySalesCalendar';
 
 const TABS      = ['Overview', 'Analytics', 'Billing', 'Inventory', 'Orders', 'Settings'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
@@ -846,6 +847,9 @@ function AnalyticsPanel({ analytics }) {
 
   return (
     <div className="space-y-6">
+      {/* Daily Sales Calendar With Walk-in and Online Breakdown */}
+      <DailySalesCalendar analytics={analytics} />
+
       {/* Daily Sales Chart */}
       <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
         <div className="flex items-center gap-2 mb-1">

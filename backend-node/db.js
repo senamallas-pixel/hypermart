@@ -68,6 +68,7 @@ const SCHEMA_SQL = `
     status           TEXT    NOT NULL DEFAULT 'pending',
     payment_status   TEXT    NOT NULL DEFAULT 'pending',
     delivery_address TEXT    NOT NULL,
+    order_type       TEXT    NOT NULL DEFAULT 'online',
     created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at       TEXT
   );

@@ -176,19 +176,50 @@ async function run() {
       const rice  = prodObjs[0]; // Basmati Rice
       const dal   = prodObjs[1]; // Toor Dal
       const milk  = prodObjs[8]; // Full Cream Milk
+      const paneer = prodObjs[9]; // Paneer
+      const bread = prodObjs[16]; // Multigrain Bread
+      const tomato = prodObjs[20]; // Tomatoes
 
-      // Order 1 — delivered
+      // Order 1 — online, delivered (2 days ago)
       const o1 = db.prepare(
-        "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, created_at) VALUES (?,?,?,?,?,?,?,?)"
-      ).run(shopObjs[0].id, shopObjs[0].name, ravi.id, rice.price + dal.price, "delivered", "paid", "42, Green Valley Road", daysAgo(2));
+        "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, order_type, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).run(shopObjs[0].id, shopObjs[0].name, ravi.id, rice.price + dal.price, "delivered", "paid", "42, Green Valley Road", "online", daysAgo(2));
       db.prepare("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?,?,?,?,?)").run(o1.lastInsertRowid, rice.id, rice.name, rice.price, 1);
       db.prepare("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?,?,?,?,?)").run(o1.lastInsertRowid, dal.id,  dal.name,  dal.price,  1);
 
-      // Order 2 — accepted
+      // Order 2 — walk-in, accepted (3 hours ago)
       const o2 = db.prepare(
-        "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, created_at) VALUES (?,?,?,?,?,?,?,?)"
-      ).run(shopObjs[1].id, shopObjs[1].name, ravi.id, milk.price * 2, "accepted", "pending", "42, Green Valley Road", hoursAgo(3));
+        "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, order_type, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).run(shopObjs[1].id, shopObjs[1].name, ravi.id, milk.price * 2, "accepted", "pending", "Milk Lane", "walk_in", hoursAgo(3));
       db.prepare("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?,?,?,?,?)").run(o2.lastInsertRowid, milk.id, milk.name, milk.price, 2);
+
+      // Sample orders spread across current month (April 2026)
+      const sampleOrders = [
+        { shopIdx: 0, items: [[rice.id, rice.name, rice.price, 1], [dal.id, dal.name, dal.price, 1]], type: 'online', daysBack: 5 },
+        { shopIdx: 1, items: [[milk.id, milk.name, milk.price, 3]], type: 'walk_in', daysBack: 4 },
+        { shopIdx: 2, items: [[bread.id, bread.name, bread.price, 2]], type: 'online', daysBack: 3 },
+        { shopIdx: 3, items: [[tomato.id, tomato.name, tomato.price, 2]], type: 'walk_in', daysBack: 1 },
+        { shopIdx: 0, items: [[paneer.id, paneer.name, paneer.price, 1], [milk.price * 100 / 100, milk.name, milk.price, 1]], type: 'walk_in', daysBack: 0 },
+        { shopIdx: 1, items: [[milk.id, milk.name, milk.price, 4]], type: 'online', daysBack: 6 },
+        { shopIdx: 2, items: [[bread.id, bread.name, bread.price, 1]], type: 'walk_in', daysBack: 7 },
+      ];
+
+      for (const orderConfig of sampleOrders) {
+        const shop = shopObjs[orderConfig.shopIdx];
+        let total = 0;
+        for (const [prodId, name, price, qty] of orderConfig.items) {
+          total += price * qty;
+        }
+        
+        const orderDate = daysAgo(orderConfig.daysBack);
+        const orderResult = db.prepare(
+          "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, order_type, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+        ).run(shop.id, shop.name, ravi.id, Math.round(total * 100) / 100, "delivered", "paid", `Customer Address ${orderConfig.shopIdx}`, orderConfig.type, orderDate);
+        
+        for (const [prodId, name, price, qty] of orderConfig.items) {
+          db.prepare("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (?,?,?,?,?)").run(orderResult.lastInsertRowid, prodId, name, price, qty);
+        }
+      }
     }
   });
 
