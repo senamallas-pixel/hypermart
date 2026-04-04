@@ -638,27 +638,25 @@ function TopNav() {
               {/* User Dropdown Menu */}
               {showUserMenu && (
                 <div className="absolute top-full mt-1 right-0 bg-white border border-[#1A1A1A]/10 rounded-xl shadow-lg min-w-max">
+                  <button
+                    onClick={() => { navigate('/profile'); setShowUserMenu(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                  >
+                    <User size={14} /> Profile
+                  </button>
+                  <button
+                    onClick={() => { navigate('/settings'); setShowUserMenu(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                  >
+                    <Settings size={14} /> Settings
+                  </button>
                   {currentUser.role === 'customer' && (
-                    <>
-                      <button
-                        onClick={() => { navigate('/profile'); setShowUserMenu(false); }}
-                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
-                      >
-                        <User size={14} /> Profile
-                      </button>
-                      <button
-                        onClick={() => { navigate('/orders'); setShowUserMenu(false); }}
-                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
-                      >
-                        <ShoppingBag size={14} /> Orders
-                      </button>
-                      <button
-                        onClick={() => { navigate('/settings'); setShowUserMenu(false); }}
-                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
-                      >
-                        <Settings size={14} /> Settings
-                      </button>
-                    </>
+                    <button
+                      onClick={() => { navigate('/orders'); setShowUserMenu(false); }}
+                      className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                    >
+                      <ShoppingBag size={14} /> Orders
+                    </button>
                   )}
                   <button 
                     onClick={handleSignOut}
