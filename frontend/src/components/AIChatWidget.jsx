@@ -63,8 +63,6 @@ export default function AIChatWidget() {
     if (open) setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
 
-  if (!aiAvailable) return null;
-
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
