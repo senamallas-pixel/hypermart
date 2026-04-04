@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts, uploadFile } from './api/client';
+import { initI18n } from './lib/i18n';
 import Marketplace        from './pages/Marketplace';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
@@ -18,6 +19,7 @@ import CustomerProfile    from './pages/CustomerProfile';
 import OrderHistory       from './pages/OrderHistory';
 import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
+import LanguageSelector   from './components/LanguageSelector';
 
 // ── Constants ─────────────────────────────────────────────────────
 const DEMO = [
@@ -617,6 +619,8 @@ function TopNav() {
               <ChevronDown size={11} className="absolute right-0 pointer-events-none text-[#5A5A40]" />
             </div>
           </div>
+
+          <LanguageSelector />
 
           {currentUser ? (
             <div className="relative flex items-center gap-1">

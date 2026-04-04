@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { listShops, listProducts, placeOrder, nearbyShops } from '../api/client';
 import { useApp } from '../context/AppContext';
+import { useTranslation } from '../hooks/useTranslation';
 
 const CATEGORIES = [
   'Grocery', 'Dairy', 'Vegetables & Fruits', 'Meat',
@@ -130,13 +131,14 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty }) {
 
 // ── Shop Products View ─────────────────────────────────────────────
 function ShopProductsView({ shop, onBack }) {
+  const { t } = useTranslation();
   const { currentUser, cart, addToCart, updateQuantity, clearCart } = useApp();
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [showCart, setShowCart] = useState(false);
   const [placing, setPlacing]   = useState(false);
   const [toast, setToast]       = useState(null);
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeFilter, setActiveFilter] = useState(t('common.all'));
   const [needsLogin, setNeedsLogin]     = useState(false);
 
   useEffect(() => {
@@ -152,17 +154,17 @@ function ShopProductsView({ shop, onBack }) {
 
   const productCategories = useMemo(() => {
     const cats = [...new Set(products.map(p => p.category))].filter(Boolean);
-    return ['All', ...cats];
-  }, [products]);
+    return [t('common.all'), ...cats];
+  }, [products, t]);
 
   const filteredProducts = useMemo(() => {
-    if (activeFilter === 'All') return products;
+    if (activeFilter === t('common.all')) return products;
     return products.filter(p => p.category === activeFilter);
-  }, [products, activeFilter]);
+  }, [products, activeFilter, t]);
 
   const handleAddToCart = product => {
     if (cart.shopId && cart.shopId !== shop.id) {
-      if (!window.confirm(`Your cart has items from another shop. Clear cart and add from ${shop.name}?`)) return;
+      if (!window.confirm(`${t('messages.cartHasItems')} ${shop.name}?`)) return;
       clearCart();
     }
     addToCart(shop.id, shop.name, { productId: product.id, name: product.name, price: product.price, unit: product.unit, image: product.image });
@@ -175,7 +177,7 @@ function ShopProductsView({ shop, onBack }) {
       await placeOrder({ shop_id: shop.id, items: shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })), delivery_address: 'Default Address' });
       clearCart();
       setShowCart(false);
-      setToast('Order placed! &#127881;');
+      setToast(t('messages.orderPlaced'));
       setTimeout(() => setToast(null), 3000);
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to place order.');
@@ -285,7 +287,7 @@ function ShopProductsView({ shop, onBack }) {
               </span>
             </div>
             <div className="text-left">
-              <p className="text-[9px] font-bold uppercase tracking-widest opacity-70 leading-none mb-0.5">View Cart</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest opacity-70 leading-none mb-0.5">{t('marketplace.viewCart')}</p>
               <p className="font-bold text-sm leading-none">&#8377;{shopTotal}</p>
             </div>
           </motion.button>
@@ -309,7 +311,7 @@ function ShopProductsView({ shop, onBack }) {
 
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#1A1A1A]/6">
                 <div>
-                  <h3 className="font-serif text-xl font-bold">Your Cart</h3>
+                  <h3 className="font-serif text-xl font-bold">{t('marketplace.yourCart')}</h3>
                   <p className="text-xs text-[#1A1A1A]/40">{shop.name}</p>
                 </div>
                 <button onClick={() => setShowCart(false)} className="w-9 h-9 flex items-center justify-center hover:bg-[#F5F5F0] rounded-xl transition-colors">
@@ -341,12 +343,12 @@ function ShopProductsView({ shop, onBack }) {
 
               <div className="px-6 py-5 border-t border-[#1A1A1A]/6 space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest text-xs">Total</span>
+                  <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest text-xs">{t('marketplace.total')}</span>
                   <span className="font-serif text-2xl font-bold">&#8377;{shopTotal}</span>
                 </div>
                 <button onClick={handlePlaceOrder} disabled={placing}
                   className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
-                  {placing ? 'Placing Order&hellip;' : <><span>Place Order</span><ChevronRight size={18} /></>}
+                  {placing ? `${t('marketplace.placingOrder')}…` : <><span>{t('marketplace.placeOrder')}</span><ChevronRight size={18} /></>}
                 </button>
               </div>
             </motion.div>
@@ -364,16 +366,16 @@ function ShopProductsView({ shop, onBack }) {
               <div className="w-16 h-16 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Store size={28} className="text-[#5A5A40]" />
               </div>
-              <h3 className="font-serif text-xl font-bold mb-2">Sign in to order</h3>
-              <p className="text-sm text-[#1A1A1A]/50 mb-6">Create an account or sign in to place your order.</p>
+              <h3 className="font-serif text-xl font-bold mb-2">{t('marketplace.signInToOrder')}</h3>
+              <p className="text-sm text-[#1A1A1A]/50 mb-6">{t('messages.createAccountOrSignIn')}</p>
               <div className="flex gap-3">
                 <button onClick={() => setNeedsLogin(false)}
                   className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0] transition-all">
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <a href="#/login"
                   className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-lg shadow-[#5A5A40]/20 text-center">
-                  Sign In
+                  {t('common.signIn')}
                 </a>
               </div>
             </motion.div>
@@ -713,6 +715,7 @@ function RouteMapModal({ userLocation, shop, onClose }) {
 }
 
 function NearbyShopsSection({ onSelectShop }) {
+  const { t } = useTranslation();
   const [nearbyList, setNearbyList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -729,12 +732,12 @@ function NearbyShopsSection({ onSelectShop }) {
       const res = await nearbyShops(lat, lng, r);
       setNearbyList(res.data.items);
     } catch {
-      setError('Failed to load nearby shops.');
+      setError(t('messages.failedToLoadShops'));
     } finally { setLoading(false); }
-  }, []);
+  }, [t]);
 
   const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) { setError('Geolocation is not supported by your browser.'); return; }
+    if (!navigator.geolocation) { setError(t('messages.geolocationNotSupported')); return; }
     setLoading(true); setError(null); setLocationRequested(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -744,12 +747,12 @@ function NearbyShopsSection({ onSelectShop }) {
       },
       (err) => {
         setLoading(false);
-        if (err.code === 1) setError('Location access denied. Please allow location access in your browser settings.');
-        else setError('Unable to retrieve your location. Please try again.');
+        if (err.code === 1) setError(t('messages.locationAccessDenied'));
+        else setError(t('messages.locationRetrievalFailed'));
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [radius, fetchNearby]);
+  }, [radius, fetchNearby, t]);
 
   useEffect(() => {
     if (userLocation) fetchNearby(userLocation.lat, userLocation.lng, radius);
@@ -759,7 +762,7 @@ function NearbyShopsSection({ onSelectShop }) {
     <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-serif text-lg font-bold flex items-center gap-2">
-          <Navigation size={16} className="text-[#5A5A40]" /> Shops Near You
+          <Navigation size={16} className="text-[#5A5A40]" /> {t('marketplace.shopsNearYou')}
         </h3>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowRadiusPicker(v => !v)}
@@ -780,7 +783,7 @@ function NearbyShopsSection({ onSelectShop }) {
         {showRadiusPicker && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-3">
             <div className="flex flex-wrap gap-1.5 bg-[#F5F5F0] rounded-2xl p-3">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 w-full mb-1">Search Radius</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 w-full mb-1">{t('marketplace.searchRadius')}</span>
               {RADIUS_OPTIONS.map(r => (
                 <button key={r} onClick={() => { setRadius(r); setShowRadiusPicker(false); }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${radius === r ? 'bg-[#5A5A40] text-white shadow-sm' : 'bg-white text-[#1A1A1A]/60 border border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
@@ -797,23 +800,23 @@ function NearbyShopsSection({ onSelectShop }) {
           <div className="w-14 h-14 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <MapPin size={24} className="text-[#5A5A40]" />
           </div>
-          <p className="text-sm text-[#1A1A1A]/50 mb-4">Find shops near your current location</p>
+          <p className="text-sm text-[#1A1A1A]/50 mb-4">{t('marketplace.findNearby')}</p>
           <button onClick={requestLocation}
             className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm inline-flex items-center gap-2">
-            <Navigation size={14} /> Use My Location
+            <Navigation size={14} /> {t('marketplace.useMyLocation')}
           </button>
         </div>
       ) : loading ? (
         <div className="py-8 text-center">
           <Loader2 size={24} className="animate-spin mx-auto text-[#5A5A40]/40 mb-2" />
-          <p className="text-sm text-[#1A1A1A]/40">Finding nearby shops…</p>
+          <p className="text-sm text-[#1A1A1A]/40">{t('messages.findingShopsNearby')}</p>
         </div>
       ) : error ? (
         <div className="py-6 text-center">
           <p className="text-sm text-red-500 mb-3">{error}</p>
           <button onClick={requestLocation}
             className="text-xs font-bold text-[#5A5A40] uppercase tracking-widest hover:underline">
-            Try Again
+            {t('common.retry')}
           </button>
         </div>
       ) : nearbyList.length > 0 ? (
@@ -829,10 +832,10 @@ function NearbyShopsSection({ onSelectShop }) {
                   <p className="font-bold text-sm truncate">{shop.name}</p>
                   {shop.is_open ? (
                     <span className="text-[7px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />open
+                      <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />{t('common.open')}
                     </span>
                   ) : (
-                    <span className="text-[7px] font-bold uppercase tracking-widest bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">closed</span>
+                    <span className="text-[7px] font-bold uppercase tracking-widest bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">{t('common.closed')}</span>
                   )}
                 </div>
                 <p className="text-[10px] text-[#1A1A1A]/40">{shop.category} · {shop.address}</p>
@@ -844,7 +847,7 @@ function NearbyShopsSection({ onSelectShop }) {
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setTrackingShop(shop); }}
                   className="flex items-center gap-1 bg-[#5A5A40] text-white px-2.5 py-1 rounded-xl text-[9px] font-bold uppercase tracking-wider hover:bg-[#4A4A30] transition-colors shadow-sm">
-                  <Route size={10} /> Track
+                  <Route size={10} /> {t('common.track')}
                 </button>
               </div>
             </motion.div>
@@ -852,17 +855,17 @@ function NearbyShopsSection({ onSelectShop }) {
         </div>
       ) : (
         <div className="py-6 text-center">
-          <p className="text-sm text-[#1A1A1A]/40">No shops found within {radius} km</p>
+          <p className="text-sm text-[#1A1A1A]/40">{t('messages.noShopsFound')} {radius} km</p>
           <button onClick={() => setRadius(r => Math.min(r + 3, 25))}
             className="text-xs font-bold text-[#5A5A40] uppercase tracking-widest hover:underline mt-2">
-            Expand radius
+            {t('marketplace.expandRadius')}
           </button>
         </div>
       )}
 
       {userLocation && nearbyList.length > 0 && (
         <p className="text-[9px] text-[#1A1A1A]/30 text-center mt-3 uppercase tracking-widest">
-          Showing {nearbyList.length} shop{nearbyList.length !== 1 ? 's' : ''} within {radius} km
+          {t('messages.showing')} {nearbyList.length} {nearbyList.length === 1 ? t('common.shop') : t('common.shops')} {t('messages.within')} {radius} km
         </p>
       )}
 
@@ -878,6 +881,8 @@ function NearbyShopsSection({ onSelectShop }) {
 
 // ── Banner / Hero ──────────────────────────────────────────────────
 function MarketplaceBanner({ location }) {
+  const { t } = useTranslation();
+  
   return (
     <div className="relative bg-gradient-to-r from-[#5A5A40] via-[#4A4A30] to-[#3A3A20] overflow-hidden">
       {/* Decorative circles */}
@@ -888,9 +893,9 @@ function MarketplaceBanner({ location }) {
           <MapPin size={10} />{location}
         </p>
         <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white mb-1">
-          Good <span id="greeting">morning</span> &#128075;
+          {t('marketplace.greeting')} <span id="greeting">{t('marketplace.greetingTime')}</span> &#128075;
         </h2>
-        <p className="text-white/55 text-sm">What are you looking for today?</p>
+        <p className="text-white/55 text-sm">{t('marketplace.selectCategory')}</p>
       </div>
     </div>
   );
@@ -898,6 +903,7 @@ function MarketplaceBanner({ location }) {
 
 // ── Main Marketplace ───────────────────────────────────────────────
 export default function Marketplace() {
+  const { t } = useTranslation();
   const { currentUser, search, setSearch, activeLocation } = useApp();
   const [shops, setShops]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -917,11 +923,11 @@ export default function Marketplace() {
       const res = await listShops(params);
       setShops(res.data.items);
     } catch {
-      setError('Failed to load shops.');
+      setError(t('messages.failedToLoadShops'));
     } finally {
       setLoading(false);
     }
-  }, [activeLocation]);
+  }, [activeLocation, t]);
 
   useEffect(() => { fetchShops(); }, [fetchShops]);
 
@@ -946,7 +952,7 @@ export default function Marketplace() {
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
             <button onClick={() => setSearch('')}
               className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-              All
+              {t('common.all')}
             </button>
             {CATEGORIES.map(cat => (
               <button key={cat} onClick={() => setSearch(cat)}
@@ -962,7 +968,7 @@ export default function Marketplace() {
         {error && (
           <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-2xl text-sm">
             <span className="text-red-700 font-medium">{error}</span>
-            <button onClick={fetchShops} className="text-red-600 font-bold text-xs uppercase tracking-widest hover:text-red-800">Retry</button>
+            <button onClick={fetchShops} className="text-red-600 font-bold text-xs uppercase tracking-widest hover:text-red-800">{t('common.retry')}</button>
           </div>
         )}
 
@@ -971,7 +977,7 @@ export default function Marketplace() {
             <div className="relative">
               <div className="w-12 h-12 border-4 border-[#5A5A40]/20 border-t-[#5A5A40] rounded-full animate-spin" />
             </div>
-            <p className="text-[#1A1A1A]/35 font-serif italic text-sm">Finding shops near you&hellip;</p>
+            <p className="text-[#1A1A1A]/35 font-serif italic text-sm">{t('messages.findingShops')}</p>
           </div>
         ) : (
           <>
@@ -984,7 +990,7 @@ export default function Marketplace() {
                   </div>
                   <div>
                     <p className="font-serif text-xl font-bold">{totalShops}</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">Shops open</p>
+                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.shopsOpen')}</p>
                   </div>
                 </div>
                 <div className="flex-shrink-0 bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 shadow-sm flex items-center gap-3 min-w-[140px]">
@@ -993,7 +999,7 @@ export default function Marketplace() {
                   </div>
                   <div>
                     <p className="font-serif text-xl font-bold">{activeLocation.split(' ')[0]}</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">Your area</p>
+                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.yourArea')}</p>
                   </div>
                 </div>
                 <div className="flex-shrink-0 bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 shadow-sm flex items-center gap-3 min-w-[140px]">
@@ -1001,8 +1007,8 @@ export default function Marketplace() {
                     <Sparkles size={16} className="text-green-600" />
                   </div>
                   <div>
-                    <p className="font-serif text-xl font-bold">Free</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">Delivery</p>
+                    <p className="font-serif text-xl font-bold">{t('marketplace.free')}</p>
+                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.delivery')}</p>
                   </div>
                 </div>
               </div>
@@ -1029,14 +1035,14 @@ export default function Marketplace() {
                         {cat}
                       </h3>
                       <p className="text-[10px] text-[#1A1A1A]/35 font-bold uppercase tracking-widest mt-0.5">
-                        Fresh from {activeLocation}
-                        {catShops.length > 0 && <span className="ml-2 text-[#5A5A40]">&bull; {catShops.length} shop{catShops.length !== 1 ? 's' : ''}</span>}
+                        {t('marketplace.freshFrom')} {activeLocation}
+                        {catShops.length > 0 && <span className="ml-2 text-[#5A5A40]">&bull; {catShops.length} {catShops.length === 1 ? t('common.shop') : t('common.shops')}</span>}
                       </p>
                     </div>
                     {catShops.length > 0 && (
                       <button onClick={() => setSearch(cat)}
                         className="text-[#5A5A40] text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline shrink-0">
-                        See All <ChevronRight size={14} />
+                        {t('common.seeAll')} <ChevronRight size={14} />
                       </button>
                     )}
                   </div>
@@ -1049,7 +1055,7 @@ export default function Marketplace() {
                         ))
                       : (
                         <div className="flex-shrink-0 w-full h-28 flex items-center justify-center bg-white/60 rounded-2xl border border-dashed border-[#1A1A1A]/10">
-                          <p className="text-[#1A1A1A]/25 italic text-sm">No shops registered in this category yet.</p>
+                          <p className="text-[#1A1A1A]/25 italic text-sm">{t('messages.noShopsYet')}</p>
                         </div>
                       )
                     }

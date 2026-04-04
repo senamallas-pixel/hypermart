@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useReducer, useCallback, useEffect, useState } from 'react';
 import { getMe } from '../api/client';
+import { setLanguage as setI18nLanguage } from '../lib/i18n';
 
 // ── Cart ──────────────────────────────────────────────────────────
 
@@ -137,6 +138,14 @@ export function AppProvider({ children }) {
     authDispatch({ type: 'SET_USER', user: userData });
   }, []);
 
+  // Language state
+  const [language, setLanguageState] = useState(localStorage.getItem('hypermart_language') || 'en');
+  const setLanguage = useCallback((lang) => {
+    setLanguageState(lang);
+    setI18nLanguage(lang); // Sync with i18n library
+    localStorage.setItem('hypermart_language', lang);
+  }, []);
+
   return (
     <AppContext.Provider value={{
       currentUser: auth.user,
@@ -146,6 +155,7 @@ export function AppProvider({ children }) {
       cart, cartItemCount, cartTotal,
       addToCart, removeFromCart, updateQuantity, clearCart,
       search, setSearch, activeLocation, setActiveLocation,
+      language, setLanguage,
     }}>
       {children}
     </AppContext.Provider>
