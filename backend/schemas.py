@@ -4,7 +4,7 @@ HyperMart — Pydantic v2 Schemas
 
 from datetime import datetime
 from typing import Optional, List, ClassVar, Dict
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator, computed_field
 
 from models import UserRole, ShopStatus, ShopCategory, ShopLocation
 from models import ProductStatus, OrderStatus, PaymentStatus, SubscriptionStatus
@@ -135,14 +135,15 @@ class ShopStatusUpdate(BaseModel):
 # ── Product ───────────────────────────────────────────────────────────────────
 
 class ProductCreate(BaseModel):
-    name:     str
-    price:    float
-    mrp:      float
-    unit:     str
-    category: ShopCategory
-    stock:    int           = 0
-    image:    Optional[str] = None
-    status:   ProductStatus = ProductStatus.active
+    name:        str
+    description: Optional[str] = None
+    price:       float
+    mrp:         float
+    unit:        str
+    category:    ShopCategory
+    stock:       int           = 0
+    image:       Optional[str] = None
+    status:      ProductStatus = ProductStatus.active
 
     @field_validator("price", "mrp")
     @classmethod
@@ -166,28 +167,30 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    name:     Optional[str]           = None
-    price:    Optional[float]         = None
-    mrp:      Optional[float]         = None
-    unit:     Optional[str]           = None
-    category: Optional[ShopCategory]  = None
-    stock:    Optional[int]           = None
-    image:    Optional[str]           = None
-    status:   Optional[ProductStatus] = None
+    name:        Optional[str]           = None
+    description: Optional[str]           = None
+    price:       Optional[float]         = None
+    mrp:         Optional[float]         = None
+    unit:        Optional[str]           = None
+    category:    Optional[ShopCategory]  = None
+    stock:       Optional[int]           = None
+    image:       Optional[str]           = None
+    status:      Optional[ProductStatus] = None
 
 
 class ProductOut(OrmBase):
-    id:         int
-    shop_id:    int
-    name:       str
-    price:      float
-    mrp:        float
-    unit:       str
-    category:   ShopCategory
-    stock:      int
-    image:      Optional[str]
-    status:     ProductStatus
-    created_at: datetime
+    id:          int
+    shop_id:     int
+    name:        str
+    description: Optional[str] = None
+    price:       float
+    mrp:         float
+    unit:        str
+    category:    ShopCategory
+    stock:       int
+    image:       Optional[str]
+    status:      ProductStatus
+    created_at:  datetime
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────
@@ -217,13 +220,28 @@ class OrderCreate(BaseModel):
         return v
 
 
+class WalkinOrderCreate(BaseModel):
+    items: List[OrderItemIn]
+
+    @field_validator("items")
+    @classmethod
+    def non_empty_items(cls, v: list) -> list:
+        if not v:
+            raise ValueError("Order must contain at least one item")
+        return v
+
+
 class OrderItemOut(OrmBase):
     id:         int
     product_id: int
     name:       str
     price:      float
     quantity:   int
-    line_total: float
+
+    @computed_field
+    @property
+    def line_total(self) -> float:
+        return round(self.price * self.quantity, 2)
 
 
 class OrderOut(OrmBase):
@@ -265,18 +283,53 @@ class OrderStatusUpdate(BaseModel):
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 class PlatformAnalytics(BaseModel):
-    total_shops:       int
-    approved_shops:    int
-    total_users:       int
-    total_orders:      int
-    delivered_revenue: float
+    total_shops:          int
+    approved_shops:       int
+    total_users:          int
+    total_orders:         int
+    delivered_revenue:    float
+    active_subscriptions: int = 0
+
+
+# ── Analytics sub-schemas ─────────────────────────────────────────────────────
+
+class LowStockItem(BaseModel):
+    name:  str
+    stock: int
+
+
+class DailySale(BaseModel):
+    day:     str
+    revenue: float
+
+
+class CategoryRevenue(BaseModel):
+    category: str
+    revenue:  float
+
+
+class TopProduct(BaseModel):
+    product_id:    int
+    name:          str
+    quantity_sold: int
+    revenue:       float
+
+
+class MonthlyRevenue(BaseModel):
+    month:   str
+    revenue: float
 
 
 class ShopAnalytics(BaseModel):
-    today_sales:     float
-    today_orders:    int
-    total_products:  int
-    low_stock_items: List[str]
+    today_sales:      float
+    today_orders:     int
+    total_products:   int
+    low_stock_items:  List[LowStockItem]
+    daily_sales:      List[DailySale]
+    category_revenue: List[CategoryRevenue]
+    top_products:     List[TopProduct]
+    monthly_revenue:  List[MonthlyRevenue]
+    orders_by_status: Dict[str, int]
 
 
 # ── Pagination ────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import {
   XCircle, Clock, Truck, Edit3, Save, Lock, AlertCircle, Plus,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
+import AIChatWidget from './components/AIChatWidget';
 import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts, uploadFile } from './api/client';
 import { initI18n } from './lib/i18n';
 import Marketplace        from './pages/Marketplace';
@@ -1040,6 +1041,7 @@ function AppShell() {
         </Routes>
       </main>
       <BottomNav />
+      <AIChatWidget />
     </div>
   );
 }

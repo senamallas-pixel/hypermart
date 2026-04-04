@@ -5,20 +5,24 @@ JWT auth, password hashing, subscription system, full CRUD.
 
 import os
 import uuid
+import shutil
+import pathlib
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, text
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 import models as M
 import schemas as S
 from database import get_db, create_tables
+from ai import router as ai_router
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App
@@ -38,9 +42,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Static uploads & AI router ──────────────────────────────────────────────────
+UPLOAD_DIR = pathlib.Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.include_router(ai_router)
+
+
 @app.on_event("startup")
 def startup():
     create_tables()
+    # Runtime migration — safe to run against existing DBs
+    from database import engine
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE products ADD COLUMN description TEXT",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -627,14 +649,20 @@ def shop_analytics(
     if not shop:
         raise HTTPException(404, "Shop not found")
     _assert_shop_ownership(shop, current_user)
-    today_start = datetime.combine(date.today(), datetime.min.time())
+
+    today_start    = datetime.combine(date.today(), datetime.min.time())
+    seven_days_ago = (date.today() - timedelta(days=6)).isoformat()
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+
+    # Today's orders
     today_orders = (
         db.query(M.Order)
         .filter(and_(M.Order.shop_id == shop_id, M.Order.created_at >= today_start))
         .all()
     )
+    # Low stock (≤ 5 units)
     low_stock = (
-        db.query(M.Product.name)
+        db.query(M.Product.name, M.Product.stock)
         .filter(
             M.Product.shop_id == shop_id,
             M.Product.stock <= 5,
@@ -642,12 +670,165 @@ def shop_analytics(
         )
         .all()
     )
-    return {
-        "today_sales":     round(sum(o.total for o in today_orders), 2),
-        "today_orders":    len(today_orders),
-        "total_products":  db.query(M.Product).filter(M.Product.shop_id == shop_id).count(),
-        "low_stock_items": [r.name for r in low_stock],
+    # Daily sales — last 7 days (gaps filled with 0)
+    daily_rows = (
+        db.query(
+            func.date(M.Order.created_at).label("day"),
+            func.sum(M.Order.total).label("revenue"),
+        )
+        .filter(
+            M.Order.shop_id == shop_id,
+            func.date(M.Order.created_at) >= seven_days_ago,
+        )
+        .group_by("day").order_by("day").all()
+    )
+    day_map = {r.day: round(float(r.revenue), 2) for r in daily_rows}
+    daily_sales = [
+        {
+            "day": (date.today() - timedelta(days=i)).strftime("%a"),
+            "revenue": day_map.get((date.today() - timedelta(days=i)).isoformat(), 0.0),
+        }
+        for i in range(6, -1, -1)
+    ]
+    # Category revenue (delivered orders)
+    cat_rows = (
+        db.query(
+            M.Product.category.label("category"),
+            func.sum(M.OrderItem.price * M.OrderItem.quantity).label("revenue"),
+        )
+        .join(M.OrderItem, M.OrderItem.product_id == M.Product.id)
+        .join(M.Order, M.OrderItem.order_id == M.Order.id)
+        .filter(
+            M.Order.shop_id == shop_id,
+            M.Order.status == M.OrderStatus.delivered,
+        )
+        .group_by(M.Product.category)
+        .order_by(func.sum(M.OrderItem.price * M.OrderItem.quantity).desc())
+        .all()
+    )
+    category_revenue = [
+        {"category": str(r.category.value if hasattr(r.category, "value") else r.category),
+         "revenue": round(float(r.revenue), 2)}
+        for r in cat_rows
+    ]
+    # Top 10 products by quantity sold
+    top_rows = (
+        db.query(
+            M.OrderItem.product_id,
+            M.OrderItem.name,
+            func.sum(M.OrderItem.quantity).label("quantity_sold"),
+            func.sum(M.OrderItem.price * M.OrderItem.quantity).label("revenue"),
+        )
+        .join(M.Order, M.OrderItem.order_id == M.Order.id)
+        .filter(M.Order.shop_id == shop_id)
+        .group_by(M.OrderItem.product_id, M.OrderItem.name)
+        .order_by(func.sum(M.OrderItem.quantity).desc())
+        .limit(10).all()
+    )
+    top_products = [
+        {"product_id": r.product_id, "name": r.name,
+         "quantity_sold": int(r.quantity_sold), "revenue": round(float(r.revenue), 2)}
+        for r in top_rows
+    ]
+    # Monthly revenue — last 6 months
+    monthly_rows = (
+        db.query(
+            func.strftime("%b", M.Order.created_at).label("month"),
+            func.sum(M.Order.total).label("revenue"),
+        )
+        .filter(
+            M.Order.shop_id == shop_id,
+            M.Order.created_at >= six_months_ago,
+        )
+        .group_by(func.strftime("%Y-%m", M.Order.created_at))
+        .order_by(M.Order.created_at)
+        .all()
+    )
+    monthly_revenue = [
+        {"month": r.month, "revenue": round(float(r.revenue), 2)}
+        for r in monthly_rows
+    ]
+    # Orders by status
+    status_rows = (
+        db.query(M.Order.status, func.count(M.Order.id))
+        .filter(M.Order.shop_id == shop_id)
+        .group_by(M.Order.status).all()
+    )
+    orders_by_status = {
+        str(s.value if hasattr(s, "value") else s): cnt
+        for s, cnt in status_rows
     }
+
+    return {
+        "today_sales":      round(sum(o.total for o in today_orders), 2),
+        "today_orders":     len(today_orders),
+        "total_products":   db.query(M.Product).filter(M.Product.shop_id == shop_id).count(),
+        "low_stock_items":  [{"name": r.name, "stock": r.stock} for r in low_stock],
+        "daily_sales":      daily_sales,
+        "category_revenue": category_revenue,
+        "top_products":     top_products,
+        "monthly_revenue":  monthly_revenue,
+        "orders_by_status": orders_by_status,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FILE UPLOAD
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    ext = pathlib.Path(file.filename or "image.bin").suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
+        raise HTTPException(400, "Only image files are allowed (jpg, png, gif, webp)")
+    filename = f"{uuid.uuid4()}{ext}"
+    dest = UPLOAD_DIR / filename
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"url": f"/uploads/{filename}"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# WALK-IN ORDER  (In-Store POS — placed by owner on behalf of customer)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/shops/{shop_id}/walkin-order", response_model=S.OrderOut, status_code=201)
+def walkin_order(
+    shop_id: int,
+    payload: S.WalkinOrderCreate,
+    current_user: M.User = Depends(require_role(M.UserRole.owner, M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    if current_user.role == M.UserRole.owner and shop.owner_id != current_user.id:
+        raise HTTPException(403, "Not authorised for this shop")
+    order_items, total = [], 0.0
+    for item_in in payload.items:
+        product = db.get(M.Product, item_in.product_id)
+        if not product or product.shop_id != shop_id:
+            raise HTTPException(422, f"Product {item_in.product_id} not found in this shop")
+        if product.stock < item_in.quantity:
+            raise HTTPException(422, f"Insufficient stock for '{product.name}'")
+        order_items.append(M.OrderItem(
+            product_id=product.id, name=product.name,
+            price=product.price,   quantity=item_in.quantity,
+        ))
+        total += product.price * item_in.quantity
+        product.stock -= item_in.quantity
+    order = M.Order(
+        shop_id=shop.id,       shop_name=shop.name,
+        customer_id=current_user.id,
+        items=order_items,     total=round(total, 2),
+        status=M.OrderStatus.delivered,
+        payment_status=M.PaymentStatus.paid,
+        delivery_address="In-Store (Walk-in)",
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 # ── Private helpers ──────────────────────────────────────────────────────────

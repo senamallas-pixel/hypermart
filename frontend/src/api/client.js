@@ -83,3 +83,4 @@ export const suggestProducts    = (category, partial_name)     => api.post('/ai/
 export const generateDescription= (name, category)             => api.post('/ai/generate-description', { name, category });
 export const getLowStockInsight = (shop_name, low_stock_items) => api.post('/ai/low-stock-insight',   { shop_name, low_stock_items });
 export const aiSalesForecast    = (shop_id)                    => api.post('/ai/sales-forecast',      { shop_id });
+export const aiChat             = (message, shop_id, role, history) => api.post('/ai/chat', { message, shop_id, role, history });

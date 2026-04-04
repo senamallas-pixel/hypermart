@@ -125,10 +125,11 @@ class Shop(Base):
 class Product(Base):
     __tablename__ = "products"
 
-    id         = Column(Integer, primary_key=True, autoincrement=True)
-    shop_id    = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
-    name       = Column(String(255), nullable=False)
-    price      = Column(Float, nullable=False)
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id     = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    name        = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    price       = Column(Float, nullable=False)
     mrp        = Column(Float, nullable=False)
     unit       = Column(String(50), nullable=False)
     category   = Column(Enum(ShopCategory), nullable=False)
