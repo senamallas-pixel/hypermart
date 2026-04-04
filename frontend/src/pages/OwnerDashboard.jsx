@@ -29,7 +29,11 @@ const SHOP_CATS = ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snac
 // ── Stat Card ─────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 flex flex-col gap-4">
+    <motion.div 
+      whileHover={{ y: -4, scale: 1.01 }}
+      transition={{ type: "spring", stiffness: 300 }}
+      className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-6 flex flex-col gap-4 shadow-sm hover:shadow-xl transition-shadow duration-300"
+    >
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${accent || 'bg-[#5A5A40]/10'}`}>
         <Icon size={24} className="text-[#5A5A40]" />
       </div>
@@ -38,7 +42,7 @@ function StatCard({ icon: Icon, label, value, sub, accent }) {
         <p className="font-serif text-3xl font-bold text-[#1A1A1A]">{value}</p>
         {sub && <p className="text-xs text-[#1A1A1A]/40 mt-1">{sub}</p>}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -109,7 +113,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
             <input className={inp} placeholder="Unit (kg, pcs…) *" value={form.unit} onChange={set('unit')} required />
             <input className={inp} placeholder="Stock qty" type="number" min="0" value={form.stock} onChange={set('stock')} />
           </div>
-          <select className={sel} value={form.category} onChange={set('category')}>
+          <select className={`${sel} cursor-pointer`} value={form.category} onChange={set('category')}>
             {CATEGORIES.map(c => <option key={c}>{c}</option>)}
           </select>
 
@@ -138,7 +142,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
           )}
 
           <button type="submit" disabled={saving}
-            className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 shadow-md hover:shadow-lg">
             {saving ? <><Loader2 size={18} className="animate-spin" /> Saving...</> : 'Save Product'}
           </button>
         </form>
@@ -205,21 +209,33 @@ function ShopRegistrationForm({ onSaved }) {
   };
 
   return (
-    <div className="max-w-lg mx-auto">
-      <h2 className="font-serif text-3xl font-bold mb-2">Register Your Shop</h2>
-      <p className="text-sm text-[#1A1A1A]/40 mb-8">Fill in the details. You can update them later. Shops go live after admin approval.</p>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input className={inp} placeholder="Shop name *" value={form.name} onChange={set('name')} required />
-        <input className={inp} placeholder="Full address *" value={form.address} onChange={set('address')} required />
-        <div className="grid grid-cols-2 gap-4">
-          <select className={`${inp} appearance-none`} value={form.category} onChange={set('category')}>
-            {SHOP_CATS.map(c => <option key={c}>{c}</option>)}
-          </select>
-          <select className={`${inp} appearance-none`} value={form.location_name} onChange={set('location_name')}>
-            {LOCATIONS.map(l => <option key={l}>{l}</option>)}
-          </select>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-sm border border-[#1A1A1A]/5"
+    >
+      <h2 className="font-serif text-3xl font-bold mb-2 text-[#1A1A1A]">Register Your Shop</h2>
+      <p className="text-sm text-[#1A1A1A]/40 mb-8 leading-relaxed">Fill in the details. You can update them later. Shops go live after admin approval.</p>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-4">
+          <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Shop name *" value={form.name} onChange={set('name')} required />
+          <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Full address *" value={form.address} onChange={set('address')} required />
         </div>
-        <input className={inp} placeholder="Timings (e.g. 9:00 AM – 9:00 PM)" value={form.timings} onChange={set('timings')} />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="relative">
+            <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.category} onChange={set('category')}>
+              {SHOP_CATS.map(c => <option key={c}>{c}</option>)}
+            </select>
+            <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none rotate-90" />
+          </div>
+          <div className="relative">
+            <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.location_name} onChange={set('location_name')}>
+              {LOCATIONS.map(l => <option key={l}>{l}</option>)}
+            </select>
+            <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none rotate-90" />
+          </div>
+        </div>
+        <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Timings (e.g. 9:00 AM – 9:00 PM)" value={form.timings} onChange={set('timings')} />
 
         {/* Location (Lat/Lng) */}
         <div>
@@ -230,12 +246,12 @@ function ShopRegistrationForm({ onSaved }) {
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={getCurrentLocation} disabled={locating}
-              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all disabled:opacity-50">
+              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 active:scale-[0.98] transition-all disabled:opacity-50 hover:shadow-md cursor-pointer">
               {locating ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}
               {locating ? 'Getting location...' : 'Use Current Location'}
             </button>
             <button type="button" onClick={() => setMapPickerOpen(true)}
-              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all">
+              className="flex-1 flex items-center justify-center gap-2 border border-[#5A5A40]/30 rounded-2xl py-3 text-sm font-bold text-[#5A5A40] mx-0 hover:bg-[#5A5A40]/5 active:scale-[0.98] transition-all hover:shadow-md cursor-pointer">
               <MapPin size={16} /> Pick on Map
             </button>
           </div>
@@ -248,29 +264,37 @@ function ShopRegistrationForm({ onSaved }) {
         </div>
 
         {/* Shop Logo Upload */}
-        <div>
-          <label className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40 mb-2 block">Shop Photo / Logo</label>
-          <label className={`flex items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-[#1A1A1A]/15 rounded-2xl py-5 hover:border-[#5A5A40] transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-            {uploading ? <Loader2 size={18} className="animate-spin text-[#5A5A40]" /> : <Upload size={18} className="text-[#5A5A40]" />}
-            <span className="text-sm font-medium text-[#1A1A1A]/50">{uploading ? 'Uploading...' : 'Upload Shop Photo'}</span>
+        <div className="pt-2">
+          <label className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40 mb-3 block">Shop Photo / Logo</label>
+          <label className={`flex flex-col items-center justify-center gap-3 cursor-pointer border-2 border-dashed border-[#1A1A1A]/15 bg-[#F5F5F0]/50 rounded-2xl py-8 hover:border-[#5A5A40] hover:bg-[#5A5A40]/5 transition-all group ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+              {uploading ? <Loader2 size={24} className="animate-spin text-[#5A5A40]" /> : <Upload size={24} className="text-[#5A5A40]" />}
+            </div>
+            <span className="text-sm font-semibold text-[#1A1A1A]/60">{uploading ? 'Uploading...' : 'Click to Upload Shop Photo'}</span>
             <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleLogoUpload} disabled={uploading} />
           </label>
-          <input className={`${inp} mt-2`} placeholder="Or paste logo URL" value={form.logo} onChange={set('logo')} />
+          <div className="relative mt-3">
+             <input className={`${inp} pr-10 hover:border-[#1A1A1A]/20`} placeholder="Or paste logo URL" value={form.logo} onChange={set('logo')} />
+          </div>
           {form.logo && (
-            <div className="relative mt-3 w-full aspect-video rounded-2xl overflow-hidden bg-[#F5F5F0] border border-[#1A1A1A]/5">
-              <img src={form.logo} alt="Shop logo preview" className="w-full h-full object-cover" referrerPolicy="no-referrer"
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               className="relative mt-4 w-full aspect-video rounded-2xl overflow-hidden bg-[#F5F5F0] border-2 border-[#1A1A1A]/10 shadow-inner group"
+            >
+              <img src={form.logo} alt="Shop logo preview" className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-700" referrerPolicy="no-referrer"
                 onError={e => { e.target.style.display = 'none'; }} />
               <button type="button" onClick={() => setForm(f => ({ ...f, logo: '' }))}
-                className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:bg-white shadow-sm">
-                <X size={14} />
+                className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full hover:bg-red-50 hover:text-red-500 shadow-lg active:scale-95 transition-all opacity-0 group-hover:opacity-100">
+                <Trash2 size={16} />
               </button>
-            </div>
+            </motion.div>
           )}
         </div>
 
         <button type="submit" disabled={saving}
-          className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-          {saving ? <><Loader2 size={18} className="animate-spin" /> Registering...</> : 'Submit for Approval'}
+          className="w-full bg-[#5A5A40] text-white py-4 mt-6 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-md hover:shadow-xl">
+          {saving ? <><Loader2 size={18} className="animate-spin" /> Registering...</> : <><Store size={18} /> Submit for Approval</>}
         </button>
       </form>
 
@@ -288,7 +312,7 @@ function ShopRegistrationForm({ onSaved }) {
           />
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
