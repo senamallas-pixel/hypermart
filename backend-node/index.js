@@ -214,17 +214,18 @@ function serializeShop(s) {
 
 function serializeProduct(p) {
   return {
-    id:         p.id,
-    shop_id:    p.shop_id,
-    name:       p.name,
-    price:      p.price,
-    mrp:        p.mrp,
-    unit:       p.unit,
-    category:   p.category,
-    stock:      p.stock,
-    image:      p.image || null,
-    status:     p.status,
-    created_at: p.created_at,
+    id:          p.id,
+    shop_id:     p.shop_id,
+    name:        p.name,
+    description: p.description || null,
+    price:       p.price,
+    mrp:         p.mrp,
+    unit:        p.unit,
+    category:    p.category,
+    stock:       p.stock,
+    image:       p.image || null,
+    status:      p.status,
+    created_at:  p.created_at,
   };
 }
 
@@ -629,7 +630,7 @@ app.post("/shops/:shopId/products", requireAuth, (req, res) => {
   if (!shop) return res.status(404).json({ detail: "Shop not found" });
   if (!assertShopOwnership(shop, req.user, res)) return;
 
-  const { name, price, mrp, unit, category, stock = 0, image, status = "active" } = req.body;
+  const { name, description, price, mrp, unit, category, stock = 0, image, status = "active" } = req.body;
   if (!name || price === undefined || mrp === undefined || !unit || !category) {
     return res.status(422).json({ detail: "name, price, mrp, unit, and category are required" });
   }
@@ -638,8 +639,8 @@ app.post("/shops/:shopId/products", requireAuth, (req, res) => {
   if (stock < 0)              return res.status(422).json({ detail: "Stock cannot be negative" });
 
   const r = db.prepare(
-    "INSERT INTO products (shop_id, name, price, mrp, unit, category, stock, image, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(shopId, name, price, mrp, unit, category, stock, image || null, status);
+    "INSERT INTO products (shop_id, name, description, price, mrp, unit, category, stock, image, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(shopId, name, description || null, price, mrp, unit, category, stock, image || null, status);
   const product = db.prepare("SELECT * FROM products WHERE id = ?").get(r.lastInsertRowid);
   res.status(201).json(serializeProduct(product));
 });
@@ -653,7 +654,7 @@ app.patch("/shops/:shopId/products/:productId", requireAuth, (req, res) => {
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
   if (!assertShopOwnership(shop, req.user, res)) return;
 
-  const allowed = ["name", "price", "mrp", "unit", "category", "stock", "image", "status"];
+  const allowed = ["name", "description", "price", "mrp", "unit", "category", "stock", "image", "status"];
   const updates = {};
   for (const k of allowed) {
     if (req.body[k] !== undefined) updates[k] = req.body[k];
@@ -1073,6 +1074,145 @@ app.post("/upload", requireAuth, (req, res) => {
     const url = `/uploads/${req.file.filename}`;
     res.json({ url, filename: req.file.filename });
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI ENDPOINTS (Gemini 2.0 Flash)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const GEMINI_URL     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+
+async function callGemini(prompt) {
+  if (!GEMINI_API_KEY) throw new Error("Gemini API key not configured");
+  const resp = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Gemini error ${resp.status}: ${body.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  return data.candidates[0].content.parts[0].text.trim();
+}
+
+// GET /ai/status
+app.get("/ai/status", (_req, res) => {
+  res.json({ available: Boolean(GEMINI_API_KEY) });
+});
+
+// POST /ai/suggest-products
+app.post("/ai/suggest-products", async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  const { category = "Grocery", partial_name = "" } = req.body;
+  if (!partial_name.trim()) return res.status(422).json({ detail: "partial_name is required" });
+  try {
+    const prompt =
+      `You are a product naming assistant for an Indian grocery/retail store.\n` +
+      `Category: ${category}\n` +
+      `Partial name: "${partial_name}"\n` +
+      `Suggest 5 complete, realistic product names that match this category and start with or relate to "${partial_name}".\n` +
+      `Each name should be specific (include brand, weight, or variety if appropriate).\n` +
+      `Respond ONLY with a JSON array of 5 strings. No explanation, no markdown.`;
+    const raw   = await callGemini(prompt);
+    const match = raw.match(/\[[\s\S]*\]/);
+    const suggestions = match ? JSON.parse(match[0]) : [];
+    res.json({ suggestions: Array.isArray(suggestions) ? suggestions.slice(0, 5) : [] });
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// POST /ai/generate-description
+app.post("/ai/generate-description", async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  const { name, category } = req.body;
+  if (!name || !category) return res.status(422).json({ detail: "name and category are required" });
+  try {
+    const prompt =
+      `Write a single short sentence (max 15 words) describing "${name}" ` +
+      `for an online grocery store in the "${category}" category.\n` +
+      `Highlight freshness, quality, or value.\n` +
+      `Respond with ONLY the description sentence, no quotes.`;
+    const raw = await callGemini(prompt);
+    res.json({ description: raw.replace(/^["']|["']$/g, "").replace(/\.$/, "") });
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// POST /ai/low-stock-insight
+app.post("/ai/low-stock-insight", async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  const { shop_name, low_stock_items } = req.body;
+  if (!low_stock_items || !low_stock_items.length) {
+    return res.status(422).json({ detail: "low_stock_items is required" });
+  }
+  try {
+    const itemsList = low_stock_items.join(", ");
+    const prompt =
+      `You are an inventory advisor for a grocery store named "${shop_name || "the store"}".\n` +
+      `The following products are running low on stock (5 units or fewer): ${itemsList}\n` +
+      `Give 2-3 short, practical sentences of advice on restocking priorities and what to order first.\n` +
+      `Consider typical demand patterns for Indian grocery stores.\n` +
+      `Respond in plain text, no bullet points or headers.`;
+    const insight = await callGemini(prompt);
+    res.json({ insight });
+  } catch (err) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
+// POST /ai/sales-forecast  (auth required)
+app.post("/ai/sales-forecast", requireAuth, async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  const { shop_id } = req.body;
+  if (!shop_id) return res.status(422).json({ detail: "shop_id is required" });
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(Number(shop_id));
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+
+  // Collect last 30 days of daily revenue
+  const dailyData = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayStart = new Date(d); dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd   = new Date(d); dayEnd.setUTCHours(23, 59, 59, 999);
+    const row = db.prepare(
+      "SELECT COALESCE(SUM(total), 0) as revenue FROM orders WHERE shop_id = ? AND created_at >= ? AND created_at <= ?"
+    ).get(Number(shop_id), dayStart.toISOString(), dayEnd.toISOString());
+    dailyData.push({ date: dayStart.toISOString().slice(0, 10), revenue: Math.round(row.revenue * 100) / 100 });
+  }
+
+  const last7      = dailyData.slice(-7).map(d => d.revenue);
+  const avgRevenue = last7.reduce((s, v) => s + v, 0) / 7;
+
+  // 7-day simple forecast with ±10 % jitter
+  const forecast = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    forecast.push({
+      date:              d.toISOString().slice(0, 10),
+      day:               d.toLocaleDateString("en-US", { weekday: "short" }),
+      predicted_revenue: Math.round(avgRevenue * (0.9 + Math.random() * 0.2) * 100) / 100,
+    });
+  }
+
+  try {
+    const prompt =
+      `You are a retail sales analyst. A grocery store named "${shop.name}" had the following ` +
+      `daily revenue (INR) over the last 7 days: ${last7.map((v, i) => `Day ${i + 1}: ₹${v}`).join(", ")}.\n` +
+      `Average daily revenue: ₹${Math.round(avgRevenue)}.\n` +
+      `Give 2-3 sentences of sales forecast insight for the next 7 days, considering typical Indian grocery demand. Plain text only.`;
+    const insight = await callGemini(prompt);
+    res.json({ forecast, insight, avg_daily_revenue: Math.round(avgRevenue * 100) / 100 });
+  } catch (_) {
+    res.json({ forecast, insight: null, avg_daily_revenue: Math.round(avgRevenue * 100) / 100 });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

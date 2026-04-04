@@ -127,6 +127,7 @@ class DB {
     try { this._db.run("ALTER TABLE shops ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
     try { this._db.run("ALTER TABLE shops ADD COLUMN schedule TEXT"); } catch (_) {}
     try { this._db.run("ALTER TABLE shops ADD COLUMN unavailable_dates TEXT"); } catch (_) {}
+    try { this._db.run("ALTER TABLE products ADD COLUMN description TEXT"); } catch (_) {}
     this._save();
   }
 

@@ -2,7 +2,7 @@
 // Global Auth + Cart state (replaces Firebase Auth + Firestore listeners)
 
 import { createContext, useContext, useReducer, useCallback, useEffect, useState } from 'react';
-import { getMe } from '../api/client';
+import { getMe, getAIStatus } from '../api/client';
 import { setLanguage as setI18nLanguage } from '../lib/i18n';
 
 // ── Cart ──────────────────────────────────────────────────────────
@@ -138,6 +138,14 @@ export function AppProvider({ children }) {
     authDispatch({ type: 'SET_USER', user: userData });
   }, []);
 
+  // AI availability
+  const [aiAvailable, setAiAvailable] = useState(false);
+  useEffect(() => {
+    getAIStatus()
+      .then(res => setAiAvailable(Boolean(res.data?.available)))
+      .catch(() => setAiAvailable(false));
+  }, []);
+
   // Language state
   const [language, setLanguageState] = useState(localStorage.getItem('hypermart_language') || 'en');
   const setLanguage = useCallback((lang) => {
@@ -155,6 +163,7 @@ export function AppProvider({ children }) {
       cart, cartItemCount, cartTotal,
       addToCart, removeFromCart, updateQuantity, clearCart,
       search, setSearch, activeLocation, setActiveLocation,
+      aiAvailable,
       language, setLanguage,
     }}>
       {children}

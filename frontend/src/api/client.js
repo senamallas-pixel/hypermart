@@ -75,3 +75,11 @@ export const uploadFile = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+
+// ── AI ────────────────────────────────────────────────────────────
+
+export const getAIStatus        = ()                           => api.get('/ai/status');
+export const suggestProducts    = (category, partial_name)     => api.post('/ai/suggest-products',    { category, partial_name });
+export const generateDescription= (name, category)             => api.post('/ai/generate-description', { name, category });
+export const getLowStockInsight = (shop_name, low_stock_items) => api.post('/ai/low-stock-insight',   { shop_name, low_stock_items });
+export const aiSalesForecast    = (shop_id)                    => api.post('/ai/sales-forecast',      { shop_id });

@@ -18,6 +18,7 @@ import {
   getShopOrders, updateOrderStatus,
   getShopAnalytics, placeWalkinOrder,
   uploadFile,
+  suggestProducts, generateDescription, getLowStockInsight,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -58,8 +59,10 @@ function StatCard({ icon: Icon, label, value, sub, accent }) {
 
 // ── Product Form Modal ────────────────────────────────────────────
 function ProductModal({ shopId, product, onSave, onClose }) {
+  const { aiAvailable } = useApp();
   const [form, setForm] = useState({
     name: product?.name || '',
+    description: product?.description || '',
     price: product?.price || '',
     mrp: product?.mrp || '',
     unit: product?.unit || 'kg',
@@ -69,7 +72,37 @@ function ProductModal({ shopId, product, onSave, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [nameSuggestions, setNameSuggestions] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [descGenerating, setDescGenerating] = useState(false);
+  const suggestTimerRef = useRef(null);
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // Debounced AI name suggestions
+  const handleNameChange = (e) => {
+    const val = e.target.value;
+    setForm(f => ({ ...f, name: val }));
+    if (!aiAvailable || val.trim().length < 2) { setNameSuggestions([]); return; }
+    clearTimeout(suggestTimerRef.current);
+    suggestTimerRef.current = setTimeout(async () => {
+      setSuggestLoading(true);
+      try {
+        const res = await suggestProducts(form.category, val.trim());
+        setNameSuggestions(res.data.suggestions || []);
+      } catch { setNameSuggestions([]); }
+      finally { setSuggestLoading(false); }
+    }, 400);
+  };
+
+  const handleGenerateDescription = async () => {
+    if (!form.name || !form.category) return;
+    setDescGenerating(true);
+    try {
+      const res = await generateDescription(form.name, form.category);
+      setForm(f => ({ ...f, description: res.data.description || '' }));
+    } catch { /* silent */ }
+    finally { setDescGenerating(false); }
+  };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -114,7 +147,45 @@ function ProductModal({ shopId, product, onSave, onClose }) {
           <button onClick={onClose} className="p-2 hover:bg-[#F5F5F0] rounded-full"><X size={24} /></button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input className={inp} placeholder="Product name *" value={form.name} onChange={set('name')} required />
+          {/* Name with AI suggestions */}
+          <div className="relative">
+            <input className={inp} placeholder="Product name *" value={form.name}
+              onChange={handleNameChange} required />
+            {suggestLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Loader2 size={14} className="animate-spin text-[#5A5A40]/40" />
+              </div>
+            )}
+            {nameSuggestions.length > 0 && (
+              <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-[#1A1A1A]/10 rounded-2xl shadow-lg overflow-hidden">
+                {nameSuggestions.map((s, i) => (
+                  <button key={i} type="button"
+                    onClick={() => { setForm(f => ({ ...f, name: s })); setNameSuggestions([]); }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-[#F5F5F0] transition-colors border-b border-[#1A1A1A]/5 last:border-0">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Description with AI generate */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Description</label>
+              {aiAvailable && (
+                <button type="button" onClick={handleGenerateDescription}
+                  disabled={descGenerating || !form.name}
+                  className="flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] hover:underline disabled:opacity-40 disabled:no-underline">
+                  {descGenerating ? <Loader2 size={10} className="animate-spin" /> : '✨'}
+                  {descGenerating ? 'Generating…' : 'AI Generate'}
+                </button>
+              )}
+            </div>
+            <textarea className={`${inp} resize-none`} rows={2} placeholder="Short product description (optional)"
+              value={form.description} onChange={set('description')} />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <input className={inp} placeholder="Selling price ₹ *" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} required />
             <input className={inp} placeholder="MRP ₹ (optional)" type="number" min="0" step="0.01" value={form.mrp} onChange={set('mrp')} />
@@ -774,7 +845,11 @@ function BillingPanel({ shopId }) {
 }
 
 // ── Analytics Panel ───────────────────────────────────────────────
-function AnalyticsPanel({ analytics }) {
+function AnalyticsPanel({ analytics, shopName }) {
+  const { aiAvailable } = useApp();
+  const [stockInsight, setStockInsight] = useState('');
+  const [insightLoading, setInsightLoading] = useState(false);
+
   if (!analytics) return (
     <div className="py-20 text-center">
       <BarChart2 size={48} className="mx-auto text-[#5A5A40]/20 mb-4" />
@@ -787,6 +862,16 @@ function AnalyticsPanel({ analytics }) {
   const topProducts = analytics.top_products || [];
   const monthlyRevenue = analytics.monthly_revenue || [];
   const lowStock = analytics.low_stock_items || [];
+
+  const handleStockInsight = async () => {
+    if (!lowStock.length) return;
+    setInsightLoading(true);
+    try {
+      const res = await getLowStockInsight(shopName || 'your shop', lowStock.map(i => i.name));
+      setStockInsight(res.data.insight || '');
+    } catch { /* silent */ }
+    finally { setInsightLoading(false); }
+  };
 
   return (
     <div className="space-y-6">
@@ -865,9 +950,18 @@ function AnalyticsPanel({ analytics }) {
 
         {/* Low Stock Alert */}
         <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertCircle size={18} className="text-amber-600" />
-            <h4 className="font-serif text-lg font-bold">Low Stock Alerts</h4>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="text-amber-600" />
+              <h4 className="font-serif text-lg font-bold">Low Stock Alerts</h4>
+            </div>
+            {aiAvailable && lowStock.length > 0 && (
+              <button onClick={handleStockInsight} disabled={insightLoading}
+                className="flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] bg-[#F5F5F0] hover:bg-[#EBEBDC] px-3 py-1.5 rounded-full border border-[#5A5A40]/20 transition-colors disabled:opacity-50">
+                {insightLoading ? <Loader2 size={10} className="animate-spin" /> : '✨'}
+                {insightLoading ? 'Thinking…' : 'AI Advice'}
+              </button>
+            )}
           </div>
           {lowStock.length > 0 ? (
             <div className="space-y-2">
@@ -877,6 +971,12 @@ function AnalyticsPanel({ analytics }) {
                   <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">{item.stock} left</span>
                 </div>
               ))}
+              {stockInsight && (
+                <div className="mt-3 p-3 bg-[#F5F5F0] rounded-2xl border border-[#5A5A40]/10">
+                  <p className="text-xs font-bold text-[#5A5A40] mb-1 flex items-center gap-1">✨ AI Restock Advice</p>
+                  <p className="text-xs text-[#1A1A1A]/70 leading-relaxed">{stockInsight}</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-8 text-center">
@@ -2271,7 +2371,7 @@ export default function OwnerDashboard() {
       {tab === 'Analytics' && (
         analyticsLoading ? (
           <div className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-[#5A5A40]" /></div>
-        ) : <AnalyticsPanel analytics={analytics} />
+        ) : <AnalyticsPanel analytics={analytics} shopName={selectedShop?.name} />
       )}
 
       {tab === 'Billing' && selectedShop && (
