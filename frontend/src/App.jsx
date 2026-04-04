@@ -11,10 +11,13 @@ import {
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import { login, register, placeOrder, getMyOrders, getMyShops, getShopAnalytics, updateMe, changePassword, listProducts, uploadFile } from './api/client';
-import Marketplace    from './pages/Marketplace';
-import OwnerDashboard from './pages/OwnerDashboard';
-import AdminPanel     from './pages/AdminPanel';
-import InvoiceModal   from './components/InvoiceModal';
+import Marketplace        from './pages/Marketplace';
+import OwnerDashboard     from './pages/OwnerDashboard';
+import AdminPanel         from './pages/AdminPanel';
+import CustomerProfile    from './pages/CustomerProfile';
+import OrderHistory       from './pages/OrderHistory';
+import CustomerSettings   from './pages/CustomerSettings';
+import InvoiceModal       from './components/InvoiceModal';
 
 // ── Constants ─────────────────────────────────────────────────────
 const DEMO = [
@@ -576,12 +579,13 @@ function TopNav() {
   const { currentUser, signOut, search, setSearch, activeLocation, setActiveLocation } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const isAuth = location.pathname === '/login';
   if (isAuth) return null;
 
   const isMarketplace = location.pathname === '/marketplace';
-  const handleSignOut = () => { signOut(); navigate('/'); };
+  const handleSignOut = () => { signOut(); navigate('/'); setShowUserMenu(false); };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6 safe-top">
@@ -615,15 +619,51 @@ function TopNav() {
           </div>
 
           {currentUser ? (
-            <div className="flex items-center gap-1">
+            <div className="relative flex items-center gap-1">
               <div className="hidden md:flex flex-col items-end mr-1">
                 <span className="text-[9px] font-bold text-[#5A5A40] uppercase tracking-widest leading-none">{currentUser.role}</span>
                 <span className="text-xs font-bold truncate max-w-[90px] leading-tight">{currentUser.display_name}</span>
               </div>
-              <button onClick={handleSignOut} title="Sign out"
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                title="User menu"
                 className="w-8 h-8 flex items-center justify-center hover:bg-[#F5F5F0] rounded-xl transition-colors text-[#5A5A40]">
-                <LogOut size={16} />
+                <User size={16} />
               </button>
+              
+              {/* User Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute top-full mt-1 right-0 bg-white border border-[#1A1A1A]/10 rounded-xl shadow-lg min-w-max">
+                  {currentUser.role === 'customer' && (
+                    <>
+                      <button
+                        onClick={() => { navigate('/profile'); setShowUserMenu(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                      >
+                        <User size={14} /> Profile
+                      </button>
+                      <button
+                        onClick={() => { navigate('/orders'); setShowUserMenu(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                      >
+                        <ShoppingBag size={14} /> Orders
+                      </button>
+                      <button
+                        onClick={() => { navigate('/settings'); setShowUserMenu(false); }}
+                        className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 border-b border-[#1A1A1A]/5"
+                      >
+                        <Settings size={14} /> Settings
+                      </button>
+                    </>
+                  )}
+                  <button 
+                    onClick={handleSignOut}
+                    className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 text-red-600"
+                  >
+                    <LogOut size={14} /> Sign Out
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button onClick={() => navigate('/login')}
@@ -991,9 +1031,9 @@ function AppShell() {
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/owner" element={<RequireAuth roles={['owner','admin']}><OwnerDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><AdminPanel /></RequireAuth>} />
-          <Route path="/cart"  element={<CartPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><CustomerProfile /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth><CustomerSettings /></RequireAuth>} />
+          <Route path="/orders" element={<RequireAuth><OrderHistory /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/marketplace" replace />} />
         </Routes>
       </main>
