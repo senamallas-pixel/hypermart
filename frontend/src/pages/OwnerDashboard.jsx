@@ -1201,6 +1201,14 @@ function ShopSettingsPanel({ shop, onUpdated }) {
   });
   const [unavailableDates, setUnavailableDates] = useState(shop?.unavailable_dates || []);
   const [newDate, setNewDate] = useState('');
+  const [periodType, setPeriodType] = useState('day'); // day, week, month, year
+  const [expandDatesTable, setExpandDatesTable] = useState(false); // Collapsible table state
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [filterType, setFilterType] = useState('all'); // all, unavailable, available, past
+  const [dayOfWeekFilter, setDayOfWeekFilter] = useState(null); // Filter by day of week (0=Sun to 6=Sat)
+  const [selectedDates, setSelectedDates] = useState(new Set());
+  const [selectMode, setSelectMode] = useState('single'); // single, week, month, all-weekday
 
   // Products for stock management
   const [products, setProducts] = useState([]);
@@ -1266,15 +1274,69 @@ function ShopSettingsPanel({ shop, onUpdated }) {
     } finally { setSaving(false); }
   };
 
+  // Helper function to get all dates for the selected period
+  const getDateRangeByPeriod = (dateStr, period) => {
+    const date = new Date(dateStr + 'T00:00:00');
+    const dates = [];
+
+    if (period === 'day') {
+      // Single day
+      dates.push(dateStr);
+    } else if (period === 'week') {
+      // 7 days starting from selected date
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(date);
+        d.setDate(d.getDate() + i);
+        dates.push(d.toISOString().split('T')[0]);
+      }
+    } else if (period === 'month') {
+      // All days in the selected month
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      for (let i = 1; i <= daysInMonth; i++) {
+        const d = new Date(year, month, i);
+        dates.push(d.toISOString().split('T')[0]);
+      }
+    } else if (period === 'year') {
+      // All days in the selected year
+      const year = date.getFullYear();
+      
+      for (let month = 0; month < 12; month++) {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let i = 1; i <= daysInMonth; i++) {
+          const d = new Date(year, month, i);
+          dates.push(d.toISOString().split('T')[0]);
+        }
+      }
+    }
+
+    return dates;
+  };
+
   const handleAddUnavailableDate = async () => {
     if (!newDate) return;
-    const updated = [...unavailableDates.filter(d => d !== newDate), newDate].sort();
+    
+    // Get all dates for the selected period
+    const newDates = getDateRangeByPeriod(newDate, periodType);
+    
+    // Add new dates to existing ones, avoiding duplicates
+    const updated = [...new Set([...unavailableDates, ...newDates])].sort();
+    
     setSaving(true); setError('');
     try {
       await updateShop(shop.id, { unavailable_dates: updated });
       setUnavailableDates(updated);
       setNewDate('');
-      setSuccess('Non-availability date added');
+      
+      const periodLabel = {
+        day: 'date',
+        week: 'week',
+        month: 'month',
+        year: 'year'
+      };
+      setSuccess(`Non-availability ${periodLabel[periodType]} added (${newDates.length} dates)`);
       onUpdated?.();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -1411,45 +1473,466 @@ function ShopSettingsPanel({ shop, onUpdated }) {
         <h3 className="font-serif text-lg font-bold mb-4 flex items-center gap-2">
           <Calendar size={18} className="text-[#5A5A40]" /> Non-Availability Dates
         </h3>
-        <p className="text-xs text-[#1A1A1A]/40 mb-4">Mark specific dates when your shop will be closed (holidays, maintenance, etc.)</p>
-        <div className="flex gap-2 mb-4">
+        <p className="text-xs text-[#1A1A1A]/40 mb-4">Mark specific dates or periods when your shop will be closed (holidays, maintenance, etc.)</p>
+        
+        {/* Period selector and date input */}
+        <div className="flex gap-2 mb-4 flex-col sm:flex-row">
+          <select value={periodType} onChange={e => setPeriodType(e.target.value)} 
+            className={`${inp} sm:w-32`}>
+            <option value="day">📅 Single Day</option>
+            <option value="week">📆 Week (7 days)</option>
+            <option value="month">📊 Full Month</option>
+            <option value="year">📈 Full Year</option>
+          </select>
+          
           <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} min={todayStr}
             className={`${inp} flex-1`} />
+          
           <button onClick={handleAddUnavailableDate} disabled={saving || !newDate}
-            className="bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2">
+            className="bg-[#5A5A40] text-white px-5 py-2.5 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center gap-2 whitespace-nowrap">
             <Plus size={14} /> Add
           </button>
         </div>
-        {futureUnavail.length > 0 ? (
-          <div className="space-y-2">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Upcoming Closures</p>
-            <div className="flex flex-wrap gap-2">
-              {futureUnavail.map(date => (
-                <div key={date} className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-xl px-3 py-1.5">
-                  <span className="text-xs font-bold text-red-700">
-                    {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </span>
-                  <button onClick={() => handleRemoveDate(date)} className="text-red-400 hover:text-red-600">
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-[#1A1A1A]/30 italic">No upcoming closure dates set</p>
+
+        {/* Period info */}
+        {newDate && (
+          <p className="text-xs text-[#1A1A40]/60 mb-4 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            ℹ️ 
+            {periodType === 'day' && ` This will mark ${new Date(newDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} as unavailable.`}
+            {periodType === 'week' && ` This will mark the week of ${new Date(newDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} to ${new Date(new Date(newDate + 'T00:00:00').setDate(new Date(newDate + 'T00:00:00').getDate() + 6)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} as unavailable.`}
+            {periodType === 'month' && ` This will mark the entire month of ${new Date(newDate + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} as unavailable.`}
+            {periodType === 'year' && ` This will mark the entire year ${new Date(newDate + 'T00:00:00').getFullYear()} as unavailable.`}
+          </p>
         )}
-        {pastUnavail.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-[#1A1A1A]/5">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/25 mb-1">Past Dates</p>
-            <div className="flex flex-wrap gap-1.5">
-              {pastUnavail.slice(-5).map(date => (
-                <span key={date} className="text-[10px] text-[#1A1A1A]/30 bg-[#F5F5F0] rounded px-2 py-0.5">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+
+        {/* Calendar View - Collapsible */}
+        <div className="mt-4">
+          <button onClick={() => setExpandDatesTable(!expandDatesTable)}
+            className="w-full flex items-center justify-between bg-[#F5F5F0] hover:bg-[#EBEBDE] rounded-2xl px-4 py-3 transition-colors mb-3">
+            <span className="text-sm font-bold text-[#1A1A1A] flex items-center gap-2">
+              📅 View Unavailability Calendar
+              {unavailableDates.length > 0 && (
+                <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                  {unavailableDates.length} dates
                 </span>
-              ))}
-            </div>
-          </div>
+              )}
+            </span>
+            <motion.div animate={{ rotate: expandDatesTable ? 180 : 0 }} transition={{ duration: 0.2 }}>
+              <ChevronRight size={18} className="text-[#5A5A40]" />
+            </motion.div>
+          </button>
+
+          <AnimatePresence>
+            {expandDatesTable && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="bg-[#F5F5F0] rounded-2xl p-4 space-y-4">
+                  {/* STATUS FILTERS */}
+                  <div className="space-y-2 bg-white rounded-xl p-3 border border-[#1A1A1A]/5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/50">Status Filters</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'all', label: '📊 All' },
+                        { value: 'unavailable', label: '🔴 Unavailable' },
+                        { value: 'available', label: '⚪ Available' },
+                        { value: 'past', label: '⏳ Past' },
+                      ].map(filter => (
+                        <button key={filter.value} onClick={() => setFilterType(filter.value)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all ${
+                            filterType === filter.value
+                              ? 'bg-[#5A5A40] text-white shadow-sm'
+                              : 'bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] hover:border-[#5A5A40]'
+                          }`}>
+                          {filter.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* DAY OF WEEK FILTERS */}
+                  <div className="space-y-2 bg-white rounded-xl p-3 border border-[#1A1A1A]/5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/50">Filter by Day</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: null, label: '🔓 All Days' },
+                        { value: 1, label: '📅 Monday' },
+                        { value: 2, label: '📅 Tuesday' },
+                        { value: 3, label: '📅 Wednesday' },
+                        { value: 4, label: '📅 Thursday' },
+                        { value: 5, label: '📅 Friday' },
+                        { value: 6, label: '📅 Saturday' },
+                        { value: 0, label: '📅 Sunday' },
+                      ].map(day => (
+                        <button key={day.value} onClick={() => setDayOfWeekFilter(dayOfWeekFilter === day.value ? null : day.value)}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded transition-all ${
+                            dayOfWeekFilter === day.value
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] hover:border-purple-400'
+                          }`}>
+                          {day.label.split(' ')[1] || 'All'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* YEAR & MONTH SELECTORS */}
+                  <div className="space-y-3 bg-white rounded-xl p-3 border border-[#1A1A1A]/5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/50">Navigation</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Year Selector */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-[#1A1A1A]/60">Year</label>
+                        <div className="flex gap-1 items-center">
+                          <button onClick={() => setCalendarYear(calendarYear - 1)}
+                            className="p-1 hover:bg-[#F5F5F0] rounded transition-colors flex-shrink-0">
+                            <ChevronRight size={16} className="transform rotate-180 text-[#5A5A40]" />
+                          </button>
+                          <select value={calendarYear} onChange={e => setCalendarYear(parseInt(e.target.value))}
+                            className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded px-2 py-1.5 text-xs font-bold text-[#1A1A1A] focus:border-[#5A5A40] outline-none">
+                            {[...Array(5)].map((_, i) => {
+                              const year = new Date().getFullYear() + i;
+                              return <option key={year} value={year}>{year}</option>;
+                            })}
+                          </select>
+                          <button onClick={() => setCalendarYear(calendarYear + 1)}
+                            className="p-1 hover:bg-[#F5F5F0] rounded transition-colors flex-shrink-0">
+                            <ChevronRight size={16} className="text-[#5A5A40]" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Month Selector */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-[#1A1A1A]/60">Month</label>
+                        <div className="flex gap-1 items-center">
+                          <button onClick={() => {
+                            if (calendarMonth === 0) {
+                              setCalendarMonth(11);
+                              setCalendarYear(calendarYear - 1);
+                            } else {
+                              setCalendarMonth(calendarMonth - 1);
+                            }
+                          }}
+                            className="p-1 hover:bg-[#F5F5F0] rounded transition-colors flex-shrink-0">
+                            <ChevronRight size={16} className="transform rotate-180 text-[#5A5A40]" />
+                          </button>
+                          <select value={calendarMonth} onChange={e => setCalendarMonth(parseInt(e.target.value))}
+                            className="flex-1 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded px-2 py-1.5 text-xs font-bold text-[#1A1A1A] focus:border-[#5A5A40] outline-none">
+                            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((month, idx) => (
+                              <option key={idx} value={idx}>{month}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => {
+                            if (calendarMonth === 11) {
+                              setCalendarMonth(0);
+                              setCalendarYear(calendarYear + 1);
+                            } else {
+                              setCalendarMonth(calendarMonth + 1);
+                            }
+                          }}
+                            className="p-1 hover:bg-[#F5F5F0] rounded transition-colors flex-shrink-0">
+                            <ChevronRight size={16} className="text-[#5A5A40]" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Jump to Today */}
+                    <button onClick={() => {
+                      const now = new Date();
+                      setCalendarMonth(now.getMonth());
+                      setCalendarYear(now.getFullYear());
+                    }}
+                      className="w-full text-[10px] font-bold px-3 py-1.5 bg-emerald-100 text-emerald-700 border border-emerald-300 rounded hover:bg-emerald-200 transition-colors">
+                      📍 Jump to Today
+                    </button>
+                  </div>
+
+                  {/* SELECTION MODE */}
+                  <div className="space-y-2 bg-white rounded-xl p-3 border border-[#1A1A1A]/5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/50">Selection Mode</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'single', label: '1️⃣ Single' },
+                        { value: 'week', label: '7️⃣ Full Week' },
+                        { value: 'month', label: '📆 Full Month' },
+                        { value: 'all-weekday', label: '🔁 All Same Day' },
+                      ].map(mode => (
+                        <button key={mode.value} onClick={() => setSelectMode(mode.value)}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded transition-all ${
+                            selectMode === mode.value
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] hover:border-indigo-400'
+                          }`}>
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Calendar Grid */}
+                  {(() => {
+                    const firstDay = new Date(calendarYear, calendarMonth, 1);
+                    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+                    const daysInMonth = lastDay.getDate();
+                    const startingDayOfWeek = firstDay.getDay();
+                    
+                    const calendarDays = [];
+                    for (let i = 0; i < startingDayOfWeek; i++) {
+                      calendarDays.push(null);
+                    }
+                    for (let i = 1; i <= daysInMonth; i++) {
+                      calendarDays.push(i);
+                    }
+                    
+                    return (
+                      <div className="space-y-3 bg-white rounded-xl p-4 border border-[#1A1A1A]/5">
+                        <div className="text-sm font-bold text-[#1A1A1A] text-center">
+                          {new Date(calendarYear, calendarMonth).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                        </div>
+                        
+                        {/* Day of week headers */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                            <div key={day} className="text-center text-[9px] font-bold uppercase text-[#1A1A1A]/50 py-1">
+                              {day}
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Calendar dates grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {calendarDays.map((day, idx) => {
+                            if (day === null) {
+                              return <div key={`empty-${idx}`} className="aspect-square"></div>;
+                            }
+                            
+                            const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const dateObj = new Date(dateStr + 'T00:00:00');
+                            const dayOfWeek = dateObj.getDay();
+                            const isUnavailable = unavailableDates.includes(dateStr);
+                            const isPast = dateStr < todayStr;
+                            const isSelected = selectedDates.has(dateStr);
+                            
+                            // Apply filters
+                            let matchesStatusFilter = true;
+                            if (filterType === 'unavailable') matchesStatusFilter = isUnavailable;
+                            else if (filterType === 'available') matchesStatusFilter = !isUnavailable && !isPast;
+                            else if (filterType === 'past') matchesStatusFilter = isPast;
+                            
+                            let matchesDayFilter = dayOfWeekFilter === null || dayOfWeek === dayOfWeekFilter;
+                            
+                            const shouldShow = matchesStatusFilter && matchesDayFilter;
+                            
+                            return (
+                              <div key={day}
+                                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] font-bold cursor-pointer transition-all relative group
+                                  ${!shouldShow 
+                                    ? 'opacity-20 pointer-events-none' 
+                                    : isSelected
+                                    ? 'bg-blue-500 text-white border-2 border-blue-700 shadow-lg transform scale-105'
+                                    : isUnavailable 
+                                    ? 'bg-red-200 text-red-700 border-2 border-red-400 hover:shadow-md hover:bg-red-300' 
+                                    : isPast
+                                    ? 'bg-[#E8E8DC] text-[#1A1A1A]/40'
+                                    : 'bg-white border border-[#1A1A1A]/10 text-[#1A1A1A] hover:bg-blue-50 hover:shadow-md hover:border-blue-400'
+                                  }
+                                `}
+                                onClick={() => {
+                                  if (!shouldShow) return;
+                                  
+                                  if (isUnavailable) {
+                                    handleRemoveDate(dateStr);
+                                  } else if (!isPast) {
+                                    let datesToAdd = [dateStr];
+                                    
+                                    // Selection mode logic
+                                    if (selectMode === 'week') {
+                                      // Add 7 consecutive days starting from this date
+                                      const d = new Date(dateStr + 'T00:00:00');
+                                      for (let i = 0; i < 7; i++) {
+                                        const nextDate = new Date(d);
+                                        nextDate.setDate(nextDate.getDate() + i);
+                                        datesToAdd.push(nextDate.toISOString().split('T')[0]);
+                                      }
+                                    } else if (selectMode === 'month') {
+                                      // Add all days in the current month
+                                      const lastDayOfMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                                      for (let dayNum = 1; dayNum <= lastDayOfMonth; dayNum++) {
+                                        const dateStr2 = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                        if (dateStr2 >= todayStr) datesToAdd.push(dateStr2);
+                                      }
+                                    } else if (selectMode === 'all-weekday') {
+                                      // Add all occurrences of this day of week in the month
+                                      const lastDayOfMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                                      for (let dayNum = 1; dayNum <= lastDayOfMonth; dayNum++) {
+                                        const dateStr2 = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                        const dateObj2 = new Date(dateStr2 + 'T00:00:00');
+                                        if (dateObj2.getDay() === dayOfWeek && dateStr2 >= todayStr) {
+                                          datesToAdd.push(dateStr2);
+                                        }
+                                      }
+                                    }
+                                    
+                                    // Toggle selection
+                                    const newSet = new Set(selectedDates);
+                                    datesToAdd.forEach(d => {
+                                      if (newSet.has(d)) newSet.delete(d);
+                                      else newSet.add(d);
+                                    });
+                                    setSelectedDates(newSet);
+                                  }
+                                }}
+                                title={isUnavailable ? 'Click to remove' : isPast ? 'Past date' : 'Click to select'}>
+                                {day}
+                                {isUnavailable && <span className="text-[7px] mt-0.5">✕</span>}
+                                {isSelected && <span className="text-[7px] mt-0.5">✓</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Selected Dates Actions */}
+                  {selectedDates.size > 0 && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                      className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                      <p className="text-xs font-bold text-blue-900">
+                        ✓ {selectedDates.size} date(s) selected
+                      </p>
+                      <div className="flex gap-2 flex-wrap max-h-12 overflow-y-auto">
+                        {Array.from(selectedDates).sort().map(date => (
+                          <span key={date} className="text-[9px] bg-white rounded px-2 py-1 border border-blue-200 whitespace-nowrap">
+                            {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 pt-2 flex-wrap">
+                        <button onClick={async () => {
+                          const updated = [...new Set([...unavailableDates, ...Array.from(selectedDates)])].sort();
+                          setSaving(true);
+                          try {
+                            await updateShop(shop.id, { unavailable_dates: updated });
+                            setUnavailableDates(updated);
+                            setSelectedDates(new Set());
+                            setSuccess(`✓ ${selectedDates.size} date(s) marked as unavailable`);
+                            onUpdated?.();
+                            setTimeout(() => setSuccess(''), 3000);
+                          } catch (err) {
+                            setError(err.response?.data?.detail || 'Failed to update');
+                          } finally {
+                            setSaving(false);
+                          }
+                        }}
+                          className="text-[10px] font-bold px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                          disabled={saving}>
+                          🔴 Mark {selectedDates.size} Unavailable
+                        </button>
+                        <button onClick={() => setSelectedDates(new Set())}
+                          className="text-[10px] font-bold px-3 py-1 bg-white border border-[#1A1A1A]/10 rounded hover:bg-[#F5F5F0] transition-colors">
+                          ✕ Clear
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                  
+                  {/* Legend */}
+                  <div className="bg-white rounded-xl p-3 border border-[#1A1A1A]/5 space-y-2">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/50">Legend</p>
+                    <div className="grid grid-cols-2 gap-3 text-[9px]">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 bg-red-200 border-2 border-red-400 rounded"></div>
+                        <span>Unavailable</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 bg-white border border-[#1A1A1A]/10 rounded"></div>
+                        <span>Available</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 bg-blue-500 border-2 border-blue-700 rounded"></div>
+                        <span>Selected</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 bg-[#E8E8DC] rounded"></div>
+                        <span>Past Date</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Clear All Filters Button */}
+                  <button onClick={() => {
+                    setFilterType('all');
+                    setDayOfWeekFilter(null);
+                    const now = new Date();
+                    setCalendarMonth(now.getMonth());
+                    setCalendarYear(now.getFullYear());
+                    setSelectedDates(new Set());
+                  }}
+                    className="w-full text-[10px] font-bold px-3 py-2 bg-[#F5F5F0] border border-[#1A1A1A]/10 text-[#1A1A1A] rounded-lg hover:bg-[#EBEBDE] transition-colors">
+                    🔄 Reset All Filters
+                  </button>
+
+                  {/* Unavailable Dates Table */}
+                  {unavailableDates.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-[#1A1A1A]/10">
+                      <h4 className="text-sm font-bold text-[#1A1A1A] mb-3">All Unavailable Dates ({unavailableDates.length})</h4>
+                      <div className="bg-white rounded-xl overflow-hidden border border-[#1A1A1A]/5 max-h-60 overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-[#EBEBDE] border-b border-[#1A1A1A]/10 sticky top-0">
+                            <tr>
+                              <th className="text-left px-4 py-2 font-bold text-[#1A1A1A]">Date</th>
+                              <th className="text-left px-4 py-2 font-bold text-[#1A1A1A]">Day</th>
+                              <th className="text-left px-4 py-2 font-bold text-[#1A1A1A]">Status</th>
+                              <th className="text-center px-4 py-2 font-bold text-[#1A1A1A]">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#1A1A1A]/5">
+                            {[...unavailableDates].sort().map(date => {
+                              const dateObj = new Date(date + 'T00:00:00');
+                              const dayName = dateObj.toLocaleDateString('en-IN', { weekday: 'short' });
+                              const isPast = date < todayStr;
+                              
+                              return (
+                                <tr key={date} className={`hover:bg-[#F5F5F0] transition-colors ${isPast ? 'opacity-60' : ''}`}>
+                                  <td className="px-4 py-2.5 font-medium text-[#1A1A1A]">
+                                    {dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-[#1A1A1A]/60">{dayName}</td>
+                                  <td className="px-4 py-2.5">
+                                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                                      isPast 
+                                        ? 'bg-[#E8E8DC] text-[#1A1A1A]/40' 
+                                        : 'bg-red-100 text-red-700'
+                                    }`}>
+                                      {isPast ? '✓ Passed' : '⊗ Closed'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-center">
+                                    {!isPast && (
+                                      <button onClick={() => handleRemoveDate(date)}
+                                        className="text-red-600 hover:text-red-700 font-bold text-sm hover:bg-red-50 px-2 py-1 rounded transition-colors">
+                                        Remove
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {unavailableDates.length === 0 && (
+          <p className="text-sm text-[#1A1A1A]/30 italic">No unavailable dates set yet</p>
         )}
       </div>
 
