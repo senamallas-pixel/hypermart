@@ -77,6 +77,7 @@
   },
   "profile": {
     "myProfile": "My Profile",
+    "userProfile": "User Profile",
     "accountActive": "Account Active",
     "editProfile": "Edit Profile",
     "updatePhoto": "Update Photo",
@@ -87,6 +88,21 @@
     "saveChanges": "Save Changes",
     "profileUpdated": "Profile updated successfully!",
     "updateFailed": "Failed to update profile"
+  },
+  "admin": {
+    "userManagement": "User Management",
+    "searchUsers": "Search by name, email or business...",
+    "addUser": "Add User",
+    "editUser": "Edit User",
+    "deleteUser": "Delete User",
+    "viewDetails": "View Details",
+    "userDeleted": "User deleted successfully",
+    "deleteConfirm": "Delete this user? This cannot be undone.",
+    "userRole": "User Role",
+    "userStatus": "User Status",
+    "businessName": "Business Name",
+    "verified": "Verified",
+    "notVerified": "Not Verified"
   },
   "orders": {
     "orderHistory": "Order History",
