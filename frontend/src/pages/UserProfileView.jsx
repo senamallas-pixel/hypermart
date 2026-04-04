@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Mail, Phone, Building2, MapPin, Star, MessageCircle, Block, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Star, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
@@ -11,7 +11,6 @@ const UserProfileView = ({ userId }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isBlocked, setIsBlocked] = useState(false);
   const { currentUser } = useApp();
   const { t } = useTranslation();
 
@@ -21,36 +20,13 @@ const UserProfileView = ({ userId }) => {
 
   const loadUser = async () => {
     try {
-      const response = await api.get(`/api/users/${userId}`);
+      const response = await api.get(`/users/${userId}`);
       setUser(response.data);
-      
-      // Check if user is blocked
-      const blockedResponse = await api.get(`/api/users/${currentUser?.id}/blocked`);
-      setIsBlocked(blockedResponse.data?.blocked_users?.includes(userId) || false);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load profile');
+      setError(err.response?.data?.detail || 'Failed to load profile');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleBlock = async () => {
-    try {
-      if (isBlocked) {
-        await api.post(`/api/users/block/${userId}`, { unblock: true });
-        setIsBlocked(false);
-      } else {
-        await api.post(`/api/users/block/${userId}`);
-        setIsBlocked(true);
-      }
-    } catch (err) {
-      setError('Action failed');
-    }
-  };
-
-  const handleMessage = async () => {
-    // Navigate to chat or open messaging interface
-    // This would depend on your messaging system implementation
   };
 
   if (loading) {
@@ -99,8 +75,8 @@ const UserProfileView = ({ userId }) => {
           {/* Photo and Basic Info */}
           <div className="flex flex-col sm:flex-row gap-8 mb-8 pb-8 border-b border-[#1A1A1A]/5">
             <div className="w-32 h-32 rounded-2xl overflow-hidden bg-[#F5F5F0] border-2 border-[#5A5A40]/20 flex-shrink-0">
-              {user.profile_photo ? (
-                <img src={user.profile_photo} alt={user.display_name} className="w-full h-full object-cover" />
+              {user.photo_url ? (
+                <img src={user.photo_url} alt={user.display_name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-[#5A5A40]/20">No photo</div>
               )}
@@ -199,29 +175,11 @@ const UserProfileView = ({ userId }) => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
-            {currentUser?.id !== userId && (
-              <>
-                <button
-                  onClick={handleMessage}
-                  className="flex-1 px-6 py-3 bg-[#5A5A40] text-white rounded-2xl font-bold uppercase tracking-wider hover:bg-[#4A4A30] transition-colors flex items-center justify-center gap-2"
-                >
-                  <MessageCircle size={16} />Send Message
-                </button>
-                <button
-                  onClick={handleBlock}
-                  className={`flex-1 px-6 py-3 rounded-2xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${
-                    isBlocked
-                      ? 'bg-orange-100 text-orange-700 border border-orange-200 hover:bg-orange-50'
-                      : 'border border-[#1A1A1A]/10 text-[#1A1A1A]/60 hover:bg-[#F5F5F0]'
-                  }`}
-                >
-                  <Block size={16} />
-                  {isBlocked ? 'Unblock' : 'Block'}
-                </button>
-              </>
-            )}
-          </div>
+          {currentUser?.id !== userId && currentUser?.role === 'admin' && (
+            <div className="flex gap-3">
+              <span className="text-xs text-[#1A1A1A]/40 italic">Admin view</span>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>

@@ -42,27 +42,25 @@ export default function OrderHistory() {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'pending':
-        return <Clock size={16} className="text-yellow-600" />;
-      case 'completed':
-        return <CheckCircle2 size={16} className="text-emerald-600" />;
-      case 'cancelled':
-        return <AlertCircle size={16} className="text-red-600" />;
-      default:
-        return <Package size={16} className="text-[#5A5A40]" />;
+      case 'pending':          return <Clock size={16} className="text-yellow-600" />;
+      case 'accepted':         return <CheckCircle2 size={16} className="text-blue-600" />;
+      case 'ready':            return <Package size={16} className="text-indigo-600" />;
+      case 'out_for_delivery': return <Truck size={16} className="text-orange-600" />;
+      case 'delivered':        return <CheckCircle2 size={16} className="text-emerald-600" />;
+      case 'rejected':         return <AlertCircle size={16} className="text-red-600" />;
+      default:                 return <Package size={16} className="text-[#5A5A40]" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending':
-        return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-      case 'completed':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'cancelled':
-        return 'bg-red-50 text-red-700 border-red-200';
-      default:
-        return 'bg-[#F5F5F0] text-[#5A5A40] border-[#5A5A40]/10';
+      case 'pending':          return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+      case 'accepted':         return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'ready':            return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'out_for_delivery': return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'delivered':        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'rejected':         return 'bg-red-50 text-red-700 border-red-200';
+      default:                 return 'bg-[#F5F5F0] text-[#5A5A40] border-[#5A5A40]/10';
     }
   };
 
@@ -132,8 +130,11 @@ export default function OrderHistory() {
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="accepted">Accepted</option>
+            <option value="ready">Ready</option>
+            <option value="out_for_delivery">Out for Delivery</option>
+            <option value="delivered">Delivered</option>
+            <option value="rejected">Rejected</option>
           </select>
         </motion.div>
 

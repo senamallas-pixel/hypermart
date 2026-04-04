@@ -389,6 +389,29 @@ app.patch("/users/:id/role", requireRole("admin"), (req, res) => {
   res.json(serializeUser(updated));
 });
 
+// GET /users/:id  (admin only, or self)
+app.get("/users/:id", requireAuth, (req, res) => {
+  const userId = Number(req.params.id);
+  if (req.user.role !== "admin" && req.user.id !== userId) {
+    return res.status(403).json({ detail: "Insufficient permissions" });
+  }
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  if (!user) return res.status(404).json({ detail: "User not found" });
+  res.json(serializeUser(user));
+});
+
+// DELETE /users/:id  (admin only)
+app.delete("/users/:id", requireRole("admin"), (req, res) => {
+  const userId = Number(req.params.id);
+  const user   = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  if (!user) return res.status(404).json({ detail: "User not found" });
+  if (user.email === ADMIN_EMAIL) {
+    return res.status(403).json({ detail: "Cannot delete the primary admin account" });
+  }
+  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  res.status(204).end();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SUBSCRIPTIONS
 // ─────────────────────────────────────────────────────────────────────────────

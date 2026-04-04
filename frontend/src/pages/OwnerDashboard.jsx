@@ -63,8 +63,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     setUploading(true);
     try {
       const res = await uploadFile(file);
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      setForm(f => ({ ...f, image: `${baseUrl}${res.data.url}` }));
+      setForm(f => ({ ...f, image: `${import.meta.env.VITE_API_URL}${res.data.url}` }));
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to upload image.');
     } finally {
@@ -168,8 +167,7 @@ function ShopRegistrationForm({ onSaved }) {
     setUploading(true);
     try {
       const res = await uploadFile(file);
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      setForm(f => ({ ...f, logo: `${baseUrl}${res.data.url}` }));
+      setForm(f => ({ ...f, logo: `${import.meta.env.VITE_API_URL}${res.data.url}` }));
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to upload image.');
     } finally {

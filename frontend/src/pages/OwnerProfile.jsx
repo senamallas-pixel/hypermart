@@ -17,9 +17,8 @@ export default function OwnerProfile() {
     display_name: currentUser?.display_name || '',
     email: currentUser?.email || '',
     phone: currentUser?.phone || '',
-    shop_name: currentUser?.shop_name || '',
   });
-  const [preview, setPreview] = useState(currentUser?.profile_photo || '');
+  const [preview, setPreview] = useState(currentUser?.photo_url || '');
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -33,7 +32,9 @@ export default function OwnerProfile() {
       setLoading(true);
       try {
         const uploaded = await uploadFile(file);
-        await updateMe({ profile_photo: uploaded.data.file_path });
+        const absoluteUrl = `${import.meta.env.VITE_API_URL}${uploaded.data.url}`;
+        await updateMe({ photo_url: absoluteUrl });
+        setPreview(absoluteUrl);
         setToast('Photo updated!');
       } catch {
         setToast('Upload failed');
@@ -49,7 +50,6 @@ export default function OwnerProfile() {
       await updateMe({
         display_name: form.display_name,
         phone: form.phone || undefined,
-        shop_name: form.shop_name || undefined,
       });
       setToast('Profile updated!');
       setEditing(false);
@@ -139,24 +139,6 @@ export default function OwnerProfile() {
                 />
               ) : (
                 <p className="px-4 py-3 rounded-2xl bg-[#F5F5F0] text-[#1A1A1A]">{form.phone || 'Not provided'}</p>
-              )}
-            </div>
-
-            {/* Shop Name */}
-            <div>
-              <label className="block text-sm font-bold text-[#1A1A1A]/60 mb-2 uppercase tracking-wider flex items-center gap-2">
-                <Building2 size={14} />Business Name
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={form.shop_name}
-                  onChange={(e) => handleChange('shop_name', e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-[#1A1A1A]/10 focus:outline-none focus:border-[#5A5A40] transition-colors"
-                  disabled={loading}
-                />
-              ) : (
-                <p className="px-4 py-3 rounded-2xl bg-[#F5F5F0] text-[#1A1A1A]">{form.shop_name || 'Not provided'}</p>
               )}
             </div>
 

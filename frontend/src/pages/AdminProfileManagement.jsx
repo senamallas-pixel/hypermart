@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Search, Edit3, Trash2, Eye, MoreVertical, Loader2, CheckCircle2, AlertCircle, Plus, X } from 'lucide-react';
-import { api } from '../api/client';
+import { Search, Edit3, Trash2, Eye, Loader2, CheckCircle2, X } from 'lucide-react';
+import { listUsers, changeRole, api } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -24,17 +24,16 @@ export default function AdminProfileManagement() {
   }, []);
 
   useEffect(() => {
-    setFilteredUsers(users.filter(u => 
+    setFilteredUsers(users.filter(u =>
       u.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase()) ||
-      u.shop_name?.toLowerCase().includes(search.toLowerCase())
+      u.email?.toLowerCase().includes(search.toLowerCase())
     ));
   }, [search, users]);
 
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/users');
+      const response = await listUsers();
       setUsers(response.data || []);
     } catch {
       setToast('Failed to load users');
@@ -50,9 +49,9 @@ export default function AdminProfileManagement() {
 
   const handleSave = async () => {
     try {
-      await api.put(`/api/users/${editing}`, form);
-      setUsers(users.map(u => u.id === editing ? form : u));
-      setToast('User updated');
+      await changeRole(editing, form.role);
+      setUsers(users.map(u => u.id === editing ? { ...u, role: form.role } : u));
+      setToast('User role updated');
       setEditing(null);
     } catch {
       setToast('Update failed');
@@ -62,7 +61,7 @@ export default function AdminProfileManagement() {
   const handleDelete = async (userId) => {
     if (!confirm('Delete this user? This cannot be undone.')) return;
     try {
-      await api.delete(`/api/users/${userId}`);
+      await api.delete(`/users/${userId}`);
       setUsers(users.filter(u => u.id !== userId));
       setToast('User deleted');
     } catch {
@@ -182,11 +181,11 @@ export default function AdminProfileManagement() {
                 <div>
                   <label className="block text-sm font-bold mb-2">Role</label>
                   <select
-                    value={form.role || 'buyer'}
+                    value={form.role || 'customer'}
                     onChange={(e) => setForm({...form, role: e.target.value})}
                     className="w-full px-4 py-2 rounded-xl border border-[#1A1A1A]/10 focus:outline-none focus:border-[#5A5A40]"
                   >
-                    <option value="buyer">Buyer</option>
+                    <option value="customer">Customer</option>
                     <option value="owner">Shop Owner</option>
                     <option value="admin">Admin</option>
                   </select>

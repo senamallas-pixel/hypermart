@@ -98,7 +98,7 @@ export function AppProvider({ children }) {
 
   // Restore session from stored JWT token on mount
   useEffect(() => {
-    const token = localStorage.getItem('hypermart_token');
+    const token = sessionStorage.getItem('hypermart_token');
     if (!token) {
       authDispatch({ type: 'CLEAR_USER' });
       return;
@@ -106,18 +106,18 @@ export function AppProvider({ children }) {
     getMe()
       .then(res => authDispatch({ type: 'SET_USER', user: res.data }))
       .catch(() => {
-        localStorage.removeItem('hypermart_token');
+        sessionStorage.removeItem('hypermart_token');
         authDispatch({ type: 'CLEAR_USER' });
       });
   }, []);
 
   const signIn = useCallback((token, userData) => {
-    localStorage.setItem('hypermart_token', token);
+    sessionStorage.setItem('hypermart_token', token);
     authDispatch({ type: 'SET_USER', user: userData });
   }, []);
 
   const signOut = useCallback(() => {
-    localStorage.removeItem('hypermart_token');
+    sessionStorage.removeItem('hypermart_token');
     authDispatch({ type: 'CLEAR_USER' });
   }, []);
 

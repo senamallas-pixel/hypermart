@@ -56,10 +56,9 @@ export default function CustomerProfile() {
 
     setUploading(true);
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('file', file);
-      const res = await uploadFile(formDataObj);
-      setFormData(prev => ({ ...prev, photo_url: res.data.url }));
+      const res = await uploadFile(file);
+      const absoluteUrl = `${import.meta.env.VITE_API_URL}${res.data.url}`;
+      setFormData(prev => ({ ...prev, photo_url: absoluteUrl }));
       setMessage({ type: 'success', text: 'Photo uploaded successfully' });
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to upload photo' });
