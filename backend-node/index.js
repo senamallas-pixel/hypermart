@@ -806,8 +806,8 @@ app.patch("/orders/:id/status", requireAuth, (req, res) => {
 // WALK-IN / POS BILLING
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /shops/:shopId/walkin-order  (owner creates order for walk-in customer)
-app.post("/shops/:shopId/walkin-order", requireRole("owner"), (req, res) => {
+// POST /shops/:shopId/walkin-order  (owner or admin creates order for walk-in customer)
+app.post("/shops/:shopId/walkin-order", requireRole("owner", "admin"), (req, res) => {
   const shopId = Number(req.params.shopId);
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
   if (!shop) return res.status(404).json({ detail: "Shop not found" });
@@ -1162,6 +1162,54 @@ app.post("/ai/low-stock-insight", async (req, res) => {
     res.json({ insight });
   } catch (err) {
     res.status(500).json({ detail: err.message });
+  }
+});
+
+// POST /ai/chat — Conversational AI with rolling history and role-based system context
+app.post("/ai/chat", async (req, res) => {
+  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  const { message, role = "customer", shop_id, history = [] } = req.body;
+  if (!message || !String(message).trim()) {
+    return res.status(422).json({ detail: "message is required" });
+  }
+
+  const roleContext = {
+    customer: (
+      "You are HyperMart Assistant, a helpful shopping assistant for a hyperlocal " +
+      "marketplace in India. Help customers find products, compare shops, and get " +
+      "shopping advice. Be friendly, concise, and use ₹ for prices."
+    ),
+    owner: (
+      "You are HyperMart Business Assistant, an AI advisor for shop owners. " +
+      "Help with inventory decisions, pricing strategies, sales trends, and " +
+      "business growth tips relevant to small Indian neighbourhood shops."
+    ),
+    admin: (
+      "You are HyperMart Admin Assistant. Help with platform governance, " +
+      "shop approval decisions, user management issues, and analytics interpretation."
+    ),
+  }[role] || "You are a helpful assistant for the HyperMart marketplace.";
+
+  const shopContext = shop_id ? ` The user is currently managing shop ID ${shop_id}.` : "";
+
+  const historyText = (Array.isArray(history) ? history.slice(-10) : [])
+    .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+    .join("\n");
+
+  const prompt =
+    `${roleContext}${shopContext}\n\n` +
+    `${historyText ? historyText + "\n" : ""}` +
+    `User: ${message}\nAssistant:`;
+
+  try {
+    const reply = await callGemini(prompt);
+    res.json({ reply, tools_used: [], sources: [] });
+  } catch (_) {
+    res.json({
+      reply: "I'm having trouble connecting right now. Please try again shortly.",
+      tools_used: [],
+      sources: [],
+    });
   }
 });
 
