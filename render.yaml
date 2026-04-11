@@ -1,8 +1,6 @@
 # HyperMart Backend Service Configuration
-databases:
-  - name: hypermart
-    databaseName: hypermart
-    user: hypermart_user
+# Note: PostgreSQL database is created separately in Render dashboard
+# DATABASE_URL must be set manually in Environment Variables
 
 services:
   - type: web
@@ -15,9 +13,7 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: DATABASE_URL
-        fromDatabase:
-          name: hypermart
-          property: connectionString
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
