@@ -81,6 +81,11 @@ def startup():
             "ALTER TABLE orders ADD COLUMN bill_discount FLOAT DEFAULT 0",
             "ALTER TABLE orders ADD COLUMN total_discount FLOAT DEFAULT 0",
             "ALTER TABLE orders ADD COLUMN order_type VARCHAR(20) DEFAULT 'online'",
+            # Payment integration migrations
+            "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(20) DEFAULT 'cash'",
+            "ALTER TABLE orders ADD COLUMN razorpay_order_id VARCHAR(255)",
+            "ALTER TABLE orders ADD COLUMN razorpay_payment_id VARCHAR(255)",
+            "ALTER TABLE shops ADD COLUMN upi_id VARCHAR(255)",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -675,6 +680,7 @@ def place_order(
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
     final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
+    pm = (payload.payment_method or M.PaymentMethod.cash).value if payload.payment_method else "cash"
     order = M.Order(
         shop_id=shop.id,
         shop_name=shop.name,
@@ -686,6 +692,8 @@ def place_order(
         bill_discount=payload.bill_discount or 0,
         total_discount=payload.total_discount or 0,
         order_type="online",
+        payment_method=pm,
+        payment_status=M.PaymentStatus.paid if pm == "cash" else M.PaymentStatus.pending,
         delivery_address=payload.delivery_address,
     )
     db.add(order)
@@ -1062,6 +1070,8 @@ def walkin_order(
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
     final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
+    pm = (payload.payment_method or M.PaymentMethod.cash).value if payload.payment_method else "cash"
+    ps = (payload.payment_status or M.PaymentStatus.paid).value if payload.payment_status else "paid"
     order = M.Order(
         shop_id=shop.id,       shop_name=shop.name,
         customer_id=current_user.id,
@@ -1072,7 +1082,8 @@ def walkin_order(
         total_discount=payload.total_discount or 0,
         order_type="walkin",
         status=M.OrderStatus.delivered,
-        payment_status=M.PaymentStatus.paid,
+        payment_method=pm,
+        payment_status=ps,
         delivery_address="In-Store (Walk-in)",
     )
     db.add(order)
@@ -1746,6 +1757,95 @@ def toggle_multi_location(
     db.commit()
     db.refresh(user)
     return S.UserOut.model_validate(user)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PAYMENTS — Razorpay integration
+# ═══════════════════════════════════════════════════════════════════
+
+RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+
+@app.post("/payments/create-order", response_model=S.RazorpayOrderOut)
+def create_razorpay_order(
+    payload: S.RazorpayOrderCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a Razorpay order for an existing HyperMart order."""
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(503, "Razorpay is not configured on this server")
+
+    order = db.get(M.Order, payload.order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.customer_id != current_user.id:
+        raise HTTPException(403, "Not your order")
+    if order.payment_status == M.PaymentStatus.paid:
+        raise HTTPException(400, "Order is already paid")
+
+    import razorpay
+    client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    amount_paise = int(round(order.total * 100))
+    rz_order = client.order.create({
+        "amount": amount_paise,
+        "currency": "INR",
+        "receipt": f"order_{order.id}",
+    })
+
+    order.razorpay_order_id = rz_order["id"]
+    order.payment_method = "razorpay"
+    db.commit()
+
+    return S.RazorpayOrderOut(
+        razorpay_order_id=rz_order["id"],
+        amount=amount_paise,
+        currency="INR",
+        key_id=RAZORPAY_KEY_ID,
+    )
+
+
+@app.post("/payments/verify")
+def verify_razorpay_payment(
+    payload: S.RazorpayVerify,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Verify Razorpay payment signature and mark order as paid."""
+    if not RAZORPAY_KEY_SECRET:
+        raise HTTPException(503, "Razorpay is not configured on this server")
+
+    order = db.get(M.Order, payload.order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.customer_id != current_user.id:
+        raise HTTPException(403, "Not your order")
+
+    import hmac, hashlib
+    message = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}"
+    expected = hmac.new(
+        RAZORPAY_KEY_SECRET.encode(), message.encode(), hashlib.sha256
+    ).hexdigest()
+
+    if expected != payload.razorpay_signature:
+        raise HTTPException(400, "Payment verification failed — invalid signature")
+
+    order.razorpay_payment_id = payload.razorpay_payment_id
+    order.payment_status = M.PaymentStatus.paid
+    order.payment_method = "razorpay"
+    db.commit()
+    db.refresh(order)
+    return {"status": "success", "order_id": order.id, "payment_status": "paid"}
+
+
+@app.get("/shops/{shop_id}/upi")
+def get_shop_upi(shop_id: int, db: Session = Depends(get_db)):
+    """Public endpoint to get a shop's UPI ID for direct payment."""
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    return {"upi_id": shop.upi_id or "", "shop_name": shop.name}
 
 
 # ── Private helpers ──────────────────────────────────────────────────────────

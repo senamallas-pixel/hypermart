@@ -7,7 +7,7 @@ from typing import Optional, List, ClassVar, Dict
 from pydantic import BaseModel, EmailStr, field_validator, model_validator, computed_field
 
 from models import UserRole, ShopStatus, ShopCategory, ShopLocation
-from models import ProductStatus, OrderStatus, PaymentStatus, SubscriptionStatus
+from models import ProductStatus, OrderStatus, PaymentStatus, PaymentMethod, SubscriptionStatus
 from models import PurchaseOrderStatus, DiscountType, DiscountAmountType
 
 
@@ -108,6 +108,7 @@ class ShopCreate(BaseModel):
     pincode:         Optional[str]   = None
     city:            Optional[str]   = None
     state:           Optional[str]   = None
+    upi_id:          Optional[str]   = None
 
     @field_validator("name")
     @classmethod
@@ -131,6 +132,7 @@ class ShopUpdate(BaseModel):
     pincode:         Optional[str]          = None
     city:            Optional[str]          = None
     state:           Optional[str]          = None
+    upi_id:          Optional[str]          = None
 
 
 class ShopOut(OrmBase):
@@ -151,6 +153,7 @@ class ShopOut(OrmBase):
     pincode:         Optional[str]   = None
     city:            Optional[str]   = None
     state:           Optional[str]   = None
+    upi_id:          Optional[str]   = None
     created_at:      datetime
 
 
@@ -242,11 +245,12 @@ class OrderItemIn(BaseModel):
 class OrderCreate(BaseModel):
     shop_id:          int
     items:            List[OrderItemIn]
-    delivery_address: str             = "Default Address"
-    subtotal:         Optional[float] = None
-    item_discounts:   Optional[float] = None
-    bill_discount:    Optional[float] = None
-    total_discount:   Optional[float] = None
+    delivery_address: str                      = "Default Address"
+    payment_method:   Optional[PaymentMethod]  = PaymentMethod.cash
+    subtotal:         Optional[float]          = None
+    item_discounts:   Optional[float]          = None
+    bill_discount:    Optional[float]          = None
+    total_discount:   Optional[float]          = None
 
     @field_validator("items")
     @classmethod
@@ -257,11 +261,14 @@ class OrderCreate(BaseModel):
 
 
 class WalkinOrderCreate(BaseModel):
-    items:          List[OrderItemIn]
-    subtotal:       Optional[float] = None
-    item_discounts: Optional[float] = None
-    bill_discount:  Optional[float] = None
-    total_discount: Optional[float] = None
+    items:            List[OrderItemIn]
+    payment_method:   Optional[PaymentMethod]  = PaymentMethod.cash
+    payment_status:   Optional[PaymentStatus]  = PaymentStatus.paid
+    customer_name:    Optional[str]            = None
+    subtotal:         Optional[float]          = None
+    item_discounts:   Optional[float]          = None
+    bill_discount:    Optional[float]          = None
+    total_discount:   Optional[float]          = None
 
     @field_validator("items")
     @classmethod
@@ -285,22 +292,45 @@ class OrderItemOut(OrmBase):
 
 
 class OrderOut(OrmBase):
-    id:               int
-    shop_id:          int
-    shop_name:        str
-    customer_id:      int
-    items:            List[OrderItemOut]
-    total:            float
-    subtotal:         Optional[float] = None
-    item_discounts:   Optional[float] = None
-    bill_discount:    Optional[float] = None
-    total_discount:   Optional[float] = None
-    order_type:       Optional[str]   = "online"
-    status:           OrderStatus
-    payment_status:   PaymentStatus
-    delivery_address: str
-    created_at:       datetime
-    updated_at:       Optional[datetime]
+    id:                  int
+    shop_id:             int
+    shop_name:           str
+    customer_id:         int
+    items:               List[OrderItemOut]
+    total:               float
+    subtotal:            Optional[float] = None
+    item_discounts:      Optional[float] = None
+    bill_discount:       Optional[float] = None
+    total_discount:      Optional[float] = None
+    order_type:          Optional[str]   = "online"
+    status:              OrderStatus
+    payment_status:      PaymentStatus
+    payment_method:      Optional[str]   = "cash"
+    razorpay_order_id:   Optional[str]   = None
+    razorpay_payment_id: Optional[str]   = None
+    delivery_address:    str
+    created_at:          datetime
+    updated_at:          Optional[datetime]
+
+
+# ── Payment ──────────────────────────────────────────────────────────────────
+
+class RazorpayOrderCreate(BaseModel):
+    order_id: int
+
+
+class RazorpayOrderOut(BaseModel):
+    razorpay_order_id: str
+    amount:            int
+    currency:          str = "INR"
+    key_id:            str
+
+
+class RazorpayVerify(BaseModel):
+    order_id:              int
+    razorpay_order_id:     str
+    razorpay_payment_id:   str
+    razorpay_signature:    str
 
 
 class OrderStatusUpdate(BaseModel):

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, Image,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Modal, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { placeOrder } from '../../api/client';
+import { placeOrder, getShopUPI, createRazorpayOrder, verifyRazorpayPayment } from '../../api/client';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing } from '../../constants/theme';
@@ -14,20 +14,32 @@ export default function CartScreen({ navigation }) {
   const { cart, cartItemCount, cartTotal, updateQuantity, removeFromCart, clearCart, currentUser } = useApp();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [shopUPI, setShopUPI] = useState(null);
+  const [showUPIModal, setShowUPIModal] = useState(false);
+
+  useEffect(() => {
+    if (cart.shopId) {
+      getShopUPI(cart.shopId).then(r => setShopUPI(r.data)).catch(() => {});
+    }
+  }, [cart.shopId]);
 
   const handlePlaceOrder = async () => {
     if (!currentUser) {
       Alert.alert(t('common.signIn'), t('messages.createAccountOrSignIn'));
       return;
     }
+    if (paymentMethod === 'upi') {
+      if (!shopUPI?.upi_id) { Alert.alert('UPI Unavailable', 'This shop has not set up UPI payments yet.'); return; }
+      setShowUPIModal(true);
+      return;
+    }
     setLoading(true);
     try {
       await placeOrder({
         shop_id: cart.shopId,
-        items: cart.items.map(i => ({
-          product_id: i.productId,
-          quantity: i.quantity,
-        })),
+        items: cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
+        payment_method: paymentMethod,
       });
       clearCart();
       Alert.alert(t('common.success'), t('messages.orderPlaced'));
@@ -35,6 +47,29 @@ export default function CartScreen({ navigation }) {
     } catch (err) {
       Alert.alert(t('common.error'), err.response?.data?.detail || 'Failed to place order');
     } finally { setLoading(false); }
+  };
+
+  const confirmUPIPayment = async () => {
+    setShowUPIModal(false);
+    setLoading(true);
+    try {
+      await placeOrder({
+        shop_id: cart.shopId,
+        items: cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
+        payment_method: 'upi',
+      });
+      clearCart();
+      Alert.alert(t('common.success'), t('messages.orderPlaced'));
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert(t('common.error'), err.response?.data?.detail || 'Failed to place order');
+    } finally { setLoading(false); }
+  };
+
+  const openUPIApp = () => {
+    if (!shopUPI?.upi_id) return;
+    const uri = `upi://pay?pa=${encodeURIComponent(shopUPI.upi_id)}&pn=${encodeURIComponent(shopUPI.shop_name || '')}&am=${cartTotal}&cu=INR`;
+    Linking.openURL(uri).catch(() => Alert.alert('Error', 'No UPI app found on this device'));
   };
 
   const renderItem = ({ item }) => (
@@ -155,24 +190,124 @@ export default function CartScreen({ navigation }) {
             {'\u20B9'}{cartTotal.toFixed(2)}
           </Text>
         </View>
+
+        {/* Payment Method Selector */}
+        <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, marginBottom: 6 }}>
+          PAYMENT METHOD
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.md }}>
+          {[
+            { key: 'cash', label: 'Cash', icon: '\uD83D\uDCB5' },
+            { key: 'upi',  label: 'UPI',  icon: '\uD83D\uDCF1' },
+            { key: 'razorpay', label: 'Online', icon: '\uD83D\uDCB3' },
+          ].map(m => (
+            <TouchableOpacity
+              key={m.key}
+              onPress={() => setPaymentMethod(m.key)}
+              style={{
+                flex: 1, alignItems: 'center', paddingVertical: 10,
+                borderRadius: BorderRadius.md, borderWidth: 1.5,
+                borderColor: paymentMethod === m.key ? Colors.primary : Colors.border,
+                backgroundColor: paymentMethod === m.key ? Colors.primary + '10' : Colors.white,
+              }}
+            >
+              <Text style={{ fontSize: 18, marginBottom: 2 }}>{m.icon}</Text>
+              <Text style={{
+                fontSize: 11, fontWeight: '700',
+                color: paymentMethod === m.key ? Colors.primary : Colors.textMuted,
+              }}>{m.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {paymentMethod === 'upi' && !shopUPI?.upi_id && (
+          <Text style={{ fontSize: 11, color: Colors.danger, marginBottom: 8 }}>
+            This shop hasn't set up UPI payments yet.
+          </Text>
+        )}
+
         <TouchableOpacity
           onPress={handlePlaceOrder}
-          disabled={loading}
+          disabled={loading || (paymentMethod === 'upi' && !shopUPI?.upi_id)}
           style={{
             backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
             paddingVertical: 14, alignItems: 'center',
-            opacity: loading ? 0.6 : 1,
+            opacity: (loading || (paymentMethod === 'upi' && !shopUPI?.upi_id)) ? 0.6 : 1,
           }}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, letterSpacing: 1 }}>
-              {t('marketplace.placeOrder').toUpperCase()}
+              {paymentMethod === 'razorpay' ? 'PAY ONLINE' : paymentMethod === 'upi' ? 'PAY VIA UPI' : 'PLACE ORDER (COD)'}
             </Text>
           )}
         </TouchableOpacity>
       </View>
+
+      {/* UPI Payment Modal */}
+      <Modal visible={showUPIModal} animationType="slide" transparent>
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'flex-end',
+        }}>
+          <View style={{
+            backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xxl,
+            borderTopRightRadius: BorderRadius.xxl, padding: Spacing.xl,
+          }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+              Scan & Pay
+            </Text>
+            <Text style={{ fontSize: 12, color: Colors.textMuted, textAlign: 'center', marginBottom: Spacing.lg }}>
+              Pay the shop owner directly via UPI
+            </Text>
+
+            {shopUPI?.upi_id && (
+              <View style={{ alignItems: 'center', marginBottom: Spacing.lg }}>
+                <Image
+                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=${encodeURIComponent(shopUPI.upi_id)}&pn=${encodeURIComponent(shopUPI.shop_name || '')}&am=${cartTotal}&cu=INR` }}
+                  style={{ width: 180, height: 180, borderRadius: BorderRadius.lg }}
+                />
+              </View>
+            )}
+
+            <View style={{ alignItems: 'center', marginBottom: Spacing.md }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1 }}>UPI ID</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', fontFamily: 'monospace', marginTop: 4 }}>
+                {shopUPI?.upi_id}
+              </Text>
+            </View>
+
+            <Text style={{ fontSize: 28, fontWeight: '700', textAlign: 'center', marginBottom: Spacing.lg }}>
+              {'\u20B9'}{cartTotal.toFixed(2)}
+            </Text>
+
+            <TouchableOpacity onPress={openUPIApp} style={{
+              backgroundColor: Colors.background, borderRadius: BorderRadius.lg,
+              paddingVertical: 12, alignItems: 'center', marginBottom: Spacing.sm,
+              borderWidth: 1, borderColor: Colors.border,
+            }}>
+              <Text style={{ fontWeight: '700', fontSize: 13, color: Colors.primary }}>
+                Open UPI App
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={confirmUPIPayment} style={{
+              backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+              paddingVertical: 14, alignItems: 'center', marginBottom: Spacing.sm,
+            }}>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                I've Paid — Confirm Order
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setShowUPIModal(false)} style={{
+              paddingVertical: 10, alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: 13, color: Colors.textMuted, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

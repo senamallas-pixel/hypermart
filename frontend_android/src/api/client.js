@@ -55,6 +55,11 @@ export const getShopOrders = (shopId, page = 1, params = {}) => api.get(`/shops/
 export const updateOrderStatus = (orderId, status) => api.patch(`/orders/${orderId}/status`, { status });
 export const cancelOrder = (orderId) => api.post(`/orders/${orderId}/cancel`);
 
+// ── Payments ─────────────────────────────────────────────────────
+export const createRazorpayOrder = (orderId) => api.post('/payments/create-order', { order_id: orderId });
+export const verifyRazorpayPayment = (data) => api.post('/payments/verify', data);
+export const getShopUPI = (shopId) => api.get(`/shops/${shopId}/upi`);
+
 // ── Analytics ─────────────────────────────────────────────────────
 export const getPlatformAnalytics = () => api.get('/analytics/platform');
 export const getShopAnalytics = (shopId) => api.get(`/shops/${shopId}/analytics`);

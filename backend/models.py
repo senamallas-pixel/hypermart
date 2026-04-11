@@ -66,6 +66,13 @@ class PaymentStatus(str, PyEnum):
     paid    = "paid"
 
 
+class PaymentMethod(str, PyEnum):
+    cash     = "cash"
+    upi      = "upi"
+    razorpay = "razorpay"
+    online   = "online"
+
+
 class SubscriptionStatus(str, PyEnum):
     pending = "pending"
     active  = "active"
@@ -136,6 +143,7 @@ class Shop(Base):
     pincode         = Column(String(10), nullable=True)
     city            = Column(String(100), nullable=True)
     state           = Column(String(100), nullable=True)
+    upi_id          = Column(String(255), nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     owner    = relationship("User",    back_populates="shops")
@@ -186,6 +194,9 @@ class Order(Base):
     order_type       = Column(String(20), nullable=True, default="online")
     status           = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.pending, index=True)
     payment_status   = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.pending)
+    payment_method   = Column(String(20), nullable=True, default="cash")
+    razorpay_order_id   = Column(String(255), nullable=True)
+    razorpay_payment_id = Column(String(255), nullable=True)
     delivery_address = Column(Text, nullable=False)
     created_at       = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at       = Column(DateTime, nullable=True, onupdate=datetime.utcnow)

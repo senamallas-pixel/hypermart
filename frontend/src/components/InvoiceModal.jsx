@@ -120,6 +120,17 @@ export default function InvoiceModal({ order, shopView, onClose }) {
                 <p className="text-sm">{order.delivery_address}</p>
               </div>
             )}
+            {order.payment_method && (
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35 mb-1">Payment</p>
+                <span className={`inline-block text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                  order.payment_status === 'paid' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+                }`}>
+                  {order.payment_method === 'razorpay' ? 'Online' : order.payment_method === 'upi' ? 'UPI' : 'Cash'}
+                  {' — '}{order.payment_status || 'pending'}
+                </span>
+              </div>
+            )}
             {shopView && order.customer_id && (
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35 mb-1">Customer</p>

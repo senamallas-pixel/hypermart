@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
-import { login, register, placeOrder, forgotPassword, getShopDiscounts } from './api/client';
+import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI } from './api/client';
 import Marketplace        from './pages/Marketplace';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
@@ -423,6 +423,9 @@ function CartPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [productDiscounts, setProductDiscounts] = useState([]);
   const [orderDiscounts, setOrderDiscounts] = useState([]);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [shopUPI, setShopUPI] = useState(null);
+  const [showUPIQR, setShowUPIQR] = useState(false);
 
   useEffect(() => {
     if (!cart.shopId) return;
@@ -431,6 +434,9 @@ function CartPage() {
         setProductDiscounts(r.data.product_discounts || []);
         setOrderDiscounts(r.data.order_discounts || []);
       })
+      .catch(() => {});
+    getShopUPI(cart.shopId)
+      .then(r => setShopUPI(r.data))
       .catch(() => {});
   }, [cart.shopId]);
 
@@ -496,12 +502,87 @@ function CartPage() {
   const handlePlace = async () => {
     if (cart.items.length === 0) return;
     if (!currentUser) { navigate('/login'); return; }
+
+    // UPI — show QR, user pays outside, then we place order as "upi"
+    if (paymentMethod === 'upi') {
+      if (!shopUPI?.upi_id) { alert('This shop has not set up UPI payments yet.'); return; }
+      setShowUPIQR(true);
+      return;
+    }
+
     setPlacing(true);
     try {
       const res = await placeOrder({
         shop_id:          cart.shopId,
         items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
         delivery_address: 'Default Address',
+        payment_method:   paymentMethod,
+        subtotal:         calculations.subtotal,
+        item_discounts:   calculations.itemDiscounts,
+        bill_discount:    calculations.billDiscount,
+        total_discount:   calculations.totalDiscount,
+      });
+
+      // Razorpay — open checkout after order is created
+      if (paymentMethod === 'razorpay') {
+        try {
+          const rzRes = await createRazorpayOrder(res.data.id);
+          const rz = rzRes.data;
+          const options = {
+            key: rz.key_id,
+            amount: rz.amount,
+            currency: rz.currency,
+            name: 'HyperMart',
+            description: `Order #${res.data.id}`,
+            order_id: rz.razorpay_order_id,
+            handler: async (response) => {
+              try {
+                await verifyRazorpayPayment({
+                  order_id:            res.data.id,
+                  razorpay_order_id:   response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature:  response.razorpay_signature,
+                });
+              } catch { /* verification failed — order stays pending */ }
+              clearCart();
+              setPlacedOrder({ ...res.data, payment_status: 'paid', payment_method: 'razorpay' });
+              setPlacing(false);
+            },
+            modal: { ondismiss: () => { setPlacing(false); clearCart(); setPlacedOrder(res.data); } },
+            prefill: { email: currentUser.email, contact: currentUser.phone || '' },
+          };
+          if (window.Razorpay) {
+            new window.Razorpay(options).open();
+          } else {
+            alert('Razorpay SDK not loaded. Order placed — pay later.');
+            clearCart(); setPlacedOrder(res.data); setPlacing(false);
+          }
+          return;
+        } catch {
+          alert('Could not initiate Razorpay payment. Order placed — pay later.');
+          clearCart(); setPlacedOrder(res.data); setPlacing(false);
+          return;
+        }
+      }
+
+      clearCart();
+      setPlacedOrder(res.data);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to place order.');
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const confirmUPIPayment = async () => {
+    setShowUPIQR(false);
+    setPlacing(true);
+    try {
+      const res = await placeOrder({
+        shop_id:          cart.shopId,
+        items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
+        delivery_address: 'Default Address',
+        payment_method:   'upi',
         subtotal:         calculations.subtotal,
         item_discounts:   calculations.itemDiscounts,
         bill_discount:    calculations.billDiscount,
@@ -630,11 +711,63 @@ function CartPage() {
               <span className="font-bold uppercase tracking-widest text-xs text-[#1A1A1A]/40">Total</span>
               <span className="font-serif text-3xl font-bold">&#8377;{calculations.total.toFixed(2)}</span>
             </div>
-            <button onClick={handlePlace} disabled={placing}
+            {/* Payment Method Selector */}
+            <div className="pt-3 border-t border-[#1A1A1A]/6">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Payment Method</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'cash', label: 'Cash', icon: '💵' },
+                  { key: 'upi',  label: 'UPI',  icon: '📱' },
+                  { key: 'razorpay', label: 'Online', icon: '💳' },
+                ].map(m => (
+                  <button key={m.key} onClick={() => setPaymentMethod(m.key)}
+                    className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-bold transition-all ${paymentMethod === m.key
+                      ? 'border-[#5A5A40] bg-[#5A5A40]/10 text-[#5A5A40]'
+                      : 'border-[#1A1A1A]/10 text-[#1A1A1A]/50 hover:border-[#5A5A40]/30'}`}>
+                    <span className="text-lg">{m.icon}</span>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              {paymentMethod === 'upi' && !shopUPI?.upi_id && (
+                <p className="text-[10px] text-red-500 mt-1">This shop hasn't set up UPI payments yet.</p>
+              )}
+            </div>
+
+            <button onClick={handlePlace} disabled={placing || (paymentMethod === 'upi' && !shopUPI?.upi_id)}
               className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20 mt-2">
-              {placing ? <><Loader2 size={16} className="animate-spin" /> Placing Order&hellip;</> : 'Place Order'}
+              {placing ? <><Loader2 size={16} className="animate-spin" /> Placing Order&hellip;</> :
+                paymentMethod === 'razorpay' ? 'Pay Online' :
+                paymentMethod === 'upi' ? 'Pay via UPI' : 'Place Order (COD)'}
             </button>
           </div>
+
+          {/* UPI QR Modal */}
+          {showUPIQR && shopUPI?.upi_id && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowUPIQR(false)}>
+              <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+                <h3 className="font-serif text-xl font-bold text-center">Scan & Pay</h3>
+                <p className="text-xs text-center text-[#1A1A1A]/50">Scan the QR code or use UPI ID to pay the shop owner directly</p>
+                <div className="flex justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=${encodeURIComponent(shopUPI.upi_id)}&pn=${encodeURIComponent(shopUPI.shop_name)}&am=${calculations.total}&cu=INR`}
+                    alt="UPI QR Code" className="w-48 h-48 rounded-xl"
+                  />
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">UPI ID</p>
+                  <p className="font-mono font-bold text-sm mt-1">{shopUPI.upi_id}</p>
+                </div>
+                <p className="text-center font-serif text-2xl font-bold">&#8377;{calculations.total.toFixed(2)}</p>
+                <button onClick={confirmUPIPayment}
+                  className="w-full bg-[#5A5A40] text-white py-3 rounded-2xl font-bold uppercase tracking-widest text-sm hover:bg-[#4A4A30] transition-all">
+                  I've Paid — Confirm Order
+                </button>
+                <button onClick={() => setShowUPIQR(false)}
+                  className="w-full py-2 text-xs text-[#1A1A1A]/40 font-bold uppercase tracking-widest">Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </motion.div>

@@ -44,7 +44,7 @@ export default function OwnerDashboardScreen() {
 
   // Shop registration
   const [showShopModal, setShowShopModal] = useState(false);
-  const [shopForm, setShopForm] = useState({ name: '', category: 'Grocery', address: '', location_name: '', pincode: '', city: '' });
+  const [shopForm, setShopForm] = useState({ name: '', category: 'Grocery', address: '', location_name: '', pincode: '', city: '', upi_id: '' });
   const [shopSaving, setShopSaving] = useState(false);
 
   // AI suggestions
@@ -101,7 +101,7 @@ export default function OwnerDashboardScreen() {
     try {
       await createShop(shopForm);
       setShowShopModal(false);
-      setShopForm({ name: '', category: 'Grocery', address: '', location_name: '', pincode: '', city: '' });
+      setShopForm({ name: '', category: 'Grocery', address: '', location_name: '', pincode: '', city: '', upi_id: '' });
       loadShops();
       Alert.alert('Success', 'Shop registration submitted for approval');
     } catch (err) {
@@ -482,6 +482,10 @@ export default function OwnerDashboardScreen() {
               <TextInput style={inputStyle} placeholder="Location Name" placeholderTextColor={Colors.textLight} value={shopForm.location_name} onChangeText={v => setShopForm(f => ({ ...f, location_name: v }))} />
               <TextInput style={inputStyle} placeholder="Pincode" placeholderTextColor={Colors.textLight} keyboardType="numeric" value={shopForm.pincode} onChangeText={v => setShopForm(f => ({ ...f, pincode: v }))} />
               <TextInput style={inputStyle} placeholder="City" placeholderTextColor={Colors.textLight} value={shopForm.city} onChangeText={v => setShopForm(f => ({ ...f, city: v }))} />
+              <TextInput style={inputStyle} placeholder="UPI ID (e.g. shopname@upi)" placeholderTextColor={Colors.textLight} value={shopForm.upi_id} onChangeText={v => setShopForm(f => ({ ...f, upi_id: v }))} autoCapitalize="none" />
+              <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: -6, marginBottom: 8, paddingHorizontal: 4 }}>
+                Customers can pay you directly via UPI scan
+              </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
                 <TouchableOpacity onPress={() => setShowShopModal(false)} style={{ flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.md, paddingVertical: 12, alignItems: 'center' }}>
                   <Text style={{ fontWeight: '600', color: Colors.textSecondary }}>Cancel</Text>

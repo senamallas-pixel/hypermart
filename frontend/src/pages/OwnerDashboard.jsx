@@ -683,6 +683,7 @@ function BillingPanel({ shopId }) {
   const [bill, setBill]         = useState([]);        // { product, quantity }
   const [customerName, setCustomerName] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('paid');
+  const [walkinPayMethod, setWalkinPayMethod] = useState('cash');
   const [placing, setPlacing]   = useState(false);
   const [lastOrder, setLastOrder] = useState(null);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
@@ -805,6 +806,7 @@ function BillingPanel({ shopId }) {
       const res = await placeWalkinOrder(shopId, {
         items: bill.map(b => ({ product_id: b.product.id, quantity: b.quantity })),
         customer_name: customerName || 'Walk-in Customer',
+        payment_method: walkinPayMethod,
         payment_status: paymentStatus,
         subtotal: calculations.subtotal,
         item_discounts: calculations.itemDiscounts,
@@ -943,6 +945,21 @@ function BillingPanel({ shopId }) {
                 <div className="flex justify-between pt-2 border-t border-[#1A1A1A]/5">
                   <span className="font-bold text-lg">Total</span>
                   <span className="font-serif text-2xl font-bold text-[#5A5A40]">₹{billTotal.toFixed(2)}</span>
+                </div>
+              </div>
+              {/* Payment Method */}
+              <div className="mb-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1.5">Payment Method</p>
+                <div className="flex gap-2">
+                  {[
+                    { key: 'cash', label: '💵 Cash' },
+                    { key: 'upi',  label: '📱 UPI' },
+                  ].map(m => (
+                    <button key={m.key} onClick={() => setWalkinPayMethod(m.key)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${walkinPayMethod === m.key ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/50 border-[#1A1A1A]/10 hover:border-[#5A5A40]'}`}>
+                      {m.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               {/* Payment Status */}
@@ -1767,6 +1784,7 @@ function ShopSettingsPanel({ shop, onUpdated }) {
   const [pincode, setPincode] = useState(shop?.pincode || '');
   const [city, setCity] = useState(shop?.city || '');
   const [state, setState] = useState(shop?.state || '');
+  const [upiId, setUpiId] = useState(shop?.upi_id || '');
 
   // Products for stock management
   const [products, setProducts] = useState([]);
@@ -1789,6 +1807,7 @@ function ShopSettingsPanel({ shop, onUpdated }) {
     setPincode(shop.pincode || '');
     setCity(shop.city || '');
     setState(shop.state || '');
+    setUpiId(shop.upi_id || '');
   }, [shop?.id]);
 
   useEffect(() => {
@@ -2154,6 +2173,11 @@ function ShopSettingsPanel({ shop, onUpdated }) {
             <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">State</label>
             <input className={inp} placeholder="e.g. Telangana" value={state} onChange={e => setState(e.target.value)} />
           </div>
+          <div className="col-span-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1 block">UPI ID (for receiving payments)</label>
+            <input className={inp} placeholder="e.g. shopname@upi" value={upiId} onChange={e => setUpiId(e.target.value)} />
+            <p className="text-[10px] text-[#1A1A1A]/30 mt-1">Customers can scan a QR code to pay you directly via UPI</p>
+          </div>
         </div>
         <button
           onClick={async () => {
@@ -2164,6 +2188,7 @@ function ShopSettingsPanel({ shop, onUpdated }) {
                 pincode: pincode || null,
                 city: city || null,
                 state: state || null,
+                upi_id: upiId || null,
               });
               setSuccess('Delivery & address details saved');
               onUpdated?.();
