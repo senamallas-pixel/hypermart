@@ -20,6 +20,14 @@ import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
 import LanguageSelector   from './components/LanguageSelector';
 
+// Fix double-prefixed Cloudinary URLs from old data
+function fixImageUrl(url) {
+  if (!url) return url;
+  const idx = url.indexOf('https://res.cloudinary.com');
+  if (idx > 0) return url.slice(idx);
+  return url;
+}
+
 // ── Constants ─────────────────────────────────────────────────────
 const DEMO = [
   { label: 'Customer',   email: 'ravi@example.com',   password: 'Customer@123', role: 'customer' },
@@ -656,7 +664,7 @@ function CartPage() {
             return (
             <div key={item.productId} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 flex gap-3 items-center">
               <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0 relative">
-                {item.image ? <img src={item.image} className="w-full h-full object-cover" alt={item.name} /> : <Package size={16} className="m-auto mt-4 text-[#5A5A40]/20" />}
+                {item.image ? <img src={fixImageUrl(item.image)} className="w-full h-full object-cover" alt={item.name} /> : <Package size={16} className="m-auto mt-4 text-[#5A5A40]/20" />}
                 {itemDiscount && <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[7px] px-1 py-0.5 rounded-full font-bold">{itemDiscount.type === 'bogo' ? 'BOGO' : 'Offer'}</span>}
               </div>
               <div className="flex-1 min-w-0">

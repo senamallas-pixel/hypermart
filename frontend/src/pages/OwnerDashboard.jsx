@@ -43,6 +43,14 @@ L.Icon.Default.mergeOptions({
 
 const TABS      = ['Overview', 'Inventory', 'Orders', 'Billing', 'Reports', 'Settings'];
 const CATEGORIES= ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care'];
+
+// Fix double-prefixed Cloudinary URLs (e.g. "https://domain.comhttps://res.cloudinary.com/...")
+function fixImageUrl(url) {
+  if (!url) return url;
+  const idx = url.indexOf('https://res.cloudinary.com');
+  if (idx > 0) return url.slice(idx);
+  return url;
+}
 const LOCATIONS = ['Green Valley','Central Market','Food Plaza','Milk Lane','Old Town'];
 const SHOP_CATS = ['Grocery','Dairy','Vegetables & Fruits','Meat','Bakery & Snacks','Beverages','Household','Personal Care','General'];
 
@@ -97,7 +105,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     unit: product?.unit || 'kg',
     category: product?.category || CATEGORIES[0],
     stock: product?.stock ?? 100,
-    image: product?.image || '',
+    image: fixImageUrl(product?.image) || '',
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -963,7 +971,7 @@ function BillingPanel({ shopId }) {
                     {hasDiscount.type === 'bogo' ? 'BOGO' : hasDiscount.type === 'buy_x_get_y' ? `B${hasDiscount.buy_qty}G${hasDiscount.get_qty}` : hasDiscount.type === 'bulk_price' ? 'Bulk' : 'Offer'}
                   </span>
                 )}
-                {p.image && <img src={p.image} alt={p.name} className="w-full h-20 object-cover rounded-xl mb-2" referrerPolicy="no-referrer" />}
+                {p.image && <img src={fixImageUrl(p.image)} alt={p.name} className="w-full h-20 object-cover rounded-xl mb-2" referrerPolicy="no-referrer" />}
                 <p className="font-bold text-sm line-clamp-1">{p.name}</p>
                 <p className="text-xs text-[#1A1A1A]/40">{p.unit} · Stock: {p.stock}</p>
                 <p className="font-bold text-[#5A5A40] mt-1">₹{p.price}</p>
@@ -1891,7 +1899,7 @@ function InventoryPanel({ shopId }) {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-11 h-11 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-[#1A1A1A]/5">
-                            {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Package size={18} className="text-[#5A5A40]/30" />}
+                            {p.image ? <img src={fixImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Package size={18} className="text-[#5A5A40]/30" />}
                           </div>
                           <p className="font-bold line-clamp-1">{p.name}</p>
                         </div>
@@ -2957,7 +2965,7 @@ function ShopSettingsPanel({ shop, onUpdated }) {
             {products.map(p => (
               <div key={p.id} className="flex items-center gap-3 bg-[#F5F5F0] rounded-xl px-4 py-3">
                 <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex-shrink-0">
-                  {p.image ? <img src={p.image} alt={p.name} className="w-full h-full object-cover" /> : <Package size={14} className="m-auto mt-3 text-[#5A5A40]/20" />}
+                  {p.image ? <img src={fixImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" /> : <Package size={14} className="m-auto mt-3 text-[#5A5A40]/20" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm truncate">{p.name}</p>

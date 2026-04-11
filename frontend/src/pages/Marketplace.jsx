@@ -22,6 +22,14 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+// Fix double-prefixed Cloudinary URLs from old data
+function fixImageUrl(url) {
+  if (!url) return url;
+  const idx = url.indexOf('https://res.cloudinary.com');
+  if (idx > 0) return url.slice(idx);
+  return url;
+}
+
 // ── Nearby map helpers ────────────────────────────────────────────────────────
 function shopMapIcon(isOpen) {
   const bg = isOpen ? '#10B981' : '#9CA3AF';
@@ -94,7 +102,7 @@ function ShopCard({ shop, onClick }) {
       {/* Image */}
       <div className="aspect-[4/3] bg-[#F5F5F0] relative overflow-hidden">
         {shop.logo
-          ? <img src={shop.logo} alt={shop.name} className={`w-full h-full object-cover transition-transform duration-500 ${isOpen ? 'group-hover:scale-105' : 'grayscale-[40%]'}`} referrerPolicy="no-referrer" />
+          ? <img src={fixImageUrl(shop.logo)} alt={shop.name} className={`w-full h-full object-cover transition-transform duration-500 ${isOpen ? 'group-hover:scale-105' : 'grayscale-[40%]'}`} referrerPolicy="no-referrer" />
           : <div className="w-full h-full flex items-center justify-center"><Store size={28} className="text-[#5A5A40]/20" /></div>
         }
         {/* Gradient overlay */}
@@ -154,7 +162,7 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty, offerLabel, shopClo
     <div className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-2.5 flex flex-col hover:shadow-md transition-all group">
       <div className="aspect-square bg-[#F5F5F0] rounded-xl mb-2 overflow-hidden relative">
         {product.image
-          ? <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+          ? <img src={fixImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
           : <div className="w-full h-full flex items-center justify-center text-[#5A5A40]/10"><Package size={28} /></div>
         }
         {/* Price discount badge */}
@@ -303,7 +311,7 @@ function ShopProductsView({ shop, onBack }) {
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/15 border border-white/20 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 shadow-lg">
             {shop.logo
-              ? <img src={shop.logo} alt={shop.name} className="w-full h-full object-cover" />
+              ? <img src={fixImageUrl(shop.logo)} alt={shop.name} className="w-full h-full object-cover" />
               : <Store size={28} className="text-white/50" />}
           </div>
           <div className="min-w-0">
@@ -515,7 +523,7 @@ function ShopProductsView({ shop, onBack }) {
                 {shopCartItems.map(item => (
                   <div key={item.productId} className="flex gap-3 items-center">
                     <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0">
-                      {item.image ? <img src={item.image} className="w-full h-full object-cover" alt={item.name} /> : <Package size={20} className="m-auto mt-3.5 text-[#5A5A40]/20" />}
+                      {item.image ? <img src={fixImageUrl(item.image)} className="w-full h-full object-cover" alt={item.name} /> : <Package size={20} className="m-auto mt-3.5 text-[#5A5A40]/20" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm truncate">{item.name}</p>
@@ -984,7 +992,7 @@ function NearbyShopsSection({ onSelectShop }) {
             <motion.div key={shop.id} whileTap={{ scale: 0.98 }} onClick={() => onSelectShop(shop)}
               className="flex items-center gap-3 bg-[#F5F5F0] rounded-2xl px-4 py-3 cursor-pointer hover:bg-[#EBEBDB] transition-colors">
               <div className="w-12 h-12 rounded-xl overflow-hidden bg-white flex-shrink-0">
-                {shop.logo ? <img src={shop.logo} alt={shop.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Store size={18} className="m-auto mt-3.5 text-[#5A5A40]/30" />}
+                {shop.logo ? <img src={fixImageUrl(shop.logo)} alt={shop.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <Store size={18} className="m-auto mt-3.5 text-[#5A5A40]/30" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
