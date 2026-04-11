@@ -26,8 +26,8 @@ export default function AdminPanelScreen() {
   const load = useCallback(async () => {
     try {
       const [shopRes, userRes] = await Promise.all([listShops(), listUsers()]);
-      setShops(shopRes.data || []);
-      setUsers(userRes.data || []);
+      setShops(shopRes.data?.items || (Array.isArray(shopRes.data) ? shopRes.data : []));
+      setUsers(Array.isArray(userRes.data) ? userRes.data : []);
       try {
         const analyticsRes = await getPlatformAnalytics();
         setAnalytics(analyticsRes.data);

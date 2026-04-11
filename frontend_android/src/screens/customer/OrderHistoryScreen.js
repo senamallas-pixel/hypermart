@@ -30,7 +30,7 @@ export default function OrderHistoryScreen() {
   const loadOrders = useCallback(async () => {
     try {
       const res = await getMyOrders(page);
-      setOrders(res.data?.orders || res.data || []);
+      setOrders(res.data?.items || res.data?.orders || (Array.isArray(res.data) ? res.data : []));
     } catch {} finally {
       setLoading(false);
       setRefreshing(false);

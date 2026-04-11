@@ -160,8 +160,9 @@ export default function OwnerDashboardScreen() {
     setOrdersLoading(true);
     try {
       const res = await getShopOrders(selectedShop.id);
-      setOrders(res.data?.orders || res.data || []);
-      setBillingOrders((res.data?.orders || res.data || []).filter(o => o.order_type === 'walkin'));
+      const list = res.data?.items || res.data?.orders || (Array.isArray(res.data) ? res.data : []);
+      setOrders(list);
+      setBillingOrders(list.filter(o => o.order_type === 'walkin'));
     } catch {} finally { setOrdersLoading(false); }
   };
 

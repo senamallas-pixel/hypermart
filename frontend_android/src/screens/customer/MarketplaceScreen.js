@@ -32,7 +32,7 @@ export default function MarketplaceScreen({ navigation }) {
       if (search) params.search = search;
       if (selectedCategory) params.category = selectedCategory;
       const res = await listShops(params);
-      setShops(res.data || []);
+      setShops(res.data?.items || (Array.isArray(res.data) ? res.data : []));
     } catch {
       Alert.alert(t('common.error'), t('messages.failedToLoadShops'));
     } finally {
