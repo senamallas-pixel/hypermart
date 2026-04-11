@@ -1,62 +1,106 @@
-name: Build & Release Android APK
+name: Android Release (EAS)
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        required: false
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
 
 jobs:
-  build:
+  build_and_release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     defaults:
       run:
         working-directory: frontend_android
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+          cache: npm
+          cache-dependency-path: frontend_android/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Expo & EAS CLI
-        run: npm install -g eas-cli
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android APK
-        run: eas build --platform android --profile preview --non-interactive --local --output ./app-release.apk
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Resolve profile
+        id: profile
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.profile }}" ]; then
+            echo "name=${{ github.event.inputs.profile }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=preview" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload APK artifact
+      - name: Trigger cloud Android build
+        id: eas_build
+        run: |
+          eas build --platform android --profile "${{ steps.profile.outputs.name }}" --non-interactive --wait --json > build.json
+          node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('build.json','utf8'));const b=Array.isArray(d)?d[0]:d;const id=b?.id||'';const url=b?.artifacts?.buildUrl||'';if(!id){process.exit(1)};fs.appendFileSync(process.env.GITHUB_OUTPUT,'id='+id+'\\nurl='+url+'\\n');"
+
+      - name: Download build artifact
+        id: artifact
+        run: |
+          FILE_EXT="apk"
+          if [ "${{ steps.profile.outputs.name }}" = "production" ]; then
+            FILE_EXT="aab"
+          fi
+
+          FILE_NAME="hypermart-android-${{ steps.profile.outputs.name }}.${FILE_EXT}"
+
+          if [ -n "${{ steps.eas_build.outputs.url }}" ]; then
+            curl -L "${{ steps.eas_build.outputs.url }}" -o "${FILE_NAME}"
+          else
+            eas build:download --id "${{ steps.eas_build.outputs.id }}" --path "${FILE_NAME}" --non-interactive
+          fi
+
+          echo "name=${FILE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hypermart-android-apk
-          path: frontend_android/app-release.apk
+          name: hypermart-android-${{ steps.profile.outputs.name }}
+          path: frontend_android/${{ steps.artifact.outputs.name }}
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download APK artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: hypermart-android-apk
-
-      - name: Create GitHub Release
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app-release.apk
+          files: frontend_android/${{ steps.artifact.outputs.name }}
           generate_release_notes: true
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Android build complete"
+            echo "- Profile: ${{ steps.profile.outputs.name }}"
+            echo "- EAS Build ID: ${{ steps.eas_build.outputs.id }}"
+            echo "- Artifact: ${{ steps.artifact.outputs.name }}"
+            if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+              echo "- Published to GitHub Release: ${{ github.ref_name }}"
+            else
+              echo "- Manual run completed (artifact uploaded)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
