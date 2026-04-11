@@ -1,6 +1,6 @@
 ﻿"""
 HyperMart — Dev Seed Script
-Populates SQLite with demo users (with hashed passwords), shops, products,
+Populates database with demo users (with hashed passwords), shops, products,
 subscriptions, and sample orders.
 
     python seed.py            — upsert (safe to run multiple times)
@@ -15,6 +15,10 @@ Demo credentials (all roles):
 
 import sys
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# Load .env file before importing database
+load_dotenv()
 
 from passlib.context import CryptContext
 
