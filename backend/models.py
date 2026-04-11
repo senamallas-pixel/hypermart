@@ -72,6 +72,25 @@ class SubscriptionStatus(str, PyEnum):
     expired = "expired"
 
 
+class PurchaseOrderStatus(str, PyEnum):
+    draft     = "draft"
+    sent      = "sent"
+    received  = "received"
+    cancelled = "cancelled"
+
+
+class DiscountType(str, PyEnum):
+    bogo        = "bogo"
+    buy_x_get_y = "buy_x_get_y"
+    bulk_price  = "bulk_price"
+    individual  = "individual"
+
+
+class DiscountAmountType(str, PyEnum):
+    percentage = "percentage"
+    flat       = "flat"
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -83,10 +102,11 @@ class User(Base):
     display_name  = Column(String(255), nullable=False)
     photo_url     = Column(String(1024), nullable=True)
     role          = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
-    phone         = Column(String(20), nullable=True)
-    password_hash = Column(String(256), nullable=True)
-    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_login    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    phone                  = Column(String(20), nullable=True)
+    password_hash          = Column(String(256), nullable=True)
+    multi_location_enabled = Column(Integer, nullable=False, default=0)
+    created_at             = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_login             = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     shops        = relationship("Shop",         back_populates="owner",    cascade="all, delete-orphan")
     orders       = relationship("Order",        back_populates="customer", cascade="all, delete-orphan")
@@ -110,9 +130,13 @@ class Shop(Base):
     timings       = Column(String(100), nullable=True)
     lat           = Column(Float, nullable=True)
     lng           = Column(Float, nullable=True)
-    rating        = Column(Float, nullable=False, default=4.5)
-    review_count  = Column(Integer, nullable=False, default=0)
-    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+    rating          = Column(Float, nullable=False, default=4.5)
+    review_count    = Column(Integer, nullable=False, default=0)
+    delivery_radius = Column(Float, nullable=True)
+    pincode         = Column(String(10), nullable=True)
+    city            = Column(String(100), nullable=True)
+    state           = Column(String(100), nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     owner    = relationship("User",    back_populates="shops")
     products = relationship("Product", back_populates="shop", cascade="all, delete-orphan")
@@ -133,10 +157,12 @@ class Product(Base):
     mrp        = Column(Float, nullable=False)
     unit       = Column(String(50), nullable=False)
     category   = Column(Enum(ShopCategory), nullable=False)
-    stock      = Column(Integer, nullable=False, default=0)
-    image      = Column(String(1024), nullable=True)
-    status     = Column(Enum(ProductStatus), nullable=False, default=ProductStatus.active, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    stock               = Column(Integer, nullable=False, default=0)
+    low_stock_threshold = Column(Integer, nullable=False, default=10)
+    expiry_date         = Column(DateTime, nullable=True)
+    image               = Column(String(1024), nullable=True)
+    status              = Column(Enum(ProductStatus), nullable=False, default=ProductStatus.active, index=True)
+    created_at          = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     shop        = relationship("Shop", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
@@ -153,6 +179,11 @@ class Order(Base):
     shop_name        = Column(String(255), nullable=False)
     customer_id      = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     total            = Column(Float, nullable=False)
+    subtotal         = Column(Float, nullable=True)
+    item_discounts   = Column(Float, nullable=True, default=0)
+    bill_discount    = Column(Float, nullable=True, default=0)
+    total_discount   = Column(Float, nullable=True, default=0)
+    order_type       = Column(String(20), nullable=True, default="online")
     status           = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.pending, index=True)
     payment_status   = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.pending)
     delivery_address = Column(Text, nullable=False)
@@ -233,3 +264,101 @@ class PasswordResetToken(Base):
 
     def __repr__(self):
         return f"<PasswordResetToken user={self.user_id}>"
+
+
+# ── New Feature Models ───────────────────────────────────────────────────────
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id        = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    name           = Column(String(255), nullable=False)
+    contact_person = Column(String(255), nullable=True)
+    phone          = Column(String(20), nullable=True)
+    email          = Column(String(255), nullable=True)
+    address        = Column(Text, nullable=True)
+    gst_number     = Column(String(50), nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    shop = relationship("Shop", backref="suppliers")
+
+    def __repr__(self):
+        return f"<Supplier '{self.name}'>"
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id      = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_id  = Column(Integer, ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False)
+    total_amount = Column(Float, nullable=False, default=0)
+    status       = Column(Enum(PurchaseOrderStatus), nullable=False, default=PurchaseOrderStatus.draft)
+    notes        = Column(Text, nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    shop     = relationship("Shop", backref="purchase_orders")
+    supplier = relationship("Supplier", backref="purchase_orders")
+    items    = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<PurchaseOrder #{self.id} [{self.status}]>"
+
+
+class PurchaseOrderItem(Base):
+    __tablename__ = "purchase_order_items"
+
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    purchase_order_id = Column(Integer, ForeignKey("purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id        = Column(Integer, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    name              = Column(String(255), nullable=False)
+    price             = Column(Float, nullable=False)
+    quantity          = Column(Integer, nullable=False)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="items")
+    product        = relationship("Product")
+
+    def __repr__(self):
+        return f"<POItem {self.name} x{self.quantity}>"
+
+
+class ProductDiscount(Base):
+    __tablename__ = "product_discounts"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id        = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id     = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_name   = Column(String(255), nullable=True)
+    type           = Column(Enum(DiscountType), nullable=False)
+    buy_qty        = Column(Integer, nullable=True)
+    get_qty        = Column(Integer, nullable=True)
+    bulk_price     = Column(Float, nullable=True)
+    discount_value = Column(Float, nullable=True)
+    status         = Column(String(20), nullable=False, default="active")
+    valid_till     = Column(DateTime, nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    shop    = relationship("Shop", backref="product_discounts")
+    product = relationship("Product", backref="discounts")
+
+    def __repr__(self):
+        return f"<ProductDiscount {self.type} product={self.product_id}>"
+
+
+class OrderDiscount(Base):
+    __tablename__ = "order_discounts"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id        = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    min_bill_value = Column(Float, nullable=False)
+    discount_type  = Column(Enum(DiscountAmountType), nullable=False, default=DiscountAmountType.percentage)
+    discount_value = Column(Float, nullable=False)
+    status         = Column(String(20), nullable=False, default="active")
+    valid_till     = Column(DateTime, nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    shop = relationship("Shop", backref="order_discounts")
+
+    def __repr__(self):
+        return f"<OrderDiscount min={self.min_bill_value} {self.discount_value}>"

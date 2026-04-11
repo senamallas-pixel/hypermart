@@ -1,0 +1,240 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, email, role (admin, owner, customer), displayName, photoURL, phone, createdAt
+    //
+    // Collection: shops
+    // Fields: id, ownerId, name, address, category, status (pending, approved, suspended), logo, timings, location, createdAt
+    //
+    // Collection: products
+    // Fields: id, shopId, name, price, mrp, unit, category, stock, image, status (active, out_of_stock, deleted), createdAt
+    //
+    // Collection: orders
+    // Fields: id, shopId, customerId, items (array), total, status (pending, accepted, ready, out_for_delivery, delivered, rejected), paymentStatus, deliveryAddress, createdAt
+    //
+    // Collection: categories
+    // Fields: id, name, image
+    //
+    // Collection: reviews
+    // Fields: id, shopId, userId, userName, userPhoto, rating, comment, createdAt
+    //
+    // Collection: suppliers
+    // Fields: id, shopId, name, contactPerson, phone, email, address, gstNumber, createdAt
+    //
+    // Collection: purchase_orders
+    // Fields: id, shopId, supplierId, items, totalAmount, status, createdAt
+    //
+    // Collection: product_discounts
+    // Fields: id, shopId, productId, productName, type, buyQty, getQty, bulkPrice, status, createdAt
+    //
+    // Collection: order_discounts
+    // Fields: id, shopId, minBillValue, discountType, discountValue, status, createdAt
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "srujan77991@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isShopOwner(shopId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/shops/$(shopId)) &&
+             get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid;
+    }
+
+    function isOrderCustomer() {
+      return isAuthenticated() && resource.data.customerId == request.auth.uid;
+    }
+
+    function isOrderShopOwner() {
+      return isAuthenticated() && get(/databases/$(database)/documents/shops/$(resource.data.shopId)).data.ownerId == request.auth.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?.*Z?$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'owner', 'customer'] &&
+             (!('multiLocationEnabled' in data) || data.multiLocationEnabled is bool) &&
+             (!('multiLocationRequestStatus' in data) || data.multiLocationRequestStatus in ['none', 'pending', 'approved']);
+    }
+
+    function isValidShop(data) {
+      return data.keys().hasAll(['ownerId', 'name', 'status']) &&
+             data.ownerId is string &&
+             data.name is string &&
+             data.status in ['pending', 'approved', 'suspended'];
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['shopId', 'name', 'price', 'status']) &&
+             data.shopId is string &&
+             data.name is string &&
+             data.price is number &&
+             data.status in ['active', 'out_of_stock', 'deleted'];
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['shopId', 'customerId', 'items', 'total', 'status', 'paymentStatus', 'deliveryAddress', 'createdAt']) &&
+             data.shopId is string &&
+             data.customerId is string &&
+             data.items is list &&
+             data.total is number &&
+             data.status in ['pending', 'accepted', 'ready', 'out_for_delivery', 'delivered', 'rejected'] &&
+             data.paymentStatus in ['pending', 'paid'] &&
+             data.deliveryAddress is string &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidSupplier(data) {
+      return data.keys().hasAll(['shopId', 'name']) &&
+             data.shopId is string &&
+             data.name is string;
+    }
+
+    function isValidPurchaseOrder(data) {
+      return data.keys().hasAll(['shopId', 'supplierId', 'items', 'totalAmount', 'status']) &&
+             data.shopId is string &&
+             data.supplierId is string &&
+             data.items is list &&
+             data.totalAmount is number &&
+             data.status in ['draft', 'sent', 'received', 'cancelled'];
+    }
+
+    function isValidProductDiscount(data) {
+      return data.keys().hasAll(['shopId', 'productId', 'type', 'status']) &&
+             data.shopId is string && data.shopId.size() < 100 &&
+             data.productId is string && data.productId.size() < 100 &&
+             data.type in ['bogo', 'buy_x_get_y', 'bulk_price', 'individual'] &&
+             data.status in ['active', 'inactive'] &&
+             (!('productName' in data) || (data.productName is string && data.productName.size() < 200)) &&
+             (!('validTill' in data) || data.validTill == null || isValidDateString(data.validTill)) &&
+             (!('discountType' in data) || data.discountType == null || data.discountType in ['percentage', 'flat']) &&
+             (!('discountValue' in data) || data.discountValue == null || data.discountValue is number);
+    }
+
+    function isValidOrderDiscount(data) {
+      return data.keys().hasAll(['shopId', 'minBillValue', 'discountType', 'discountValue', 'status']) &&
+             data.shopId is string && data.shopId.size() < 100 &&
+             data.minBillValue is number &&
+             data.discountType in ['percentage', 'flat'] &&
+             data.discountValue is number &&
+             data.status in ['active', 'inactive'] &&
+             (!('validTill' in data) || data.validTill == null || isValidDateString(data.validTill));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /shops/{shopId} {
+      allow read: if resource.data.status == 'approved' || isOwner(resource.data.ownerId) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid && isValidShop(request.resource.data) && (request.resource.data.status == 'pending' || isAdmin());
+      allow update: if isAuthenticated() && (
+        ((isOwner(resource.data.ownerId) || isAdmin()) && isValidShop(request.resource.data) && (request.resource.data.status == resource.data.status || isAdmin())) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewCount']))
+      );
+    }
+
+    match /products/{productId} {
+      allow read: if resource.data.status in ['active', 'out_of_stock'] || isShopOwner(resource.data.shopId) || isAdmin();
+      allow create: if isAuthenticated() && isShopOwner(request.resource.data.shopId) && isValidProduct(request.resource.data);
+      allow update: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin()) && isValidProduct(request.resource.data);
+      allow delete: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+    }
+
+    match /orders/{orderId} {
+      allow read: if isOrderCustomer() || isOrderShopOwner() || isAdmin();
+      allow create: if isAuthenticated() && (request.resource.data.customerId == request.auth.uid || isShopOwner(request.resource.data.shopId)) && isValidOrder(request.resource.data);
+      allow update: if isAuthenticated() && (isOrderCustomer() || isOrderShopOwner() || isAdmin()) && isValidOrder(request.resource.data);
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+      allow create: if isAuthenticated() && isShopOwner(request.resource.data.shopId) && isValidSupplier(request.resource.data);
+      allow update: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin()) && isValidSupplier(request.resource.data);
+      allow delete: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+    }
+
+    match /purchase_orders/{poId} {
+      allow read: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+      allow create: if isAuthenticated() && isShopOwner(request.resource.data.shopId) && isValidPurchaseOrder(request.resource.data);
+      allow update: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin()) && isValidPurchaseOrder(request.resource.data);
+      allow delete: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+    }
+
+    match /product_discounts/{discountId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isShopOwner(request.resource.data.shopId) && isValidProductDiscount(request.resource.data);
+      allow update: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin()) && isValidProductDiscount(request.resource.data);
+      allow delete: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+    }
+
+    match /order_discounts/{discountId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isShopOwner(request.resource.data.shopId) && isValidOrderDiscount(request.resource.data);
+      allow update: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin()) && isValidOrderDiscount(request.resource.data);
+      allow delete: if isAuthenticated() && (isShopOwner(resource.data.shopId) || isAdmin());
+    }
+  }
+}

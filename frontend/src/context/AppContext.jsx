@@ -88,11 +88,8 @@ export function AppProvider({ children }) {
     saveCart(cart);
   }, [cart]);
   const [search, setSearch] = useState('');
-  const [activeLocation, setActiveLocationState] = useState(
-    localStorage.getItem('hm_location') || 'All'
-  );
+  const [activeLocation, setActiveLocationState] = useState('All');
   const setActiveLocation = useCallback((loc) => {
-    localStorage.setItem('hm_location', loc);
     setActiveLocationState(loc);
   }, []);
 

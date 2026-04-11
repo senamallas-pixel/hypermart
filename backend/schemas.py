@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator, comp
 
 from models import UserRole, ShopStatus, ShopCategory, ShopLocation
 from models import ProductStatus, OrderStatus, PaymentStatus, SubscriptionStatus
+from models import PurchaseOrderStatus, DiscountType, DiscountAmountType
 
 
 class OrmBase(BaseModel):
@@ -33,15 +34,16 @@ class UserUpdate(BaseModel):
 
 
 class UserOut(OrmBase):
-    id:           int
-    uid:          str
-    email:        str
-    display_name: str
-    photo_url:    Optional[str]
-    role:         UserRole
-    phone:        Optional[str]
-    created_at:   datetime
-    last_login:   Optional[datetime]
+    id:                     int
+    uid:                    str
+    email:                  str
+    display_name:           str
+    photo_url:              Optional[str]
+    role:                   UserRole
+    phone:                  Optional[str]
+    multi_location_enabled: int = 0
+    created_at:             datetime
+    last_login:             Optional[datetime]
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -94,14 +96,18 @@ class TokenOut(BaseModel):
 # ── Shop ──────────────────────────────────────────────────────────────────────
 
 class ShopCreate(BaseModel):
-    name:          str
-    address:       str
-    category:      ShopCategory
-    location_name: ShopLocation
-    logo:          Optional[str]   = None
-    timings:       Optional[str]   = None
-    lat:           Optional[float] = None
-    lng:           Optional[float] = None
+    name:            str
+    address:         str
+    category:        ShopCategory
+    location_name:   ShopLocation
+    logo:            Optional[str]   = None
+    timings:         Optional[str]   = None
+    lat:             Optional[float] = None
+    lng:             Optional[float] = None
+    delivery_radius: Optional[float] = None
+    pincode:         Optional[str]   = None
+    city:            Optional[str]   = None
+    state:           Optional[str]   = None
 
     @field_validator("name")
     @classmethod
@@ -112,32 +118,40 @@ class ShopCreate(BaseModel):
 
 
 class ShopUpdate(BaseModel):
-    name:          Optional[str]          = None
-    address:       Optional[str]          = None
-    category:      Optional[ShopCategory] = None
-    location_name: Optional[ShopLocation] = None
-    logo:          Optional[str]          = None
-    timings:       Optional[str]          = None
-    status:        Optional[ShopStatus]   = None
-    lat:           Optional[float]        = None
-    lng:           Optional[float]        = None
+    name:            Optional[str]          = None
+    address:         Optional[str]          = None
+    category:        Optional[ShopCategory] = None
+    location_name:   Optional[ShopLocation] = None
+    logo:            Optional[str]          = None
+    timings:         Optional[str]          = None
+    status:          Optional[ShopStatus]   = None
+    lat:             Optional[float]        = None
+    lng:             Optional[float]        = None
+    delivery_radius: Optional[float]        = None
+    pincode:         Optional[str]          = None
+    city:            Optional[str]          = None
+    state:           Optional[str]          = None
 
 
 class ShopOut(OrmBase):
-    id:            int
-    owner_id:      int
-    name:          str
-    address:       str
-    category:      ShopCategory
-    location_name: ShopLocation
-    status:        ShopStatus
-    logo:          Optional[str]
-    timings:       Optional[str]
-    lat:           Optional[float]
-    lng:           Optional[float]
-    rating:        float
-    review_count:  int
-    created_at:    datetime
+    id:              int
+    owner_id:        int
+    name:            str
+    address:         str
+    category:        ShopCategory
+    location_name:   ShopLocation
+    status:          ShopStatus
+    logo:            Optional[str]
+    timings:         Optional[str]
+    lat:             Optional[float]
+    lng:             Optional[float]
+    rating:          float
+    review_count:    int
+    delivery_radius: Optional[float] = None
+    pincode:         Optional[str]   = None
+    city:            Optional[str]   = None
+    state:           Optional[str]   = None
+    created_at:      datetime
 
 
 class ShopStatusUpdate(BaseModel):
@@ -147,15 +161,17 @@ class ShopStatusUpdate(BaseModel):
 # ── Product ───────────────────────────────────────────────────────────────────
 
 class ProductCreate(BaseModel):
-    name:        str
-    description: Optional[str] = None
-    price:       float
-    mrp:         float
-    unit:        str
-    category:    ShopCategory
-    stock:       int           = 0
-    image:       Optional[str] = None
-    status:      ProductStatus = ProductStatus.active
+    name:                str
+    description:         Optional[str]      = None
+    price:               float
+    mrp:                 float
+    unit:                str
+    category:            ShopCategory
+    stock:               int                = 0
+    low_stock_threshold: int                = 10
+    expiry_date:         Optional[datetime] = None
+    image:               Optional[str]      = None
+    status:              ProductStatus      = ProductStatus.active
 
     @field_validator("price", "mrp")
     @classmethod
@@ -179,30 +195,34 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    name:        Optional[str]           = None
-    description: Optional[str]           = None
-    price:       Optional[float]         = None
-    mrp:         Optional[float]         = None
-    unit:        Optional[str]           = None
-    category:    Optional[ShopCategory]  = None
-    stock:       Optional[int]           = None
-    image:       Optional[str]           = None
-    status:      Optional[ProductStatus] = None
+    name:                Optional[str]           = None
+    description:         Optional[str]           = None
+    price:               Optional[float]         = None
+    mrp:                 Optional[float]         = None
+    unit:                Optional[str]           = None
+    category:            Optional[ShopCategory]  = None
+    stock:               Optional[int]           = None
+    low_stock_threshold: Optional[int]           = None
+    expiry_date:         Optional[datetime]      = None
+    image:               Optional[str]           = None
+    status:              Optional[ProductStatus] = None
 
 
 class ProductOut(OrmBase):
-    id:          int
-    shop_id:     int
-    name:        str
-    description: Optional[str] = None
-    price:       float
-    mrp:         float
-    unit:        str
-    category:    ShopCategory
-    stock:       int
-    image:       Optional[str]
-    status:      ProductStatus
-    created_at:  datetime
+    id:                  int
+    shop_id:             int
+    name:                str
+    description:         Optional[str]      = None
+    price:               float
+    mrp:                 float
+    unit:                str
+    category:            ShopCategory
+    stock:               int
+    low_stock_threshold: int                = 10
+    expiry_date:         Optional[datetime] = None
+    image:               Optional[str]
+    status:              ProductStatus
+    created_at:          datetime
 
 
 # ── Orders ────────────────────────────────────────────────────────────────────
@@ -222,7 +242,11 @@ class OrderItemIn(BaseModel):
 class OrderCreate(BaseModel):
     shop_id:          int
     items:            List[OrderItemIn]
-    delivery_address: str = "Default Address"
+    delivery_address: str             = "Default Address"
+    subtotal:         Optional[float] = None
+    item_discounts:   Optional[float] = None
+    bill_discount:    Optional[float] = None
+    total_discount:   Optional[float] = None
 
     @field_validator("items")
     @classmethod
@@ -233,7 +257,11 @@ class OrderCreate(BaseModel):
 
 
 class WalkinOrderCreate(BaseModel):
-    items: List[OrderItemIn]
+    items:          List[OrderItemIn]
+    subtotal:       Optional[float] = None
+    item_discounts: Optional[float] = None
+    bill_discount:  Optional[float] = None
+    total_discount: Optional[float] = None
 
     @field_validator("items")
     @classmethod
@@ -263,6 +291,11 @@ class OrderOut(OrmBase):
     customer_id:      int
     items:            List[OrderItemOut]
     total:            float
+    subtotal:         Optional[float] = None
+    item_discounts:   Optional[float] = None
+    bill_discount:    Optional[float] = None
+    total_discount:   Optional[float] = None
+    order_type:       Optional[str]   = "online"
     status:           OrderStatus
     payment_status:   PaymentStatus
     delivery_address: str
@@ -338,16 +371,25 @@ class MonthlyRevenue(BaseModel):
     revenue: float
 
 
+class MonthlyDailySale(BaseModel):
+    date:    str
+    revenue: float
+    walk_in: float
+    online:  float
+    orders:  int
+
+
 class ShopAnalytics(BaseModel):
-    today_sales:      float
-    today_orders:     int
-    total_products:   int
-    low_stock_items:  List[LowStockItem]
-    daily_sales:      List[DailySale]
-    category_revenue: List[CategoryRevenue]
-    top_products:     List[TopProduct]
-    monthly_revenue:  List[MonthlyRevenue]
-    orders_by_status: Dict[str, int]
+    today_sales:         float
+    today_orders:        int
+    total_products:      int
+    low_stock_items:     List[LowStockItem]
+    daily_sales:         List[DailySale]
+    category_revenue:    List[CategoryRevenue]
+    top_products:        List[TopProduct]
+    monthly_revenue:     List[MonthlyRevenue]
+    orders_by_status:    Dict[str, int]
+    monthly_daily_sales: List[MonthlyDailySale] = []
 
 
 # ── Pagination ────────────────────────────────────────────────────────────────
@@ -418,3 +460,138 @@ class ResetPasswordRequest(BaseModel):
         if len(v) < 6:
             raise ValueError("Password must be at least 6 characters")
         return v
+
+
+# ── Suppliers ────────────────────────────────────────────────────────
+
+class SupplierCreate(BaseModel):
+    name:           str
+    contact_person: Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+    address:        Optional[str] = None
+    gst_number:     Optional[str] = None
+
+
+class SupplierUpdate(BaseModel):
+    name:           Optional[str] = None
+    contact_person: Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+    address:        Optional[str] = None
+    gst_number:     Optional[str] = None
+
+
+class SupplierOut(OrmBase):
+    id:             int
+    shop_id:        int
+    name:           str
+    contact_person: Optional[str] = None
+    phone:          Optional[str] = None
+    email:          Optional[str] = None
+    address:        Optional[str] = None
+    gst_number:     Optional[str] = None
+    created_at:     datetime
+
+
+# ── Purchase Orders ──────────────────────────────────────────────────
+
+class POItemIn(BaseModel):
+    product_id: int
+    name:       str
+    price:      float
+    quantity:   int
+
+
+class POCreate(BaseModel):
+    supplier_id: int
+    items:       List[POItemIn]
+    notes:       Optional[str] = None
+
+
+class POItemOut(OrmBase):
+    id:         int
+    product_id: int
+    name:       str
+    price:      float
+    quantity:   int
+
+
+class POOut(OrmBase):
+    id:           int
+    shop_id:      int
+    supplier_id:  int
+    total_amount: float
+    status:       PurchaseOrderStatus
+    notes:        Optional[str] = None
+    items:        List[POItemOut] = []
+    created_at:   datetime
+
+
+class POStatusUpdate(BaseModel):
+    status: PurchaseOrderStatus
+
+
+# ── Discounts ────────────────────────────────────────────────────────
+
+class ProductDiscountCreate(BaseModel):
+    product_id:     int
+    product_name:   Optional[str]      = None
+    type:           DiscountType
+    buy_qty:        Optional[int]      = None
+    get_qty:        Optional[int]      = None
+    bulk_price:     Optional[float]    = None
+    discount_value: Optional[float]    = None
+    valid_till:     Optional[datetime] = None
+
+
+class ProductDiscountOut(OrmBase):
+    id:             int
+    shop_id:        int
+    product_id:     int
+    product_name:   Optional[str] = None
+    type:           DiscountType
+    buy_qty:        Optional[int]   = None
+    get_qty:        Optional[int]   = None
+    bulk_price:     Optional[float] = None
+    discount_value: Optional[float] = None
+    status:         str
+    valid_till:     Optional[datetime] = None
+    created_at:     datetime
+
+
+class OrderDiscountCreate(BaseModel):
+    min_bill_value: float
+    discount_type:  DiscountAmountType = DiscountAmountType.percentage
+    discount_value: float
+    valid_till:     Optional[datetime] = None
+
+
+class OrderDiscountOut(OrmBase):
+    id:             int
+    shop_id:        int
+    min_bill_value: float
+    discount_type:  DiscountAmountType
+    discount_value: float
+    status:         str
+    valid_till:     Optional[datetime] = None
+    created_at:     datetime
+
+
+# ── Bulk Stock Adjustment ────────────────────────────────────────────
+
+class StockAdjustmentItem(BaseModel):
+    product_id:          int
+    stock:               Optional[int] = None
+    low_stock_threshold: Optional[int] = None
+    expiry_date:         Optional[str] = None   # date string "YYYY-MM-DD", "" to clear
+
+
+class BulkStockAdjustment(BaseModel):
+    items: List[StockAdjustmentItem]
+
+
+# ── Multi-location ──────────────────────────────────────────────────
+
+class MultiLocationUpdate(BaseModel):
+    multi_location_enabled: int

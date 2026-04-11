@@ -60,7 +60,7 @@ export const deleteProduct = (shopId, productId)       => api.delete(`/shops/${s
 export const placeOrder        = (data)             => api.post('/orders', data);
 export const placeWalkinOrder  = (shopId, data)     => api.post(`/shops/${shopId}/walkin-order`, data);
 export const getMyOrders       = (page = 1)         => api.get('/orders/me', { params: { page } });
-export const getShopOrders     = (shopId, page = 1) => api.get(`/shops/${shopId}/orders`, { params: { page } });
+export const getShopOrders     = (shopId, page = 1, params = {}) => api.get(`/shops/${shopId}/orders`, { params: { page, ...params } });
 export const updateOrderStatus = (orderId, status)  => api.patch(`/orders/${orderId}/status`, { status });
 export const cancelOrder       = (orderId)          => api.post(`/orders/${orderId}/cancel`);
 
@@ -105,3 +105,43 @@ export const generateDescription= (name, category)             => api.post('/ai/
 export const getLowStockInsight = (shop_name, low_stock_items) => api.post('/ai/low-stock-insight',   { shop_name, low_stock_items });
 export const aiSalesForecast    = (shop_id)                    => api.post('/ai/sales-forecast',      { shop_id });
 export const aiChat             = (message, shop_id, role, history) => api.post('/ai/chat', { message, shop_id, role, history });
+
+// ── Suppliers ────────────────────────────────────────────────────
+
+export const listSuppliers   = (shopId)           => api.get(`/shops/${shopId}/suppliers`);
+export const createSupplier  = (shopId, data)     => api.post(`/shops/${shopId}/suppliers`, data);
+export const updateSupplier  = (shopId, id, data) => api.patch(`/shops/${shopId}/suppliers/${id}`, data);
+export const deleteSupplier  = (shopId, id)       => api.delete(`/shops/${shopId}/suppliers/${id}`);
+
+// ── Purchase Orders ──────────────────────────────────────────────
+
+export const listPurchaseOrders  = (shopId)             => api.get(`/shops/${shopId}/purchase-orders`);
+export const createPurchaseOrder = (shopId, data)       => api.post(`/shops/${shopId}/purchase-orders`, data);
+export const getPurchaseOrder    = (shopId, id)         => api.get(`/shops/${shopId}/purchase-orders/${id}`);
+export const updatePOStatus      = (shopId, id, status) => api.patch(`/shops/${shopId}/purchase-orders/${id}/status`, { status });
+
+// ── Product Discounts ────────────────────────────────────────────
+
+export const listProductDiscounts  = (shopId)           => api.get(`/shops/${shopId}/product-discounts`);
+export const createProductDiscount = (shopId, data)     => api.post(`/shops/${shopId}/product-discounts`, data);
+export const updateProductDiscount = (shopId, id, data) => api.patch(`/shops/${shopId}/product-discounts/${id}`, data);
+export const deleteProductDiscount = (shopId, id)       => api.delete(`/shops/${shopId}/product-discounts/${id}`);
+
+// ── Order Discounts ──────────────────────────────────────────────
+
+export const listOrderDiscounts  = (shopId)           => api.get(`/shops/${shopId}/order-discounts`);
+export const createOrderDiscount = (shopId, data)     => api.post(`/shops/${shopId}/order-discounts`, data);
+export const updateOrderDiscount = (shopId, id, data) => api.patch(`/shops/${shopId}/order-discounts/${id}`, data);
+export const deleteOrderDiscount = (shopId, id)       => api.delete(`/shops/${shopId}/order-discounts/${id}`);
+
+// ── Combined Discounts (public) ──────────────────────────────────
+
+export const getShopDiscounts = (shopId) => api.get(`/shops/${shopId}/discounts`);
+
+// ── Bulk Stock Adjustment ────────────────────────────────────────
+
+export const bulkUpdateProducts = (shopId, items) => api.patch(`/shops/${shopId}/products/bulk-update`, { items });
+
+// ── Multi-location Toggle ────────────────────────────────────────
+
+export const toggleMultiLocation = (userId, enabled) => api.patch(`/users/${userId}/multi-location`, { multi_location_enabled: enabled ? 1 : 0 });

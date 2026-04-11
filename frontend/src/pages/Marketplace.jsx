@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview } from '../api/client';
+import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview, getShopDiscounts } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -83,29 +83,40 @@ const CAT_EMOJI = {
 
 // ── Shop Card ──────────────────────────────────────────────────────
 function ShopCard({ shop, onClick }) {
+  const isOpen = shop.is_open !== 0;
   return (
     <motion.div
-      whileHover={{ y: -3, shadow: 'lg' }}
+      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className="flex-shrink-0 w-40 sm:w-48 bg-white border border-[#1A1A1A]/5 rounded-2xl overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all group"
+      className={`flex-shrink-0 w-40 sm:w-48 bg-white border rounded-2xl overflow-hidden cursor-pointer shadow-sm transition-all group ${isOpen ? 'border-[#1A1A1A]/5 hover:shadow-lg' : 'border-[#1A1A1A]/8 opacity-70 hover:opacity-90'}`}
     >
       {/* Image */}
       <div className="aspect-[4/3] bg-[#F5F5F0] relative overflow-hidden">
         {shop.logo
-          ? <img src={shop.logo} alt={shop.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+          ? <img src={shop.logo} alt={shop.name} className={`w-full h-full object-cover transition-transform duration-500 ${isOpen ? 'group-hover:scale-105' : 'grayscale-[40%]'}`} referrerPolicy="no-referrer" />
           : <div className="w-full h-full flex items-center justify-center"><Store size={28} className="text-[#5A5A40]/20" /></div>
         }
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-        {/* OPEN badge */}
-        <div className="absolute top-2 left-2 bg-white/92 backdrop-blur-sm px-2 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest border border-[#1A1A1A]/5 text-emerald-600 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />OPEN
-        </div>
+        {/* OPEN / CLOSED badge */}
+        {isOpen ? (
+          <div className="absolute top-2 left-2 bg-white/92 backdrop-blur-sm px-2 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest border border-[#1A1A1A]/5 text-emerald-600 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />OPEN
+          </div>
+        ) : (
+          <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest text-white flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />CLOSED
+          </div>
+        )}
         {/* Category */}
         <div className="absolute top-2 right-2 bg-white/92 backdrop-blur-sm px-1.5 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest border border-[#1A1A1A]/5 max-w-[60px] truncate">
           {shop.category}
         </div>
+        {/* Closed overlay */}
+        {!isOpen && (
+          <div className="absolute inset-0 bg-black/10" />
+        )}
       </div>
 
       {/* Body */}
@@ -124,7 +135,10 @@ function ShopCard({ shop, onClick }) {
             <Phone size={12} className="text-[#5A5A40]/60" />
             <MessageCircle size={12} className="text-[#5A5A40]/60" />
           </div>
-          <span className="text-[9px] font-bold text-white bg-[#5A5A40] px-3 py-1 rounded-lg">Shop</span>
+          {isOpen
+            ? <span className="text-[9px] font-bold text-white bg-[#5A5A40] px-3 py-1 rounded-lg">Shop</span>
+            : <span className="text-[9px] font-bold text-[#1A1A1A]/40 bg-[#F5F5F0] px-3 py-1 rounded-lg border border-[#1A1A1A]/8">View</span>
+          }
         </div>
       </div>
     </motion.div>
@@ -132,7 +146,7 @@ function ShopCard({ shop, onClick }) {
 }
 
 // ── Product Card ───────────────────────────────────────────────────
-function ProductCard({ product, cartQty, onAdd, onUpdateQty }) {
+function ProductCard({ product, cartQty, onAdd, onUpdateQty, offerLabel, shopClosed }) {
   const hasDiscount = product.mrp > product.price;
   const discountPct = hasDiscount ? Math.round((1 - product.price / product.mrp) * 100) : 0;
 
@@ -143,10 +157,16 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty }) {
           ? <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
           : <div className="w-full h-full flex items-center justify-center text-[#5A5A40]/10"><Package size={28} /></div>
         }
-        {/* Discount badge */}
+        {/* Price discount badge */}
         {hasDiscount && (
           <div className="absolute top-1.5 left-1.5 bg-[#FF3269] text-white text-[7px] font-bold px-1.5 py-0.5 rounded-full leading-none">
             {discountPct}% off
+          </div>
+        )}
+        {/* Offer badge */}
+        {offerLabel && (
+          <div className="absolute bottom-8 left-1.5 bg-green-500 text-white text-[7px] font-bold px-1.5 py-0.5 rounded-full leading-none uppercase">
+            {offerLabel}
           </div>
         )}
         {/* Unit badge */}
@@ -154,7 +174,7 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty }) {
           {product.unit}
         </div>
         {/* Add / Qty control */}
-        {cartQty > 0 ? (
+        {!shopClosed && cartQty > 0 ? (
           <div className="absolute bottom-2 right-2 flex items-center gap-0.5 bg-[#5A5A40] rounded-lg px-1 py-0.5 shadow-md">
             <button onClick={e => { e.stopPropagation(); onUpdateQty(product.id, cartQty - 1); }}
               className="text-white w-5 h-5 flex items-center justify-center font-bold text-sm">&#8722;</button>
@@ -162,12 +182,12 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty }) {
             <button onClick={e => { e.stopPropagation(); onUpdateQty(product.id, cartQty + 1); }}
               className="text-white w-5 h-5 flex items-center justify-center font-bold text-sm">&#43;</button>
           </div>
-        ) : (
+        ) : !shopClosed ? (
           <button onClick={e => { e.stopPropagation(); onAdd(); }}
             className="absolute bottom-2 right-2 bg-white text-[#FF3269] border border-[#FF3269]/20 px-2.5 py-1 rounded-lg text-[9px] font-bold shadow-sm hover:bg-[#FF3269] hover:text-white active:scale-95 transition-all uppercase">
             ADD
           </button>
-        )}
+        ) : null}
       </div>
       <div className="flex flex-col gap-0.5 flex-1">
         <div className="flex items-baseline gap-1">
@@ -196,6 +216,7 @@ function ShopProductsView({ shop, onBack }) {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [productDiscounts, setProductDiscounts] = useState([]);
 
   useEffect(() => {
     listProducts(shop.id)
@@ -205,7 +226,19 @@ function ShopProductsView({ shop, onBack }) {
     getShopReviews(shop.id)
       .then(r => setReviews(r.data))
       .catch(() => {});
+    getShopDiscounts(shop.id)
+      .then(r => setProductDiscounts(r.data.product_discounts || []))
+      .catch(() => {});
   }, [shop.id]);
+
+  const getOfferLabel = (productId) => {
+    const d = productDiscounts.find(d => d.product_id === productId && d.status === 'active' && (!d.valid_till || new Date(d.valid_till) >= new Date()));
+    if (!d) return null;
+    if (d.type === 'bogo') return 'BOGO';
+    if (d.type === 'buy_x_get_y') return `B${d.buy_qty}G${d.get_qty}`;
+    if (d.type === 'bulk_price') return 'Bulk Deal';
+    return 'Offer';
+  };
 
   const shopCartItems = cart.shopId === shop.id ? cart.items : [];
   const shopTotal     = shopCartItems.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -221,7 +254,10 @@ function ShopProductsView({ shop, onBack }) {
     return products.filter(p => p.category === activeFilter);
   }, [products, activeFilter, t]);
 
+  const shopIsOpen = shop.is_open !== 0;
+
   const handleAddToCart = product => {
+    if (!shopIsOpen) return;
     if (cart.shopId && cart.shopId !== shop.id) {
       if (!window.confirm(`${t('messages.cartHasItems')} ${shop.name}?`)) return;
       clearCart();
@@ -282,6 +318,15 @@ function ShopProductsView({ shop, onBack }) {
             </p>
             <div className="flex gap-2 flex-wrap">
               <span className="bg-white/15 text-white/80 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest">{shop.category}</span>
+              {shopIsOpen ? (
+                <span className="bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Open Now
+                </span>
+              ) : (
+                <span className="bg-red-500/30 text-red-200 border border-red-400/30 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />Closed
+                </span>
+              )}
               {shop.timings && (
                 <span className="bg-white/15 text-white/80 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
                   <Clock size={9} />{shop.timings}
@@ -291,6 +336,21 @@ function ShopProductsView({ shop, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* Closed shop notice */}
+      {!shopIsOpen && (
+        <div className="max-w-7xl mx-auto px-4 mb-4">
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Store size={16} className="text-red-500" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-red-800">This shop is currently closed</p>
+              <p className="text-xs text-red-600 mt-0.5">You can browse products but cannot place orders right now.{shop.timings ? ` Opens: ${shop.timings}` : ''}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4">
         {/* Category filter pills */}
@@ -316,7 +376,9 @@ function ShopProductsView({ shop, onBack }) {
                     <ProductCard key={product.id} product={product}
                       cartQty={cartItem?.quantity || 0}
                       onAdd={() => handleAddToCart(product)}
-                      onUpdateQty={(id, qty) => updateQuantity(id, qty)} />
+                      onUpdateQty={(id, qty) => shopIsOpen ? updateQuantity(id, qty) : null}
+                      offerLabel={getOfferLabel(product.id)}
+                      shopClosed={!shopIsOpen} />
                   );
                 })
               : (

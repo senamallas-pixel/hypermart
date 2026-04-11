@@ -24,6 +24,9 @@ from sqlalchemy import func, and_, text
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before ai.py reads OPENAI_API_KEY
+
 import models as M
 import schemas as S
 from database import get_db, create_tables
@@ -65,6 +68,19 @@ def startup():
     with engine.connect() as conn:
         for stmt in [
             "ALTER TABLE products ADD COLUMN description TEXT",
+            # Phase 1 migrations — new columns on existing tables
+            "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 10",
+            "ALTER TABLE products ADD COLUMN expiry_date DATETIME",
+            "ALTER TABLE shops ADD COLUMN delivery_radius FLOAT",
+            "ALTER TABLE shops ADD COLUMN pincode VARCHAR(10)",
+            "ALTER TABLE shops ADD COLUMN city VARCHAR(100)",
+            "ALTER TABLE shops ADD COLUMN state VARCHAR(100)",
+            "ALTER TABLE users ADD COLUMN multi_location_enabled INTEGER DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN subtotal FLOAT",
+            "ALTER TABLE orders ADD COLUMN item_discounts FLOAT DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN bill_discount FLOAT DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN total_discount FLOAT DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN order_type VARCHAR(20) DEFAULT 'online'",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -191,9 +207,15 @@ def register(payload: S.RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
 
-    # Owners get a pending subscription record automatically
+    # Owners get a free 1-month active subscription on registration
     if role == M.UserRole.owner:
-        db.add(M.Subscription(user_id=user.id))
+        now = datetime.utcnow()
+        db.add(M.Subscription(
+            user_id=user.id,
+            status=M.SubscriptionStatus.active,
+            starts_at=now,
+            expires_at=now + timedelta(days=30),
+        ))
 
     db.commit()
     db.refresh(user)
@@ -546,6 +568,41 @@ def create_product(
     return product
 
 
+@app.patch("/shops/{shop_id}/products/bulk-update")
+def bulk_update_products(
+    shop_id: int,
+    payload: S.BulkStockAdjustment,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    updated = 0
+    for item in payload.items:
+        product = db.query(M.Product).filter(
+            M.Product.id == item.product_id, M.Product.shop_id == shop_id
+        ).first()
+        if not product:
+            continue
+        if item.stock is not None:
+            product.stock = item.stock
+        if item.low_stock_threshold is not None:
+            product.low_stock_threshold = item.low_stock_threshold
+        if item.expiry_date is not None:
+            if item.expiry_date == "":
+                product.expiry_date = None
+            else:
+                try:
+                    product.expiry_date = datetime.fromisoformat(item.expiry_date)
+                except (ValueError, TypeError):
+                    pass
+        updated += 1
+    db.commit()
+    return {"updated": updated}
+
+
 @app.patch("/shops/{shop_id}/products/{product_id}", response_model=S.ProductOut)
 def update_product(
     shop_id: int,
@@ -617,12 +674,18 @@ def place_order(
         )
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
+    final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
     order = M.Order(
         shop_id=shop.id,
         shop_name=shop.name,
         customer_id=current_user.id,
         items=order_items,
-        total=round(total, 2),
+        total=max(final_total, 0),
+        subtotal=round(total, 2),
+        item_discounts=payload.item_discounts or 0,
+        bill_discount=payload.bill_discount or 0,
+        total_discount=payload.total_discount or 0,
+        order_type="online",
         delivery_address=payload.delivery_address,
     )
     db.add(order)
@@ -649,6 +712,9 @@ def list_shop_orders(
     shop_id: int,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    order_type: Optional[str] = None,
     current_user: M.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -657,6 +723,12 @@ def list_shop_orders(
         raise HTTPException(404, "Shop not found")
     _assert_shop_ownership(shop, current_user)
     q = db.query(M.Order).filter(M.Order.shop_id == shop_id)
+    if date_from:
+        q = q.filter(func.date(M.Order.created_at) >= date_from)
+    if date_to:
+        q = q.filter(func.date(M.Order.created_at) <= date_to)
+    if order_type and order_type != "all":
+        q = q.filter(M.Order.order_type == order_type)
     total = q.count()
     items = q.order_by(M.Order.created_at.desc()).offset((page - 1) * size).limit(size).all()
     return {"items": items, "total": total, "page": page, "size": size}
@@ -881,16 +953,61 @@ def shop_analytics(
         for s, cnt in status_rows
     }
 
+    # Monthly daily sales — every day of the current month, split by walk-in / online
+    month_start = date.today().replace(day=1).isoformat()
+    month_end   = date.today().isoformat()
+    mds_rows = (
+        db.query(
+            func.date(M.Order.created_at).label("day"),
+            M.Order.order_type,
+            func.sum(M.Order.total).label("revenue"),
+            func.count(M.Order.id).label("cnt"),
+        )
+        .filter(
+            M.Order.shop_id == shop_id,
+            func.date(M.Order.created_at) >= month_start,
+            func.date(M.Order.created_at) <= month_end,
+        )
+        .group_by(func.date(M.Order.created_at), M.Order.order_type)
+        .all()
+    )
+    mds_map = {}  # date_str -> {revenue, walk_in, online, orders}
+    for r in mds_rows:
+        d = r.day
+        if d not in mds_map:
+            mds_map[d] = {"date": d, "revenue": 0.0, "walk_in": 0.0, "online": 0.0, "orders": 0}
+        rev = round(float(r.revenue or 0), 2)
+        cnt = int(r.cnt or 0)
+        mds_map[d]["revenue"] += rev
+        mds_map[d]["orders"]  += cnt
+        otype = r.order_type or "online"
+        if otype == "walkin":
+            mds_map[d]["walk_in"] += rev
+        else:
+            mds_map[d]["online"] += rev
+
+    # Fill in every day of the current month up to today
+    monthly_daily_sales = []
+    cur = date.today().replace(day=1)
+    while cur <= date.today():
+        d_str = cur.isoformat()
+        if d_str in mds_map:
+            monthly_daily_sales.append(mds_map[d_str])
+        else:
+            monthly_daily_sales.append({"date": d_str, "revenue": 0.0, "walk_in": 0.0, "online": 0.0, "orders": 0})
+        cur += timedelta(days=1)
+
     return {
-        "today_sales":      round(sum(o.total for o in today_orders), 2),
-        "today_orders":     len(today_orders),
-        "total_products":   db.query(M.Product).filter(M.Product.shop_id == shop_id).count(),
-        "low_stock_items":  [{"name": r.name, "stock": r.stock} for r in low_stock],
-        "daily_sales":      daily_sales,
-        "category_revenue": category_revenue,
-        "top_products":     top_products,
-        "monthly_revenue":  monthly_revenue,
-        "orders_by_status": orders_by_status,
+        "today_sales":         round(sum(o.total for o in today_orders), 2),
+        "today_orders":        len(today_orders),
+        "total_products":      db.query(M.Product).filter(M.Product.shop_id == shop_id).count(),
+        "low_stock_items":     [{"name": r.name, "stock": r.stock} for r in low_stock],
+        "daily_sales":         daily_sales,
+        "category_revenue":    category_revenue,
+        "top_products":        top_products,
+        "monthly_revenue":     monthly_revenue,
+        "orders_by_status":    orders_by_status,
+        "monthly_daily_sales": monthly_daily_sales,
     }
 
 
@@ -944,10 +1061,16 @@ def walkin_order(
         ))
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
+    final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
     order = M.Order(
         shop_id=shop.id,       shop_name=shop.name,
         customer_id=current_user.id,
-        items=order_items,     total=round(total, 2),
+        items=order_items,     total=max(final_total, 0),
+        subtotal=round(total, 2),
+        item_discounts=payload.item_discounts or 0,
+        bill_discount=payload.bill_discount or 0,
+        total_discount=payload.total_discount or 0,
+        order_type="walkin",
         status=M.OrderStatus.delivered,
         payment_status=M.PaymentStatus.paid,
         delivery_address="In-Store (Walk-in)",
@@ -1232,6 +1355,397 @@ def search_products(
         ],
         "total": total, "page": page, "size": size,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SUPPLIERS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/suppliers", response_model=List[S.SupplierOut])
+def list_suppliers(
+    shop_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    return db.query(M.Supplier).filter(M.Supplier.shop_id == shop_id).order_by(M.Supplier.name).all()
+
+
+@app.post("/shops/{shop_id}/suppliers", response_model=S.SupplierOut, status_code=201)
+def create_supplier(
+    shop_id: int,
+    payload: S.SupplierCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    supplier = M.Supplier(shop_id=shop_id, **payload.model_dump())
+    db.add(supplier)
+    db.commit()
+    db.refresh(supplier)
+    return supplier
+
+
+@app.patch("/shops/{shop_id}/suppliers/{supplier_id}", response_model=S.SupplierOut)
+def update_supplier(
+    shop_id: int, supplier_id: int,
+    payload: S.SupplierUpdate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    supplier = db.query(M.Supplier).filter(M.Supplier.id == supplier_id, M.Supplier.shop_id == shop_id).first()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(supplier, field, value)
+    db.commit()
+    db.refresh(supplier)
+    return supplier
+
+
+@app.delete("/shops/{shop_id}/suppliers/{supplier_id}", status_code=204)
+def delete_supplier(
+    shop_id: int, supplier_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    supplier = db.query(M.Supplier).filter(M.Supplier.id == supplier_id, M.Supplier.shop_id == shop_id).first()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+    db.delete(supplier)
+    db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PURCHASE ORDERS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/purchase-orders", response_model=List[S.POOut])
+def list_purchase_orders(
+    shop_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    return (
+        db.query(M.PurchaseOrder)
+        .filter(M.PurchaseOrder.shop_id == shop_id)
+        .order_by(M.PurchaseOrder.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/shops/{shop_id}/purchase-orders", response_model=S.POOut, status_code=201)
+def create_purchase_order(
+    shop_id: int,
+    payload: S.POCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    supplier = db.query(M.Supplier).filter(M.Supplier.id == payload.supplier_id, M.Supplier.shop_id == shop_id).first()
+    if not supplier:
+        raise HTTPException(404, "Supplier not found")
+    total = sum(item.price * item.quantity for item in payload.items)
+    po = M.PurchaseOrder(
+        shop_id=shop_id, supplier_id=payload.supplier_id,
+        total_amount=round(total, 2), notes=payload.notes,
+    )
+    for item in payload.items:
+        po.items.append(M.PurchaseOrderItem(
+            product_id=item.product_id, name=item.name,
+            price=item.price, quantity=item.quantity,
+        ))
+    db.add(po)
+    db.commit()
+    db.refresh(po)
+    return po
+
+
+@app.get("/shops/{shop_id}/purchase-orders/{po_id}", response_model=S.POOut)
+def get_purchase_order(
+    shop_id: int, po_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    po = db.query(M.PurchaseOrder).filter(M.PurchaseOrder.id == po_id, M.PurchaseOrder.shop_id == shop_id).first()
+    if not po:
+        raise HTTPException(404, "Purchase order not found")
+    return po
+
+
+@app.patch("/shops/{shop_id}/purchase-orders/{po_id}/status", response_model=S.POOut)
+def update_po_status(
+    shop_id: int, po_id: int,
+    payload: S.POStatusUpdate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    po = db.query(M.PurchaseOrder).filter(M.PurchaseOrder.id == po_id, M.PurchaseOrder.shop_id == shop_id).first()
+    if not po:
+        raise HTTPException(404, "Purchase order not found")
+    po.status = payload.status
+    # Auto-increment stock when PO is received
+    if payload.status == M.PurchaseOrderStatus.received:
+        for po_item in po.items:
+            product = db.get(M.Product, po_item.product_id)
+            if product:
+                product.stock += po_item.quantity
+    db.commit()
+    db.refresh(po)
+    return po
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PRODUCT DISCOUNTS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/product-discounts", response_model=List[S.ProductDiscountOut])
+def list_product_discounts(
+    shop_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    return (
+        db.query(M.ProductDiscount)
+        .filter(M.ProductDiscount.shop_id == shop_id)
+        .order_by(M.ProductDiscount.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/shops/{shop_id}/product-discounts", response_model=S.ProductDiscountOut, status_code=201)
+def create_product_discount(
+    shop_id: int,
+    payload: S.ProductDiscountCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    product = _get_product_or_404(db, shop_id, payload.product_id)
+    discount = M.ProductDiscount(
+        shop_id=shop_id,
+        product_name=payload.product_name or product.name,
+        **payload.model_dump(exclude={"product_name"}),
+    )
+    db.add(discount)
+    db.commit()
+    db.refresh(discount)
+    return discount
+
+
+@app.patch("/shops/{shop_id}/product-discounts/{discount_id}", response_model=S.ProductDiscountOut)
+def update_product_discount(
+    shop_id: int, discount_id: int,
+    payload: S.ProductDiscountCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    discount = db.query(M.ProductDiscount).filter(
+        M.ProductDiscount.id == discount_id, M.ProductDiscount.shop_id == shop_id
+    ).first()
+    if not discount:
+        raise HTTPException(404, "Discount not found")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(discount, field, value)
+    db.commit()
+    db.refresh(discount)
+    return discount
+
+
+@app.delete("/shops/{shop_id}/product-discounts/{discount_id}", status_code=204)
+def delete_product_discount(
+    shop_id: int, discount_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    discount = db.query(M.ProductDiscount).filter(
+        M.ProductDiscount.id == discount_id, M.ProductDiscount.shop_id == shop_id
+    ).first()
+    if not discount:
+        raise HTTPException(404, "Discount not found")
+    db.delete(discount)
+    db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ORDER / BILL DISCOUNTS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/order-discounts", response_model=List[S.OrderDiscountOut])
+def list_order_discounts(
+    shop_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    return (
+        db.query(M.OrderDiscount)
+        .filter(M.OrderDiscount.shop_id == shop_id)
+        .order_by(M.OrderDiscount.min_bill_value)
+        .all()
+    )
+
+
+@app.post("/shops/{shop_id}/order-discounts", response_model=S.OrderDiscountOut, status_code=201)
+def create_order_discount(
+    shop_id: int,
+    payload: S.OrderDiscountCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    discount = M.OrderDiscount(shop_id=shop_id, **payload.model_dump())
+    db.add(discount)
+    db.commit()
+    db.refresh(discount)
+    return discount
+
+
+@app.patch("/shops/{shop_id}/order-discounts/{discount_id}", response_model=S.OrderDiscountOut)
+def update_order_discount(
+    shop_id: int, discount_id: int,
+    payload: S.OrderDiscountCreate,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    discount = db.query(M.OrderDiscount).filter(
+        M.OrderDiscount.id == discount_id, M.OrderDiscount.shop_id == shop_id
+    ).first()
+    if not discount:
+        raise HTTPException(404, "Discount not found")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(discount, field, value)
+    db.commit()
+    db.refresh(discount)
+    return discount
+
+
+@app.delete("/shops/{shop_id}/order-discounts/{discount_id}", status_code=204)
+def delete_order_discount(
+    shop_id: int, discount_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    discount = db.query(M.OrderDiscount).filter(
+        M.OrderDiscount.id == discount_id, M.OrderDiscount.shop_id == shop_id
+    ).first()
+    if not discount:
+        raise HTTPException(404, "Discount not found")
+    db.delete(discount)
+    db.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# COMBINED DISCOUNTS (public — for customer checkout)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/discounts")
+def get_shop_discounts(shop_id: int, db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    product_discounts = (
+        db.query(M.ProductDiscount)
+        .filter(
+            M.ProductDiscount.shop_id == shop_id,
+            M.ProductDiscount.status == "active",
+        )
+        .all()
+    )
+    order_discounts = (
+        db.query(M.OrderDiscount)
+        .filter(
+            M.OrderDiscount.shop_id == shop_id,
+            M.OrderDiscount.status == "active",
+        )
+        .all()
+    )
+    # Filter expired
+    pd_out = [S.ProductDiscountOut.model_validate(d) for d in product_discounts if not d.valid_till or d.valid_till > now]
+    od_out = [S.OrderDiscountOut.model_validate(d) for d in order_discounts if not d.valid_till or d.valid_till > now]
+    return {"product_discounts": pd_out, "order_discounts": od_out}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# BULK STOCK ADJUSTMENT
+# ═══════════════════════════════════════════════════════════════════
+
+
+
+# ═══════════════════════════════════════════════════════════════════
+# MULTI-LOCATION TOGGLE (admin only)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.patch("/users/{user_id}/multi-location")
+def toggle_multi_location(
+    user_id: int,
+    payload: S.MultiLocationUpdate,
+    current_user: M.User = Depends(require_role(M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    user = db.get(M.User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.multi_location_enabled = payload.multi_location_enabled
+    db.commit()
+    db.refresh(user)
+    return S.UserOut.model_validate(user)
 
 
 # ── Private helpers ──────────────────────────────────────────────────────────

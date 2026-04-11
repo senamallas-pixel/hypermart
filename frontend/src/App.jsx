@@ -1,16 +1,16 @@
 ﻿// src/App.jsx — Root component: auth, nav, cart, shell
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
-  Search, Package, CheckCircle2, Eye, EyeOff, Phone,
+  Search, Package, CheckCircle2, Eye, EyeOff, Phone, Tag, Percent,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
-import { login, register, placeOrder } from './api/client';
+import { login, register, placeOrder, forgotPassword, getShopDiscounts } from './api/client';
 import Marketplace        from './pages/Marketplace';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
@@ -59,6 +59,9 @@ function SignIn() {
   const [showPw, setShowPw]   = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [showForgot, setShowForgot]   = useState(false);
+  const [forgotMsg, setForgotMsg]     = useState('');
 
   // Login fields
   const [email, setEmail]     = useState('');
@@ -151,6 +154,9 @@ function SignIn() {
                   className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
                   {loading ? <><Loader2 size={16} className="animate-spin" /> Signing in&hellip;</> : <>Sign In <ArrowRight size={16} /></>}
                 </button>
+                <button onClick={() => setShowForgot(true)} className="w-full text-center text-xs text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors py-1">
+                  Forgot password?
+                </button>
                 <div className="flex items-center gap-3 my-1">
                   <div className="flex-1 h-px bg-[#1A1A1A]/8" /><span className="text-[10px] font-bold text-[#1A1A1A]/25 uppercase tracking-widest">Quick demo</span><div className="flex-1 h-px bg-[#1A1A1A]/8" />
                 </div>
@@ -214,6 +220,38 @@ function SignIn() {
           </div>
         </div>
       </motion.div>
+
+      {/* Forgot Password Modal */}
+      {showForgot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowForgot(false)}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="font-serif text-xl font-bold mb-2">Reset Password</h3>
+            <p className="text-sm text-[#1A1A1A]/50 mb-4">Enter your email and we'll send a reset link.</p>
+            <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3"
+              placeholder="Email address" type="email" value={forgotEmail}
+              onChange={e => { setForgotEmail(e.target.value); setForgotMsg(''); }} />
+            {forgotMsg && <p className="text-xs text-emerald-600 font-semibold mb-3 px-1">{forgotMsg}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => setShowForgot(false)}
+                className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0]">
+                Cancel
+              </button>
+              <button onClick={async () => {
+                  if (!forgotEmail) return;
+                  try {
+                    await forgotPassword(forgotEmail.trim());
+                    setForgotMsg('If this email exists, a reset link has been sent. Check console in dev.');
+                  } catch { setForgotMsg('Something went wrong.'); }
+                }}
+                className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold hover:bg-[#4A4A30] transition-all">
+                Send Reset
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
@@ -383,6 +421,77 @@ function CartPage() {
   const [placing, setPlacing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
   const [showInvoice, setShowInvoice] = useState(false);
+  const [productDiscounts, setProductDiscounts] = useState([]);
+  const [orderDiscounts, setOrderDiscounts] = useState([]);
+
+  useEffect(() => {
+    if (!cart.shopId) return;
+    getShopDiscounts(cart.shopId)
+      .then(r => {
+        setProductDiscounts(r.data.product_discounts || []);
+        setOrderDiscounts(r.data.order_discounts || []);
+      })
+      .catch(() => {});
+  }, [cart.shopId]);
+
+  const isOfferValid = (validTill) => !validTill || new Date(validTill) >= new Date();
+
+  const calculations = useMemo(() => {
+    let subtotal = 0;
+    let itemDiscounts = 0;
+
+    cart.items.forEach(item => {
+      const itemTotal = item.price * item.quantity;
+      subtotal += itemTotal;
+
+      const discount = productDiscounts.find(d => d.product_id === item.productId && d.status === 'active' && isOfferValid(d.valid_till));
+      if (discount) {
+        if (discount.type === 'bogo') {
+          itemDiscounts += Math.floor(item.quantity / 2) * item.price;
+        } else if (discount.type === 'buy_x_get_y') {
+          const freeQty = Math.floor(item.quantity / ((discount.buy_qty || 1) + (discount.get_qty || 1))) * (discount.get_qty || 1);
+          itemDiscounts += freeQty * item.price;
+        } else if (discount.type === 'bulk_price') {
+          if (item.quantity >= (discount.buy_qty || 1)) {
+            const sets = Math.floor(item.quantity / discount.buy_qty);
+            const remainder = item.quantity % discount.buy_qty;
+            itemDiscounts += (itemTotal - (sets * (discount.bulk_price || 0) + remainder * item.price));
+          }
+        } else if (discount.type === 'individual' && discount.discount_value) {
+          itemDiscounts += (itemTotal * discount.discount_value) / 100;
+        }
+      }
+    });
+
+    const intermediateTotal = subtotal - itemDiscounts;
+    let billDiscount = 0;
+    const applicableOrderDiscount = orderDiscounts
+      .filter(d => d.status === 'active' && intermediateTotal >= d.min_bill_value && isOfferValid(d.valid_till))
+      .sort((a, b) => b.min_bill_value - a.min_bill_value)[0];
+
+    if (applicableOrderDiscount) {
+      billDiscount = applicableOrderDiscount.discount_type === 'percentage'
+        ? (intermediateTotal * applicableOrderDiscount.discount_value) / 100
+        : applicableOrderDiscount.discount_value;
+    }
+
+    const nextDiscount = orderDiscounts
+      .filter(d => d.status === 'active' && intermediateTotal < d.min_bill_value && isOfferValid(d.valid_till))
+      .sort((a, b) => a.min_bill_value - b.min_bill_value)[0];
+
+    const finalTotal = Math.max(0, intermediateTotal - billDiscount);
+
+    return {
+      subtotal: Math.round(subtotal * 100) / 100,
+      itemDiscounts: Math.round(itemDiscounts * 100) / 100,
+      billDiscount: Math.round(billDiscount * 100) / 100,
+      total: Math.round(finalTotal * 100) / 100,
+      appliedOrderDiscount: applicableOrderDiscount,
+      nextDiscount,
+      remainingForNext: nextDiscount ? Math.round((nextDiscount.min_bill_value - intermediateTotal) * 100) / 100 : 0,
+      totalDiscount: Math.round((itemDiscounts + billDiscount) * 100) / 100,
+    };
+  }, [cart.items, productDiscounts, orderDiscounts]);
 
   const handlePlace = async () => {
     if (cart.items.length === 0) return;
@@ -393,6 +502,10 @@ function CartPage() {
         shop_id:          cart.shopId,
         items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
         delivery_address: 'Default Address',
+        subtotal:         calculations.subtotal,
+        item_discounts:   calculations.itemDiscounts,
+        bill_discount:    calculations.billDiscount,
+        total_discount:   calculations.totalDiscount,
       });
       clearCart();
       setPlacedOrder(res.data);
@@ -457,10 +570,13 @@ function CartPage() {
             </div>
           </div>
 
-          {cart.items.map(item => (
+          {cart.items.map(item => {
+            const itemDiscount = productDiscounts.find(d => d.product_id === item.productId && d.status === 'active' && isOfferValid(d.valid_till));
+            return (
             <div key={item.productId} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 flex gap-3 items-center">
-              <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0">
+              <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0 relative">
                 {item.image ? <img src={item.image} className="w-full h-full object-cover" alt={item.name} /> : <Package size={16} className="m-auto mt-4 text-[#5A5A40]/20" />}
+                {itemDiscount && <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[7px] px-1 py-0.5 rounded-full font-bold">{itemDiscount.type === 'bogo' ? 'BOGO' : 'Offer'}</span>}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm truncate">{item.name}</p>
@@ -475,18 +591,44 @@ function CartPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           <div className="bg-white border border-[#1A1A1A]/5 rounded-3xl p-5 space-y-3">
+            {calculations.remainingForNext > 0 && (
+              <div className="bg-[#5A5A40]/5 border border-[#5A5A40]/10 rounded-xl p-3">
+                <p className="text-[10px] font-bold text-[#5A5A40] uppercase tracking-widest text-center">
+                  Add &#8377;{calculations.remainingForNext} more to unlock {calculations.nextDiscount?.discount_type === 'percentage' ? `${calculations.nextDiscount.discount_value}%` : `₹${calculations.nextDiscount?.discount_value}`} OFF!
+                </p>
+              </div>
+            )}
             <div className="flex justify-between text-sm text-[#1A1A1A]/50">
-              <span>Subtotal</span><span className="font-medium">&#8377;{cartTotal}</span>
+              <span>Subtotal</span><span className="font-medium">&#8377;{calculations.subtotal.toFixed(2)}</span>
             </div>
+            {calculations.itemDiscounts > 0 && (
+              <div className="flex justify-between text-sm text-green-600">
+                <span className="flex items-center gap-1"><Tag size={12} /> Item Offers</span>
+                <span className="font-bold">- &#8377;{calculations.itemDiscounts.toFixed(2)}</span>
+              </div>
+            )}
+            {calculations.billDiscount > 0 && (
+              <div className="flex justify-between text-sm text-green-600">
+                <span className="flex items-center gap-1"><Percent size={12} /> Bill Offer</span>
+                <span className="font-bold">- &#8377;{calculations.billDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            {calculations.totalDiscount > 0 && (
+              <div className="flex justify-between text-sm text-red-500 pt-1 border-t border-dashed border-[#1A1A1A]/10">
+                <span className="font-bold text-[10px] uppercase tracking-widest">Total Savings</span>
+                <span className="font-bold">&#8377;{calculations.totalDiscount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm text-[#1A1A1A]/50">
               <span>Delivery</span><span className="text-green-600 font-bold">FREE</span>
             </div>
             <div className="flex justify-between items-center border-t border-[#1A1A1A]/6 pt-3">
               <span className="font-bold uppercase tracking-widest text-xs text-[#1A1A1A]/40">Total</span>
-              <span className="font-serif text-3xl font-bold">&#8377;{cartTotal}</span>
+              <span className="font-serif text-3xl font-bold">&#8377;{calculations.total.toFixed(2)}</span>
             </div>
             <button onClick={handlePlace} disabled={placing}
               className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20 mt-2">

@@ -21,8 +21,11 @@ from passlib.context import CryptContext
 from database import create_tables, drop_tables, get_db_ctx
 from models import (
     User, Shop, Product, Order, OrderItem, Subscription,
+    Supplier, PurchaseOrder, PurchaseOrderItem,
+    ProductDiscount, OrderDiscount,
     UserRole, ShopStatus, ShopCategory, ShopLocation,
     OrderStatus, PaymentStatus, SubscriptionStatus,
+    PurchaseOrderStatus, DiscountType, DiscountAmountType,
 )
 
 pwd_ctx = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -302,11 +305,139 @@ def run(reset: bool = False):
                 ],
             ))
 
+        # ── Set low_stock_threshold and expiry_date on some products ──
+        now = datetime.utcnow()
+        for i, p in enumerate(prod_objs):
+            p.low_stock_threshold = 10
+            if i % 5 == 0:
+                p.expiry_date = now + timedelta(days=15)  # expiring soon
+            elif i % 7 == 0:
+                p.expiry_date = now + timedelta(days=90)
+            if i == 2:
+                p.stock = 5  # low stock item
+                p.low_stock_threshold = 10
+
+        # ── Set delivery_radius, pincode, city, state on shops ──
+        for i, shop in enumerate(shop_objs):
+            shop.delivery_radius = 3.0 + i * 0.5
+            shop.pincode = f"50000{i+1}"
+            shop.city = "Hyderabad"
+            shop.state = "Telangana"
+
+        db.flush()
+
+        # ── Suppliers ──
+        suppliers_data = [
+            dict(shop_idx=0, name="Metro Wholesale", contact_person="Raj Malhotra",
+                 phone="+91-9800000001", email="metro@wholesale.com",
+                 address="Industrial Area, Phase 2", gst_number="29AABCM1234A1Z1"),
+            dict(shop_idx=0, name="Agro Fresh Supplies", contact_person="Suresh Patel",
+                 phone="+91-9800000002", email="agro@fresh.com",
+                 address="Farm Road, Sector 7", gst_number="29AABCA5678B2Z2"),
+            dict(shop_idx=1, name="Nandini Dairy Co-op", contact_person="Lakshmi Devi",
+                 phone="+91-9800000003", email="nandini@dairy.com",
+                 address="Dairy Complex, Milk Lane", gst_number="29AABCN9012C3Z3"),
+            dict(shop_idx=2, name="Flour Power Mills", contact_person="Amit Sharma",
+                 phone="+91-9800000004", email="flour@power.com",
+                 address="Mill Road, Old Town", gst_number="29AABCF3456D4Z4"),
+        ]
+        supplier_objs = []
+        for s in suppliers_data:
+            shop = shop_objs[s.pop("shop_idx")]
+            existing = db.query(Supplier).filter(Supplier.shop_id == shop.id, Supplier.name == s["name"]).first()
+            if not existing:
+                existing = Supplier(shop_id=shop.id, **s)
+                db.add(existing)
+                db.flush()
+            supplier_objs.append(existing)
+
+        # ── Purchase Orders ──
+        if not db.query(PurchaseOrder).first():
+            po1 = PurchaseOrder(
+                shop_id=shop_objs[0].id, supplier_id=supplier_objs[0].id,
+                total_amount=15000.0, status=PurchaseOrderStatus.received,
+                notes="Monthly stock replenishment",
+                created_at=now - timedelta(days=5),
+            )
+            db.add(po1)
+            db.flush()
+            db.add(PurchaseOrderItem(purchase_order_id=po1.id, product_id=prod_objs[0].id,
+                                     name="Basmati Rice (5 kg)", price=300, quantity=30))
+            db.add(PurchaseOrderItem(purchase_order_id=po1.id, product_id=prod_objs[1].id,
+                                     name="Toor Dal (1 kg)", price=120, quantity=50))
+
+            po2 = PurchaseOrder(
+                shop_id=shop_objs[1].id, supplier_id=supplier_objs[2].id,
+                total_amount=8500.0, status=PurchaseOrderStatus.sent,
+                notes="Weekly dairy restock",
+                created_at=now - timedelta(days=1),
+            )
+            db.add(po2)
+            db.flush()
+            db.add(PurchaseOrderItem(purchase_order_id=po2.id, product_id=prod_objs[8].id,
+                                     name="Full Cream Milk (1 L)", price=58, quantity=100))
+            db.add(PurchaseOrderItem(purchase_order_id=po2.id, product_id=prod_objs[9].id,
+                                     name="Paneer (200 g)", price=80, quantity=30))
+
+        # ── Product Discounts ──
+        if not db.query(ProductDiscount).first():
+            # BOGO on Sugar for Anand Groceries
+            db.add(ProductDiscount(
+                shop_id=shop_objs[0].id, product_id=prod_objs[3].id,
+                product_name="Sugar (1 kg)", type=DiscountType.bogo,
+                buy_qty=2, get_qty=1, status="active",
+                valid_till=now + timedelta(days=30),
+            ))
+            # Buy 3 Get 1 on Milk for Anand Dairy
+            db.add(ProductDiscount(
+                shop_id=shop_objs[1].id, product_id=prod_objs[8].id,
+                product_name="Full Cream Milk (1 L)", type=DiscountType.buy_x_get_y,
+                buy_qty=3, get_qty=1, status="active",
+                valid_till=now + timedelta(days=15),
+            ))
+            # Bulk price on Bread for Priya Bakery
+            db.add(ProductDiscount(
+                shop_id=shop_objs[2].id, product_id=prod_objs[14].id,
+                product_name="Multigrain Bread", type=DiscountType.bulk_price,
+                buy_qty=3, bulk_price=100.0, status="active",
+                valid_till=now + timedelta(days=20),
+            ))
+            # Individual 10% off on Tomatoes for Priya Vegetables
+            db.add(ProductDiscount(
+                shop_id=shop_objs[3].id, product_id=prod_objs[19].id,
+                product_name="Tomatoes (1 kg)", type=DiscountType.individual,
+                discount_value=10.0, status="active",
+                valid_till=now + timedelta(days=10),
+            ))
+
+        # ── Order Discounts ──
+        if not db.query(OrderDiscount).first():
+            # 5% off on orders >= 500 for Anand Groceries
+            db.add(OrderDiscount(
+                shop_id=shop_objs[0].id, min_bill_value=500.0,
+                discount_type=DiscountAmountType.percentage, discount_value=5.0,
+                status="active", valid_till=now + timedelta(days=30),
+            ))
+            # Rs 50 off on orders >= 1000 for Anand Groceries
+            db.add(OrderDiscount(
+                shop_id=shop_objs[0].id, min_bill_value=1000.0,
+                discount_type=DiscountAmountType.flat, discount_value=50.0,
+                status="active", valid_till=now + timedelta(days=30),
+            ))
+            # 10% off on orders >= 300 for Priya Bakery
+            db.add(OrderDiscount(
+                shop_id=shop_objs[2].id, min_bill_value=300.0,
+                discount_type=DiscountAmountType.percentage, discount_value=10.0,
+                status="active", valid_till=now + timedelta(days=20),
+            ))
+
+        db.commit()
+
     print()
     print("Seed complete!")
     print()
     print("  Demo credentials:")
-    print("  ─────────────────────────────────────────────────────────")
+    print("  ---------------------------------------------------------")
     print("  Admin    : senamallas@gmail.com  / Admin@123    | +91-9000000001")
     print("  Owner 1  : anand@example.com     / Owner@123    | +91-9000000002")
     print("  Owner 2  : priya@example.com     / Owner@123    | +91-9000000003")
@@ -314,7 +445,15 @@ def run(reset: bool = False):
     print("  Customer : kavita@example.com    / Customer@123 | +91-9000000005")
     print()
     print("  Subscription: Anand & Priya are ACTIVE (30 days from now, Rs 10/month)")
-    print("  ─────────────────────────────────────────────────────────")
+    print("  ---------------------------------------------------------")
+    print()
+    print("  New seed data:")
+    print("  - 4 suppliers across 3 shops")
+    print("  - 2 purchase orders with items")
+    print("  - 4 product discounts (BOGO, Buy3Get1, Bulk, 10% off)")
+    print("  - 3 order discounts (5% on 500+, Rs50 on 1000+, 10% on 300+)")
+    print("  - Low stock / expiry dates set on select products")
+    print("  ---------------------------------------------------------")
 
 
 if __name__ == "__main__":

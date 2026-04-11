@@ -1,6 +1,6 @@
 """
-HyperMart — Gemini AI Router
-All AI calls are routed through here so GEMINI_API_KEY stays server-side.
+HyperMart — OpenAI ChatGPT AI Router
+All AI calls are routed through here so OPENAI_API_KEY stays server-side.
 Mounted in main.py: app.include_router(ai_router)
 """
 
@@ -13,23 +13,37 @@ from typing import List, Optional
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta"
-    "/models/gemini-2.0-flash:generateContent"
-)
-AI_AVAILABLE = bool(GEMINI_KEY)
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+AI_AVAILABLE = bool(OPENAI_KEY)
 
 
-async def call_gemini(prompt: str) -> str:
-    """Send a prompt to Gemini 2.0 Flash and return the response text."""
+async def call_openai(prompt: str, system: str = "") -> str:
+    """Send a prompt to OpenAI ChatGPT and return the response text."""
     if not AI_AVAILABLE:
-        raise HTTPException(503, "Gemini API key not configured")
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post(f"{GEMINI_URL}?key={GEMINI_KEY}", json=payload)
+        raise HTTPException(503, "OpenAI API key not configured")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            OPENAI_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {OPENAI_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
         r.raise_for_status()
-    return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    return r.json()["choices"][0]["message"]["content"].strip()
 
 
 # ── GET /ai/status ────────────────────────────────────────────────────────────
@@ -51,10 +65,9 @@ class SuggestRequest(BaseModel):
 async def suggest_products(body: SuggestRequest) -> List[str]:
     """
     Returns up to 5 product name suggestions.
-    Called after a 400 ms debounce when the owner types ≥ 2 chars.
+    Called after a 400 ms debounce when the owner types >= 2 chars.
     """
     prompt = (
-        f"You are a product naming assistant for a hyperlocal grocery marketplace in India.\n"
         f"Category: {body.category}\n"
         f'Partial name typed: "{body.partial_name}"\n'
         f"Suggest 5 complete, realistic product names that a neighbourhood shop in India "
@@ -62,8 +75,12 @@ async def suggest_products(body: SuggestRequest) -> List[str]:
         f"Respond ONLY with a JSON array of strings — no markdown, no explanation.\n"
         f'Example: ["Amul Butter 100g", "Britannia Bread 400g"]'
     )
+    system = (
+        "You are a product naming assistant for a hyperlocal grocery marketplace in India. "
+        "Respond only with valid JSON arrays."
+    )
     try:
-        text = await call_gemini(prompt)
+        text = await call_openai(prompt, system)
         text = text.replace("```json", "").replace("```", "").strip()
         suggestions = json.loads(text)
         return [s for s in suggestions if isinstance(s, str)][:5]
@@ -82,7 +99,7 @@ class DescribeRequest(BaseModel):
 async def generate_description(body: DescribeRequest) -> dict:
     """
     Returns a single-sentence product description.
-    Called when the owner clicks '✨ AI Generate' in the product modal.
+    Called when the owner clicks 'AI Generate' in the product modal.
     """
     prompt = (
         f'Write a single short sentence (max 15 words) describing "{body.name}" '
@@ -91,7 +108,7 @@ async def generate_description(body: DescribeRequest) -> dict:
         f"Respond with ONLY the description sentence — no quotes, no punctuation at the end."
     )
     try:
-        text = await call_gemini(prompt)
+        text = await call_openai(prompt)
         return {"description": text.rstrip(".")}
     except Exception:
         return {"description": ""}
@@ -114,13 +131,15 @@ async def low_stock_insight(body: LowStockRequest) -> dict:
         return {"insight": ""}
     items_list = ", ".join(body.low_stock_items)
     prompt = (
-        f'You are an inventory advisor for a small neighbourhood shop called "{body.shop_name}".\n'
-        f"The following products are running low (≤ 5 units): {items_list}.\n"
-        f"Give 2–3 short, practical sentences of advice on restocking priorities "
+        f"The following products are running low (<= 5 units): {items_list}.\n"
+        f"Give 2-3 short, practical sentences of advice on restocking priorities "
         f"and what to order first. Be concise and specific to these items."
     )
+    system = (
+        f'You are an inventory advisor for a small neighbourhood shop called "{body.shop_name}".'
+    )
     try:
-        text = await call_gemini(prompt)
+        text = await call_openai(prompt, system)
         return {"insight": text}
     except Exception:
         return {"insight": ""}
@@ -136,17 +155,19 @@ class ForecastRequest(BaseModel):
 @router.post("/sales-forecast")
 async def sales_forecast(body: ForecastRequest) -> dict:
     """
-    Simple Gemini-based narrative sales forecast for a shop.
+    Simple ChatGPT-based narrative sales forecast for a shop.
     Returns a short insight paragraph.
     """
     prompt = (
-        f"You are a sales analyst for a small hyperlocal grocery shop (shop ID {body.shop_id}). "
         f"Based on typical neighbourhood grocery shopping patterns in India, "
         f"write 2-3 sentences forecasting sales trends for the next 7 days. "
         f"Mention peak days and suggest a category to stock up on. Be specific and concise."
     )
+    system = (
+        f"You are a sales analyst for a small hyperlocal grocery shop (shop ID {body.shop_id})."
+    )
     try:
-        text = await call_gemini(prompt)
+        text = await call_openai(prompt, system)
         return {"insight": text, "forecast": [], "avg_daily_revenue": 0}
     except Exception:
         return {"insight": "", "forecast": [], "avg_daily_revenue": 0}
@@ -170,39 +191,71 @@ async def ai_chat(body: ChatRequest) -> dict:
     Conversational AI endpoint. Keeps a rolling history for context.
     Tailors its persona based on the caller's role.
     """
-    role_context = {
+    formatting_rules = (
+        "\n\nFormatting rules: Keep answers concise (under 150 words). "
+        "Use **bold** for key terms. Use numbered lists (1. 2. 3.) or bullet points (- item) "
+        "for multiple items. Use short paragraphs. Never use tables or code blocks. "
+        "Do not repeat the question back. Get straight to the answer."
+    )
+    system_prompt = {
         "customer": (
-            "You are HyperMart Assistant, a helpful shopping assistant for a hyperlocal "
-            "marketplace in India. Help customers find products, compare shops, and get "
-            "shopping advice. Be friendly, concise, and use ₹ for prices."
+            "You are HyperMart Assistant, a friendly shopping helper for a hyperlocal "
+            "grocery marketplace in India. Help customers find products, compare shops, "
+            "and get shopping advice. Use Rs for prices. Be warm and helpful."
         ),
         "owner": (
-            "You are HyperMart Business Assistant, an AI advisor for shop owners. "
-            "Help with inventory decisions, pricing strategies, sales trends, and "
-            "business growth tips relevant to small Indian neighbourhood shops."
+            "You are HyperMart Business Assistant, an AI advisor for shop owners on "
+            "the HyperMart platform. Help with inventory, pricing, sales trends, and "
+            "business growth tips for small Indian neighbourhood shops."
         ),
         "admin": (
             "You are HyperMart Admin Assistant. Help with platform governance, "
-            "shop approval decisions, user management issues, and analytics interpretation."
+            "shop approvals, user management, and analytics interpretation."
         ),
     }.get(body.role, "You are a helpful assistant for the HyperMart marketplace.")
+    system_prompt += formatting_rules
 
-    # Build conversation history (last 10 turns)
-    history_text = ""
+    if body.shop_id:
+        system_prompt += f" The user is currently managing shop ID {body.shop_id}."
+
+    # Build OpenAI messages array from history (last 10 turns)
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in body.history[-10:]:
-        prefix = "User" if msg.role == "user" else "Assistant"
-        history_text += f"{prefix}: {msg.content}\n"
+        messages.append({
+            "role": "user" if msg.role == "user" else "assistant",
+            "content": msg.content,
+        })
+    messages.append({"role": "user", "content": body.message})
 
-    shop_context = f" The user is currently managing shop ID {body.shop_id}." if body.shop_id else ""
+    if not AI_AVAILABLE:
+        return {
+            "reply": "AI is not configured. Please set OPENAI_API_KEY.",
+            "tools_used": [],
+            "sources": [],
+        }
 
-    prompt = (
-        f"{role_context}{shop_context}\n\n"
-        f"{history_text}"
-        f"User: {body.message}\n"
-        f"Assistant:"
-    )
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
     try:
-        reply = await call_gemini(prompt)
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                OPENAI_URL,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {OPENAI_KEY}",
+                    "Content-Type": "application/json",
+                },
+            )
+            r.raise_for_status()
+        reply = r.json()["choices"][0]["message"]["content"].strip()
         return {"reply": reply, "tools_used": [], "sources": []}
-    except Exception as e:
-        return {"reply": "I'm having trouble connecting right now. Please try again shortly.", "tools_used": [], "sources": []}
+    except Exception:
+        return {
+            "reply": "I'm having trouble connecting right now. Please try again shortly.",
+            "tools_used": [],
+            "sources": [],
+        }

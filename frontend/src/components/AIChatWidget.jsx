@@ -17,19 +17,143 @@ function TypingIndicator() {
   );
 }
 
+// Lightweight markdown renderer for AI responses
+function renderMarkdown(text) {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines (add spacing)
+    if (!trimmed) {
+      elements.push(<div key={i} className="h-2" />);
+      i++;
+      continue;
+    }
+
+    // Headings: ### heading
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const cls = level === 1 ? 'text-base font-bold' : level === 2 ? 'text-sm font-bold' : 'text-[13px] font-semibold';
+      elements.push(<p key={i} className={`${cls} mt-1 mb-0.5`}>{formatInline(headingMatch[2])}</p>);
+      i++;
+      continue;
+    }
+
+    // Numbered list: 1. item or 1) item
+    const numMatch = trimmed.match(/^(\d+)[.)]\s+(.+)/);
+    if (numMatch) {
+      const listItems = [];
+      while (i < lines.length) {
+        const m = lines[i].trim().match(/^(\d+)[.)]\s+(.+)/);
+        if (!m) break;
+        listItems.push(<li key={i} className="flex gap-1.5 py-0.5"><span className="font-semibold text-[#4A7C59] shrink-0 min-w-[18px]">{m[1]}.</span><span>{formatInline(m[2])}</span></li>);
+        i++;
+      }
+      elements.push(<ol key={`ol-${i}`} className="my-1 space-y-0.5">{listItems}</ol>);
+      continue;
+    }
+
+    // Bullet list: - item or * item or • item
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
+    if (bulletMatch) {
+      const listItems = [];
+      while (i < lines.length) {
+        const m = lines[i].trim().match(/^[-*•]\s+(.+)/);
+        if (!m) break;
+        listItems.push(<li key={i} className="flex gap-1.5 py-0.5"><span className="text-[#4A7C59] shrink-0 mt-0.5">•</span><span>{formatInline(m[1])}</span></li>);
+        i++;
+      }
+      elements.push(<ul key={`ul-${i}`} className="my-1 space-y-0.5">{listItems}</ul>);
+      continue;
+    }
+
+    // Regular paragraph
+    elements.push(<p key={i} className="my-0.5 leading-relaxed">{formatInline(trimmed)}</p>);
+    i++;
+  }
+
+  return elements;
+}
+
+// Inline formatting: **bold**, *italic*, `code`
+function formatInline(text) {
+  if (!text) return text;
+  const parts = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    // Bold: **text**
+    const boldIdx = remaining.indexOf('**');
+    // Code: `text`
+    const codeIdx = remaining.indexOf('`');
+    // Italic: *text* (but not **)
+    let italicIdx = -1;
+    for (let j = 0; j < remaining.length; j++) {
+      if (remaining[j] === '*' && remaining[j + 1] !== '*' && (j === 0 || remaining[j - 1] !== '*')) {
+        italicIdx = j;
+        break;
+      }
+    }
+
+    // Find earliest match
+    const candidates = [
+      boldIdx >= 0 ? { type: 'bold', idx: boldIdx } : null,
+      codeIdx >= 0 ? { type: 'code', idx: codeIdx } : null,
+      italicIdx >= 0 ? { type: 'italic', idx: italicIdx } : null,
+    ].filter(Boolean).sort((a, b) => a.idx - b.idx);
+
+    if (candidates.length === 0) {
+      parts.push(remaining);
+      break;
+    }
+
+    const first = candidates[0];
+
+    if (first.type === 'bold') {
+      const end = remaining.indexOf('**', first.idx + 2);
+      if (end === -1) { parts.push(remaining); break; }
+      if (first.idx > 0) parts.push(remaining.slice(0, first.idx));
+      parts.push(<strong key={key++} className="font-semibold">{remaining.slice(first.idx + 2, end)}</strong>);
+      remaining = remaining.slice(end + 2);
+    } else if (first.type === 'code') {
+      const end = remaining.indexOf('`', first.idx + 1);
+      if (end === -1) { parts.push(remaining); break; }
+      if (first.idx > 0) parts.push(remaining.slice(0, first.idx));
+      parts.push(<code key={key++} className="px-1 py-0.5 rounded bg-black/5 text-[12px] font-mono">{remaining.slice(first.idx + 1, end)}</code>);
+      remaining = remaining.slice(end + 1);
+    } else if (first.type === 'italic') {
+      const end = remaining.indexOf('*', first.idx + 1);
+      if (end === -1 || remaining[end + 1] === '*') { parts.push(remaining.slice(0, first.idx + 1)); remaining = remaining.slice(first.idx + 1); continue; }
+      if (first.idx > 0) parts.push(remaining.slice(0, first.idx));
+      parts.push(<em key={key++}>{remaining.slice(first.idx + 1, end)}</em>);
+      remaining = remaining.slice(end + 1);
+    }
+  }
+
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts;
+}
+
 // Single chat message bubble
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
       <div
-        className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words shadow-sm
+        className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] break-words shadow-sm leading-relaxed
           ${isUser
             ? 'bg-[#4A7C59] text-white rounded-br-sm'
             : 'bg-white text-[#1A1A1A] rounded-bl-sm border border-[#E8E8E0]'
           }`}
       >
-        {msg.content}
+        {isUser ? msg.content : <div className="ai-msg">{renderMarkdown(msg.content)}</div>}
       </div>
     </div>
   );

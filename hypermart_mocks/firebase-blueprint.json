@@ -1,0 +1,239 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "owner", "customer"] },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "multiLocationEnabled": { "type": "boolean", "description": "Whether the user can add multiple shop locations" },
+        "multiLocationRequestStatus": { "type": "string", "enum": ["none", "pending", "approved"], "description": "Status of multi-location access request" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Shop": {
+      "title": "Shop",
+      "description": "Local shop details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "suspended"] },
+        "logo": { "type": "string", "format": "uri" },
+        "timings": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ownerId", "name", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product in a shop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "mrp": { "type": "number" },
+        "unit": { "type": "string" },
+        "category": { "type": "string" },
+        "stock": { "type": "number" },
+        "image": { "type": "string", "format": "uri" },
+        "status": { "type": "string", "enum": ["active", "out_of_stock", "deleted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "name", "price", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "ready", "out_for_delivery", "delivered", "rejected"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid"] },
+        "deliveryAddress": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "customerId", "items", "total", "status"]
+    },
+    "Bill": {
+      "title": "Bill",
+      "description": "Owner-generated bill for walk-in customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "upi", "card"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "items", "total", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "image": { "type": "string", "format": "uri" }
+      },
+      "required": ["id", "name"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Shop review and rating",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string", "format": "uri" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "userId", "rating", "comment", "createdAt"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Supplier information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "name": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "address": { "type": "string" },
+        "gstNumber": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "name"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Purchase order for inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "sent", "received", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "supplierId", "items", "totalAmount", "status"]
+    },
+    "ProductDiscount": {
+      "title": "ProductDiscount",
+      "description": "Discount for a specific product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string", "enum": ["bogo", "buy_x_get_y", "bulk_price", "individual"] },
+        "buyQty": { "type": "number" },
+        "getQty": { "type": "number" },
+        "bulkPrice": { "type": "number" },
+        "discountType": { "type": "string", "enum": ["percentage", "flat"] },
+        "discountValue": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "validTill": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "productId", "type", "status"]
+    },
+    "OrderDiscount": {
+      "title": "OrderDiscount",
+      "description": "Discount for the entire order based on bill value",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "minBillValue": { "type": "number" },
+        "discountType": { "type": "string", "enum": ["percentage", "flat"] },
+        "discountValue": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "validTill": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "shopId", "minBillValue", "discountType", "discountValue", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/shops/{shopId}": { "schema": "Shop", "description": "Shop listings" },
+    "/products/{productId}": { "schema": "Product", "description": "Product catalog" },
+    "/orders/{orderId}": { "schema": "Order", "description": "Customer orders" },
+    "/bills/{billId}": { "schema": "Bill", "description": "Shop bills" },
+    "/categories/{categoryId}": { "schema": "Category", "description": "Marketplace categories" },
+    "/reviews/{reviewId}": { "schema": "Review", "description": "Shop reviews" },
+    "/suppliers/{supplierId}": { "schema": "Supplier", "description": "Shop suppliers" },
+    "/purchase_orders/{poId}": { "schema": "PurchaseOrder", "description": "Shop purchase orders" },
+    "/product_discounts/{discountId}": { "schema": "ProductDiscount", "description": "Product-specific discounts" },
+    "/order_discounts/{discountId}": { "schema": "OrderDiscount", "description": "Bill-value based discounts" }
+  }
+}
