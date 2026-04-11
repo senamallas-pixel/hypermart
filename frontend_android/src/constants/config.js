@@ -1,6 +1,4 @@
-// Change this to your backend URL
-// For local development with Android emulator, use 10.0.2.2 instead of localhost
-export const API_URL = 'http://10.0.2.2:8000';
+export const API_URL = 'https://hypermart-ukg0.onrender.com';
 
 export const DEMO_ACCOUNTS = [
   { label: 'Customer', email: 'ravi@example.com', password: 'Customer@123', role: 'customer' },
