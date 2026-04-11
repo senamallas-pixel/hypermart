@@ -26,10 +26,16 @@ def _set_sqlite_pragma(dbapi_conn, _):
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 
+# Build connect_args based on database type
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args=connect_args,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,  # Enable connection health checks
 )
 
 if DATABASE_URL.startswith("sqlite"):

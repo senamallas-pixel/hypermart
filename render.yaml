@@ -1,4 +1,9 @@
 # HyperMart Backend Service Configuration
+databases:
+  - name: hypermart
+    databaseName: hypermart
+    user: hypermart_user
+
 services:
   - type: web
     name: hypermart-api
@@ -10,7 +15,9 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: DATABASE_URL
-        value: sqlite:///./hypermart.db
+        fromDatabase:
+          name: hypermart
+          property: connectionString
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL

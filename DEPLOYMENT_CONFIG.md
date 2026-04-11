@@ -52,6 +52,7 @@ Add these variables:
 | Variable | Value | Notes |
 |---|---|---|
 | `JWT_SECRET` | Generate with: `openssl rand -hex 32` | **CRITICAL** - Use unique secret, not default |
+| `DATABASE_URL` | PostgreSQL connection string | **From Render PostgreSQL database** - See POSTGRES_MIGRATION.md |
 
 ### Optional (For Features)
 | Variable | Value | Notes |
@@ -64,9 +65,29 @@ Add these variables:
 ### Auto-Configured (No action needed)
 | Variable | Default Value | Notes |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./hypermart.db` | SQLite DB (resets on redeploy) |
 | `MAX_UPLOAD_MB` | `10` | Max file upload size |
 | `SQL_ECHO` | `false` | SQL query logging |
+
+---
+
+## 🗄️ Database (PostgreSQL)
+
+**Database:** PostgreSQL on Render
+**Status:** ✅ Configured and ready
+
+**Connection Details:**
+- Hostname: `dpg-d7dbcdt7vec73819d70-a`
+- Port: `5432`
+- Database: `hypermart`
+- Username: `hypermart_user`
+
+**Migration Guide:** See [POSTGRES_MIGRATION.md](POSTGRES_MIGRATION.md) for complete migration steps.
+
+**Benefits:**
+- ✅ Persistent data (survives redeployments)
+- ✅ Production-ready performance
+- ✅ Automatic backups (Pro plan)
+- ✅ Scalable
 
 ---
 
