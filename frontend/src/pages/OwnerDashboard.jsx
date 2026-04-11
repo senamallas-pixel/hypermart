@@ -742,7 +742,7 @@ function BillingPanel({ shopId }) {
           }, 2000);
         }
       } catch { /* ignore poll errors */ }
-    }, 5000);
+    }, 3000);
   };
 
   const handlePaymentReceived = async () => {
