@@ -68,7 +68,7 @@ foreach ($u in $users) {
             Write-Host "  [--] $($u.email) (already exists, logging in...)" -ForegroundColor Yellow
             try {
                 $loginBody = @{
-                    username = $u.email
+                    email = $u.email
                     password = $u.password
                 } | ConvertTo-Json
                 $loginResponse = Invoke-WebRequest "$API_URL/auth/login" -Method POST -Body $loginBody -ContentType "application/json" -UseBasicParsing
@@ -103,10 +103,11 @@ foreach ($shop in $shops) {
         $headers = @{ Authorization = "Bearer $($tokens[$shop.owner])" }
         $body = @{
             name = $shop.name
+            address = "$($shop.location), Hyderabad"
             category = $shop.category
             location_name = $shop.location
-            latitude = 17.385 + (Get-Random -Minimum -10 -Maximum 10) / 1000
-            longitude = 78.486 + (Get-Random -Minimum -10 -Maximum 10) / 1000
+            lat = 17.385 + (Get-Random -Minimum -10 -Maximum 10) / 1000
+            lng = 78.486 + (Get-Random -Minimum -10 -Maximum 10) / 1000
         } | ConvertTo-Json
 
         $response = Invoke-WebRequest "$API_URL/shops" -Method POST -Headers $headers -Body $body -ContentType "application/json" -UseBasicParsing
@@ -121,34 +122,34 @@ foreach ($shop in $shops) {
 # Products for each shop
 $products = @(
     # Shop 1: Anand Groceries
-    @{ shop_idx = 0; name = "Basmati Rice (5 kg)"; price = 320; stock = 50; category = "Groceries" }
-    @{ shop_idx = 0; name = "Sugar (1 kg)"; price = 45; stock = 100; category = "Groceries" }
-    @{ shop_idx = 0; name = "Sunflower Oil (1 L)"; price = 155; stock = 40; category = "Groceries" }
-    @{ shop_idx = 0; name = "Atta Flour (10 kg)"; price = 410; stock = 30; category = "Groceries" }
+    @{ shop_idx = 0; name = "Basmati Rice"; category = "Grocery"; unit = "5 kg"; price = 320; mrp = 350; stock = 50 }
+    @{ shop_idx = 0; name = "Sugar"; category = "Grocery"; unit = "1 kg"; price = 45; mrp = 50; stock = 100 }
+    @{ shop_idx = 0; name = "Sunflower Oil"; category = "Grocery"; unit = "1 L"; price = 155; mrp = 170; stock = 40 }
+    @{ shop_idx = 0; name = "Atta Flour"; category = "Grocery"; unit = "10 kg"; price = 410; mrp = 450; stock = 30 }
     
     # Shop 2: Anand Dairy Fresh
-    @{ shop_idx = 1; name = "Fresh Milk (1 L)"; price = 55; stock = 80; category = "Dairy" }
-    @{ shop_idx = 1; name = "Paneer (200g)"; price = 90; stock = 40; category = "Dairy" }
-    @{ shop_idx = 1; name = "Yogurt (500g)"; price = 60; stock = 50; category = "Dairy" }
-    @{ shop_idx = 1; name = "Butter (100g)"; price = 55; stock = 60; category = "Dairy" }
+    @{ shop_idx = 1; name = "Fresh Milk"; category = "Dairy"; unit = "1 L"; price = 55; mrp = 60; stock = 80 }
+    @{ shop_idx = 1; name = "Paneer"; category = "Dairy"; unit = "200g"; price = 90; mrp = 100; stock = 40 }
+    @{ shop_idx = 1; name = "Yogurt"; category = "Dairy"; unit = "500g"; price = 60; mrp = 70; stock = 50 }
+    @{ shop_idx = 1; name = "Butter"; category = "Dairy"; unit = "100g"; price = 55; mrp = 60; stock = 60 }
     
     # Shop 3: Priya Bakery
-    @{ shop_idx = 2; name = "White Bread"; price = 45; stock = 100; category = "Bakery" }
-    @{ shop_idx = 2; name = "Butter Cookies (250g)"; price = 80; stock = 50; category = "Bakery" }
-    @{ shop_idx = 2; name = "Cake (500g)"; price = 250; stock = 20; category = "Bakery" }
-    @{ shop_idx = 2; name = "Croissants (4 pcs)"; price = 120; stock = 30; category = "Bakery" }
+    @{ shop_idx = 2; name = "White Bread"; category = "Bakery & Snacks"; unit = "piece"; price = 45; mrp = 50; stock = 100 }
+    @{ shop_idx = 2; name = "Butter Cookies"; category = "Bakery & Snacks"; unit = "250g"; price = 80; mrp = 90; stock = 50 }
+    @{ shop_idx = 2; name = "Cake"; category = "Bakery & Snacks"; unit = "500g"; price = 250; mrp = 280; stock = 20 }
+    @{ shop_idx = 2; name = "Croissants"; category = "Bakery & Snacks"; unit = "4 pcs"; price = 120; mrp = 140; stock = 30 }
     
     # Shop 4: Priya Vegetables
-    @{ shop_idx = 3; name = "Tomatoes (1 kg)"; price = 40; stock = 100; category = "Vegetables" }
-    @{ shop_idx = 3; name = "Onions (1 kg)"; price = 35; stock = 150; category = "Vegetables" }
-    @{ shop_idx = 3; name = "Potatoes (1 kg)"; price = 30; stock = 200; category = "Vegetables" }
-    @{ shop_idx = 3; name = "Spinach (250g)"; price = 20; stock = 80; category = "Vegetables" }
+    @{ shop_idx = 3; name = "Tomatoes"; category = "Vegetables & Fruits"; unit = "1 kg"; price = 40; mrp = 45; stock = 100 }
+    @{ shop_idx = 3; name = "Onions"; category = "Vegetables & Fruits"; unit = "1 kg"; price = 35; mrp = 40; stock = 150 }
+    @{ shop_idx = 3; name = "Potatoes"; category = "Vegetables & Fruits"; unit = "1 kg"; price = 30; mrp = 35; stock = 200 }
+    @{ shop_idx = 3; name = "Spinach"; category = "Vegetables & Fruits"; unit = "250g"; price = 20; mrp = 25; stock = 80 }
     
     # Shop 5: Priya Beverages
-    @{ shop_idx = 4; name = "Coca Cola (2 L)"; price = 90; stock = 60; category = "Beverages" }
-    @{ shop_idx = 4; name = "Orange Juice (1 L)"; price = 120; stock = 40; category = "Beverages" }
-    @{ shop_idx = 4; name = "Mineral Water (1 L)"; price = 20; stock = 200; category = "Beverages" }
-    @{ shop_idx = 4; name = "Energy Drink (250ml)"; price = 110; stock = 50; category = "Beverages" }
+    @{ shop_idx = 4; name = "Coca Cola"; category = "Beverages"; unit = "2 L"; price = 90; mrp = 100; stock = 60 }
+    @{ shop_idx = 4; name = "Orange Juice"; category = "Beverages"; unit = "1 L"; price = 120; mrp = 140; stock = 40 }
+    @{ shop_idx = 4; name = "Mineral Water"; category = "Beverages"; unit = "1 L"; price = 20; mrp = 20; stock = 200 }
+    @{ shop_idx = 4; name = "Energy Drink"; category = "Beverages"; unit = "250ml"; price = 110; mrp = 120; stock = 50 }
 )
 
 $productCount = 0
@@ -168,8 +169,10 @@ foreach ($product in $products) {
         $headers = @{ Authorization = "Bearer $($tokens[$shopOwner])" }
         $body = @{
             name = $product.name
+            unit = $product.unit
             price = $product.price
-            stock_quantity = $product.stock
+            mrp = $product.mrp
+            stock = $product.stock
             category = $product.category
         } | ConvertTo-Json
 
@@ -177,7 +180,7 @@ foreach ($product in $products) {
         $productCount++
         Write-Host "  [OK] $($product.name)" -ForegroundColor Green
     } catch {
-        Write-Host "  [!!] Failed to create $($product.name)" -ForegroundColor Red
+        Write-Host "  [!!] Failed to create $($product.name): $($_.Exception.Message)" -ForegroundColor Red
         $failedCount++
     }
 }
