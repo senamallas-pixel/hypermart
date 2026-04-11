@@ -22,10 +22,11 @@ import {
   suggestProducts, generateDescription, getLowStockInsight,
   getShopReports, exportShopCSV,
   listSuppliers, listProductDiscounts, listOrderDiscounts,
-  createRazorpayOrder, verifyRazorpayPayment,
+  getShopUPI,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
+import { QRCodeSVG } from 'qrcode.react';
 import DailySalesCalendar from '../components/DailySalesCalendar';
 import SupplierManager from '../components/SupplierManager';
 import PurchaseOrderManager from '../components/PurchaseOrderManager';
@@ -690,6 +691,10 @@ function BillingPanel({ shopId }) {
   const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [productDiscounts, setProductDiscounts] = useState([]);
   const [orderDiscounts, setOrderDiscounts] = useState([]);
+  const [shopUpiId, setShopUpiId] = useState('');
+  const [shopName, setShopName] = useState('');
+  const [showUpiQR, setShowUpiQR] = useState(false);
+  const [upiOrderData, setUpiOrderData] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -697,11 +702,14 @@ function BillingPanel({ shopId }) {
       listProducts(shopId),
       listProductDiscounts(shopId),
       listOrderDiscounts(shopId),
+      getShopUPI(shopId),
     ])
-      .then(([pRes, pdRes, odRes]) => {
+      .then(([pRes, pdRes, odRes, upiRes]) => {
         setProducts(pRes.data);
         setProductDiscounts(pdRes.data);
         setOrderDiscounts(odRes.data);
+        setShopUpiId(upiRes.data.upi_id || '');
+        setShopName(upiRes.data.shop_name || '');
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -800,50 +808,12 @@ function BillingPanel({ shopId }) {
 
   const billTotal = calculations.total;
 
-  const openRazorpayCheckout = async (order) => {
-    try {
-      const rzRes = await createRazorpayOrder(order.id);
-      const rz = rzRes.data;
-      const options = {
-        key: rz.key_id,
-        amount: rz.amount,
-        currency: rz.currency,
-        name: 'HyperMart',
-        description: `Walk-in Order #${order.id}`,
-        order_id: rz.razorpay_order_id,
-        method: { upi: true, card: false, netbanking: false, wallet: false },
-        handler: async (response) => {
-          try {
-            await verifyRazorpayPayment({
-              order_id:            order.id,
-              razorpay_order_id:   response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature:  response.razorpay_signature,
-            });
-          } catch { /* verification failed — order stays pending */ }
-          setLastOrder({ ...order, payment_status: 'paid', payment_method: 'upi' });
-          setPlacing(false);
-        },
-        modal: {
-          ondismiss: () => {
-            setLastOrder(order);
-            setPlacing(false);
-          },
-        },
-        prefill: { name: customerName || 'Walk-in Customer' },
-      };
-      if (window.Razorpay) {
-        new window.Razorpay(options).open();
-      } else {
-        alert('Razorpay SDK not loaded. Order placed — collect UPI payment manually.');
-        setLastOrder(order);
-        setPlacing(false);
-      }
-    } catch {
-      alert('Could not initiate Razorpay UPI payment. Order placed — collect payment manually.');
-      setLastOrder(order);
-      setPlacing(false);
-    }
+  const buildUpiUrl = (amount, orderId) => {
+    const pa = encodeURIComponent(shopUpiId);
+    const pn = encodeURIComponent(shopName);
+    const tn = encodeURIComponent(`Order #${orderId}`);
+    const am = amount.toFixed(2);
+    return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`;
   };
 
   const handlePlaceOrder = async () => {
@@ -863,13 +833,20 @@ function BillingPanel({ shopId }) {
 
       setBill([]);
       setCustomerName('');
-      // refresh products to reflect stock changes
       const pRes = await listProducts(shopId);
       setProducts(pRes.data);
 
-      // If UPI selected, open Razorpay checkout for UPI QR/scanner
+      // If UPI selected, show QR code for PhonePe/GPay/Paytm
       if (walkinPayMethod === 'upi') {
-        await openRazorpayCheckout(res.data);
+        if (!shopUpiId) {
+          alert('No UPI ID configured. Go to Settings to add your UPI ID.');
+          setLastOrder(res.data);
+          setPlacing(false);
+          return;
+        }
+        setUpiOrderData(res.data);
+        setShowUpiQR(true);
+        setPlacing(false);
         return;
       }
 
@@ -1008,7 +985,7 @@ function BillingPanel({ shopId }) {
                 <div className="flex gap-2">
                   {[
                     { key: 'cash', label: '💵 Cash' },
-                    { key: 'upi',  label: '📱 UPI (Razorpay)' },
+                    { key: 'upi',  label: '📱 UPI (QR Code)' },
                   ].map(m => (
                     <button key={m.key} onClick={() => setWalkinPayMethod(m.key)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${walkinPayMethod === m.key ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/50 border-[#1A1A1A]/10 hover:border-[#5A5A40]'}`}>
@@ -1018,7 +995,7 @@ function BillingPanel({ shopId }) {
                 </div>
                 {walkinPayMethod === 'upi' && (
                   <p className="text-[10px] text-[#5A5A40] mt-1.5 text-center font-medium">
-                    Razorpay UPI QR / scanner will open after billing
+                    {shopUpiId ? 'Customer scans QR with PhonePe / GPay / Paytm' : '⚠️ Set your UPI ID in Settings first'}
                   </p>
                 )}
               </div>
@@ -1039,6 +1016,64 @@ function BillingPanel({ shopId }) {
               </button>
             </>
           )}
+
+          {/* UPI QR Code Modal */}
+          <AnimatePresence>
+            {showUpiQR && upiOrderData && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                onClick={() => { setShowUpiQR(false); setLastOrder(upiOrderData); setUpiOrderData(null); }}>
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl"
+                  onClick={e => e.stopPropagation()}>
+                  <div className="mb-4">
+                    <div className="w-14 h-14 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <span className="text-2xl">📱</span>
+                    </div>
+                    <h3 className="font-serif text-xl font-bold">Scan & Pay</h3>
+                    <p className="text-xs text-[#1A1A1A]/50 mt-1">Order #{upiOrderData.id} · {shopName}</p>
+                  </div>
+
+                  <div className="bg-white border-2 border-[#5A5A40]/20 rounded-2xl p-6 inline-block mb-4">
+                    <QRCodeSVG
+                      value={buildUpiUrl(upiOrderData.total, upiOrderData.id)}
+                      size={220}
+                      level="H"
+                      includeMargin={false}
+                      bgColor="#ffffff"
+                      fgColor="#1A1A1A"
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="font-serif text-3xl font-bold text-[#5A5A40]">₹{upiOrderData.total?.toFixed(2)}</p>
+                    <p className="text-xs text-[#1A1A1A]/40 mt-1 font-medium">Pay to: {shopUpiId}</p>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3 mb-5">
+                    <span className="text-xs font-bold text-[#1A1A1A]/30 uppercase tracking-widest">Works with</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-4 mb-5">
+                    <span className="bg-[#5f259f]/10 text-[#5f259f] text-[10px] font-bold px-3 py-1.5 rounded-full">PhonePe</span>
+                    <span className="bg-[#137333]/10 text-[#137333] text-[10px] font-bold px-3 py-1.5 rounded-full">GPay</span>
+                    <span className="bg-[#00BAF2]/10 text-[#00BAF2] text-[10px] font-bold px-3 py-1.5 rounded-full">Paytm</span>
+                    <span className="bg-[#1A1A1A]/5 text-[#1A1A1A]/50 text-[10px] font-bold px-3 py-1.5 rounded-full">Any UPI</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowUpiQR(false); setLastOrder({ ...upiOrderData, payment_status: 'paid', payment_method: 'upi' }); setUpiOrderData(null); }}
+                      className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-green-700 transition-all flex items-center justify-center gap-2">
+                      <CheckCircle2 size={16} /> Payment Received
+                    </button>
+                    <button onClick={() => { setShowUpiQR(false); setLastOrder(upiOrderData); setUpiOrderData(null); }}
+                      className="px-4 py-3 rounded-xl text-sm font-bold text-[#1A1A1A]/40 border border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/5 transition-all">
+                      Close
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Last Order Success */}
           <AnimatePresence>

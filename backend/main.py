@@ -702,6 +702,43 @@ def place_order(
     return order
 
 
+@app.get("/orders/{order_id}/payment-status")
+def get_order_payment_status(
+    order_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Check payment status of an order (for UPI polling)."""
+    order = db.get(M.Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.customer_id != current_user.id:
+        shop = db.get(M.Shop, order.shop_id)
+        if not shop or shop.owner_id != current_user.id:
+            raise HTTPException(403, "Not your order")
+    return {"order_id": order.id, "payment_status": order.payment_status, "payment_method": order.payment_method}
+
+
+@app.patch("/orders/{order_id}/payment-status")
+def update_order_payment_status(
+    order_id: int,
+    payload: dict,
+    current_user: M.User = Depends(require_role(M.UserRole.owner, M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    """Owner marks order payment as received."""
+    order = db.get(M.Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    shop = db.get(M.Shop, order.shop_id)
+    if not shop or (current_user.role == M.UserRole.owner and shop.owner_id != current_user.id):
+        raise HTTPException(403, "Not authorised")
+    new_status = payload.get("payment_status", "paid")
+    order.payment_status = new_status
+    db.commit()
+    return {"order_id": order.id, "payment_status": order.payment_status}
+
+
 @app.get("/orders/me", response_model=S.PaginatedOrders)
 def get_my_orders(
     page: int = Query(1, ge=1),
@@ -1763,8 +1800,11 @@ def toggle_multi_location(
 # PAYMENTS — Razorpay integration
 # ═══════════════════════════════════════════════════════════════════
 
-RAZORPAY_KEY_ID     = os.getenv("RAZORPAY_KEY_ID", "")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+def _get_razorpay_keys():
+    key_id = os.getenv("RAZORPAY_KEY_ID", "")
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+    return key_id, key_secret
 
 
 @app.post("/payments/create-order", response_model=S.RazorpayOrderOut)
@@ -1774,19 +1814,24 @@ def create_razorpay_order(
     db: Session = Depends(get_db),
 ):
     """Create a Razorpay order for an existing HyperMart order."""
-    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+    key_id, key_secret = _get_razorpay_keys()
+    if not key_id or not key_secret:
         raise HTTPException(503, "Razorpay is not configured on this server")
 
     order = db.get(M.Order, payload.order_id)
     if not order:
         raise HTTPException(404, "Order not found")
+    # Allow owner for walk-in orders, customer for online orders
     if order.customer_id != current_user.id:
-        raise HTTPException(403, "Not your order")
+        # Check if current user is the shop owner (walk-in scenario)
+        shop = db.get(M.Shop, order.shop_id)
+        if not shop or shop.owner_id != current_user.id:
+            raise HTTPException(403, "Not your order")
     if order.payment_status == M.PaymentStatus.paid:
         raise HTTPException(400, "Order is already paid")
 
     import razorpay
-    client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    client = razorpay.Client(auth=(key_id, key_secret))
     amount_paise = int(round(order.total * 100))
     rz_order = client.order.create({
         "amount": amount_paise,
@@ -1802,7 +1847,7 @@ def create_razorpay_order(
         razorpay_order_id=rz_order["id"],
         amount=amount_paise,
         currency="INR",
-        key_id=RAZORPAY_KEY_ID,
+        key_id=key_id,
     )
 
 
@@ -1813,19 +1858,23 @@ def verify_razorpay_payment(
     db: Session = Depends(get_db),
 ):
     """Verify Razorpay payment signature and mark order as paid."""
-    if not RAZORPAY_KEY_SECRET:
+    _, key_secret = _get_razorpay_keys()
+    if not key_secret:
         raise HTTPException(503, "Razorpay is not configured on this server")
 
     order = db.get(M.Order, payload.order_id)
     if not order:
         raise HTTPException(404, "Order not found")
+    # Allow owner for walk-in orders, customer for online orders
     if order.customer_id != current_user.id:
-        raise HTTPException(403, "Not your order")
+        shop = db.get(M.Shop, order.shop_id)
+        if not shop or shop.owner_id != current_user.id:
+            raise HTTPException(403, "Not your order")
 
     import hmac, hashlib
     message = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}"
     expected = hmac.new(
-        RAZORPAY_KEY_SECRET.encode(), message.encode(), hashlib.sha256
+        key_secret.encode(), message.encode(), hashlib.sha256
     ).hexdigest()
 
     if expected != payload.razorpay_signature:

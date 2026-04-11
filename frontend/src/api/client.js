@@ -63,6 +63,8 @@ export const getMyOrders       = (page = 1)         => api.get('/orders/me', { p
 export const getShopOrders     = (shopId, page = 1, params = {}) => api.get(`/shops/${shopId}/orders`, { params: { page, ...params } });
 export const updateOrderStatus = (orderId, status)  => api.patch(`/orders/${orderId}/status`, { status });
 export const cancelOrder       = (orderId)          => api.post(`/orders/${orderId}/cancel`);
+export const getOrderPaymentStatus  = (orderId) => api.get(`/orders/${orderId}/payment-status`);
+export const markOrderPaymentStatus = (orderId, status) => api.patch(`/orders/${orderId}/payment-status`, { payment_status: status });
 
 // ── Payments ─────────────────────────────────────────────────────
 
