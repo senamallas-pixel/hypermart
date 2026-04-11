@@ -1,3 +1,4 @@
+# HyperMart Backend Service Configuration
 services:
   - type: web
     name: hypermart-api
