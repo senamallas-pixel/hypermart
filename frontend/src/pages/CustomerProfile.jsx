@@ -57,7 +57,8 @@ export default function CustomerProfile() {
     setUploading(true);
     try {
       const res = await uploadFile(file);
-      const absoluteUrl = `${import.meta.env.VITE_API_URL}${res.data.url}`;
+      const url = res.data.url;
+      const absoluteUrl = url.startsWith('http') ? url : `${import.meta.env.VITE_API_URL}${url}`;
       setFormData(prev => ({ ...prev, photo_url: absoluteUrl }));
       setMessage({ type: 'success', text: 'Photo uploaded successfully' });
     } catch (error) {
