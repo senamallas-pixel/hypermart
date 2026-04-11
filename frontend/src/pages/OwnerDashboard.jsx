@@ -8,7 +8,7 @@ import {
   Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight,
   Truck, Store, AlertCircle, Loader2, BarChart2, Menu, Minus,
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
-  MapPin, Upload, Navigation, Image, Calendar, Power, Save,
+  MapPin, Upload, Navigation, Image, Calendar, Power, Save, Download,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -19,6 +19,7 @@ import {
   getShopAnalytics, placeWalkinOrder,
   uploadFile,
   suggestProducts, generateDescription, getLowStockInsight,
+  getShopReports, exportShopCSV,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -845,10 +846,56 @@ function BillingPanel({ shopId }) {
 }
 
 // ── Analytics Panel ───────────────────────────────────────────────
-function AnalyticsPanel({ analytics, shopName }) {
+function AnalyticsPanel({ analytics, shopName, shopId }) {
   const { aiAvailable } = useApp();
   const [stockInsight, setStockInsight] = useState('');
   const [insightLoading, setInsightLoading] = useState(false);
+
+  // Date-range reports state
+  const today = new Date().toISOString().split('T')[0];
+  const [reportRange, setReportRange] = useState('7');
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(today);
+  const [reportData, setReportData] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleRangeChange = (days) => {
+    setReportRange(days);
+    if (days !== 'custom') {
+      const d = new Date();
+      d.setDate(d.getDate() - parseInt(days));
+      setDateFrom(d.toISOString().split('T')[0]);
+      setDateTo(today);
+    }
+  };
+
+  const fetchReport = async () => {
+    if (!shopId) return;
+    setReportLoading(true);
+    try {
+      const res = await getShopReports(shopId, dateFrom, dateTo);
+      setReportData(res.data);
+    } catch { /* silent */ }
+    finally { setReportLoading(false); }
+  };
+
+  useEffect(() => { if (shopId) fetchReport(); }, [shopId, dateFrom, dateTo]);
+
+  const handleExportCSV = async () => {
+    if (!shopId) return;
+    setExporting(true);
+    try {
+      const res = await exportShopCSV(shopId, dateFrom, dateTo);
+      const url = URL.createObjectURL(res.data);
+      Object.assign(document.createElement('a'), { href: url, download: `report-${dateFrom}-${dateTo}.csv` }).click();
+      URL.revokeObjectURL(url);
+    } catch { alert('Export failed'); }
+    finally { setExporting(false); }
+  };
 
   if (!analytics) return (
     <div className="py-20 text-center">
@@ -875,6 +922,60 @@ function AnalyticsPanel({ analytics, shopName }) {
 
   return (
     <div className="space-y-6">
+      {/* Date-Range Reports Section */}
+      <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Calendar size={18} className="text-[#5A5A40]" />
+            <h4 className="font-serif text-lg font-bold">Reports</h4>
+          </div>
+          <button onClick={handleExportCSV} disabled={exporting || !reportData}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#F5F5F0] rounded-xl text-xs font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-all disabled:opacity-40 border border-[#5A5A40]/20">
+            {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            Export CSV
+          </button>
+        </div>
+
+        {/* Range selector */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {[{ label: 'Today', val: '0' }, { label: '7 Days', val: '7' }, { label: '30 Days', val: '30' }, { label: 'Custom', val: 'custom' }].map(r => (
+            <button key={r.val} onClick={() => handleRangeChange(r.val)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all ${reportRange === r.val ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/60 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        {reportRange === 'custom' && (
+          <div className="flex gap-3 mb-4">
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
+              className="px-3 py-2 border border-[#1A1A1A]/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+            <span className="self-center text-[#1A1A1A]/30">to</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom}
+              className="px-3 py-2 border border-[#1A1A1A]/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]" />
+          </div>
+        )}
+
+        {/* Report KPIs */}
+        {reportLoading ? (
+          <div className="py-8 text-center"><Loader2 size={24} className="animate-spin mx-auto text-[#5A5A40]" /></div>
+        ) : reportData ? (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-[#F5F5F0] rounded-2xl p-4 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1">Revenue</p>
+              <p className="font-serif text-xl font-bold">₹{reportData.total_revenue}</p>
+            </div>
+            <div className="bg-[#F5F5F0] rounded-2xl p-4 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1">Orders</p>
+              <p className="font-serif text-xl font-bold">{reportData.total_orders}</p>
+            </div>
+            <div className="bg-[#F5F5F0] rounded-2xl p-4 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1">Avg Order</p>
+              <p className="font-serif text-xl font-bold">₹{reportData.avg_order_value}</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
       {/* Daily Sales Calendar With Walk-in and Online Breakdown */}
       <DailySalesCalendar analytics={analytics} />
 
@@ -2371,7 +2472,7 @@ export default function OwnerDashboard() {
       {tab === 'Analytics' && (
         analyticsLoading ? (
           <div className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-[#5A5A40]" /></div>
-        ) : <AnalyticsPanel analytics={analytics} shopName={selectedShop?.name} />
+        ) : <AnalyticsPanel analytics={analytics} shopName={selectedShop?.name} shopId={selectedShop?.id} />
       )}
 
       {tab === 'Billing' && selectedShop && (

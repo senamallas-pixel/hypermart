@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { listShops, listProducts, placeOrder, nearbyShops } from '../api/client';
+import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -192,12 +192,19 @@ function ShopProductsView({ shop, onBack }) {
   const [toast, setToast]       = useState(null);
   const [activeFilter, setActiveFilter] = useState(t('common.all'));
   const [needsLogin, setNeedsLogin]     = useState(false);
+  const [reviews, setReviews]           = useState([]);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     listProducts(shop.id)
       .then(r => setProducts(r.data))
       .catch(console.error)
       .finally(() => setLoading(false));
+    getShopReviews(shop.id)
+      .then(r => setReviews(r.data))
+      .catch(() => {});
   }, [shop.id]);
 
   const shopCartItems = cart.shopId === shop.id ? cart.items : [];
@@ -319,6 +326,77 @@ function ShopProductsView({ shop, onBack }) {
                 </div>
               )
           }
+        </div>
+
+        {/* Reviews Section */}
+        <div className="mt-8 mb-6">
+          <h3 className="font-serif text-lg font-bold mb-4">Reviews ({reviews.length})</h3>
+
+          {/* Submit Review */}
+          {currentUser && currentUser.role === 'customer' && !reviews.find(r => r.customer_id === currentUser.id) && (
+            <div className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 mb-4">
+              <p className="text-sm font-bold mb-2">Rate this shop</p>
+              <div className="flex gap-1 mb-3">
+                {[1, 2, 3, 4, 5].map(s => (
+                  <button key={s} onClick={() => setReviewRating(s)} className="focus:outline-none">
+                    <Star size={24} className={s <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-[#1A1A1A]/15'} />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={reviewComment}
+                onChange={e => setReviewComment(e.target.value)}
+                placeholder="Write a review (optional)..."
+                rows={2}
+                className="w-full p-3 border border-[#1A1A1A]/10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40] resize-none mb-3"
+              />
+              <button
+                disabled={reviewRating === 0 || submittingReview}
+                onClick={async () => {
+                  setSubmittingReview(true);
+                  try {
+                    const res = await createReview(shop.id, { rating: reviewRating, comment: reviewComment || null });
+                    setReviews([res.data, ...reviews]);
+                    setReviewRating(0);
+                    setReviewComment('');
+                  } catch (err) {
+                    alert(err.response?.data?.detail || 'Failed to submit review');
+                  } finally {
+                    setSubmittingReview(false);
+                  }
+                }}
+                className="px-4 py-2 bg-[#5A5A40] text-white text-sm font-bold rounded-xl hover:bg-[#4A4A30] transition-colors disabled:opacity-40"
+              >
+                {submittingReview ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </div>
+          )}
+
+          {/* Reviews List */}
+          {reviews.length > 0 ? (
+            <div className="space-y-3">
+              {reviews.map(r => (
+                <div key={r.id} className="bg-white border border-[#1A1A1A]/5 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm">{r.customer_name || 'Customer'}</span>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map(s => (
+                          <Star key={s} size={12} className={s <= r.rating ? 'text-amber-400 fill-amber-400' : 'text-[#1A1A1A]/10'} />
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-[#1A1A1A]/30">
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {r.comment && <p className="text-sm text-[#1A1A1A]/60">{r.comment}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#1A1A1A]/30 italic">No reviews yet. Be the first to review!</p>
+          )}
         </div>
       </div>
 

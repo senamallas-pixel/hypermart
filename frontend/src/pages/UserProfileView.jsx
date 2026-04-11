@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Mail, Phone, MapPin, Star, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Star, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';

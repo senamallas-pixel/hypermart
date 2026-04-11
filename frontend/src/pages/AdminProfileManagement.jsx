@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Search, Edit3, Trash2, Eye, Loader2, CheckCircle2, X } from 'lucide-react';
-import { listUsers, changeRole, api } from '../api/client';
+import { Search, Edit3, Trash2, Eye, Loader2, CheckCircle2, X, Plus } from 'lucide-react';
+import { listUsers, changeRole, deleteUser } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -61,7 +61,7 @@ export default function AdminProfileManagement() {
   const handleDelete = async (userId) => {
     if (!confirm('Delete this user? This cannot be undone.')) return;
     try {
-      await api.delete(`/users/${userId}`);
+      await deleteUser(userId);
       setUsers(users.filter(u => u.id !== userId));
       setToast('User deleted');
     } catch {

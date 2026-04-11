@@ -33,6 +33,19 @@ export default function OrderHistory() {
     loadOrders();
   }, []);
 
+  const handleCancel = async (orderId) => {
+    if (!confirm('Cancel this order? Stock will be restored.')) return;
+    setCancellingId(orderId);
+    try {
+      await cancelOrder(orderId);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'rejected' } : o));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to cancel order');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id?.toString().includes(searchTerm) ||
@@ -252,6 +265,31 @@ export default function OrderHistory() {
                               <span className="text-[#5A5A40] text-2xl">₹{order.total}</span>
                             </div>
                           </div>
+
+                          {/* Action buttons */}
+                          <div className="pt-3 flex gap-2">
+                            {order.status === 'pending' && (
+                              <motion.button
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleCancel(order.id)}
+                                disabled={cancellingId === order.id}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-red-200 text-red-600 font-semibold rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                              >
+                                {cancellingId === order.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                                Cancel Order
+                              </motion.button>
+                            )}
+                            {order.status === 'delivered' && (
+                              <motion.button
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setInvoiceOrder(order)}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-[#5A5A40]/20 text-[#5A5A40] font-semibold rounded-lg hover:bg-[#F5F5F0] transition-colors"
+                              >
+                                <Printer size={16} />
+                                Print Invoice
+                              </motion.button>
+                            )}
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -262,6 +300,14 @@ export default function OrderHistory() {
           </div>
         )}
       </div>
+
+      {/* Invoice Modal */}
+      {invoiceOrder && (
+        <InvoiceModal
+          order={invoiceOrder}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </div>
   );
 }
