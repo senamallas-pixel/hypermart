@@ -257,10 +257,10 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-[#F5F5F0] w-full max-w-4xl rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
+            className="bg-[#F5F5F0] w-full max-w-4xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-10 py-8 border-b border-[#1A1A1A]/10">
+            <div className="flex items-center justify-between px-5 sm:px-10 py-5 sm:py-8 border-b border-[#1A1A1A]/10">
               <div>
                 <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
                   Purchase Order #{detailPO.id}
@@ -340,10 +340,10 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-[#F5F5F0] w-full max-w-4xl rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
+            className="bg-[#F5F5F0] w-full max-w-4xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-10 py-8 border-b border-[#1A1A1A]/10">
+            <div className="flex items-center justify-between px-5 sm:px-10 py-5 sm:py-8 border-b border-[#1A1A1A]/10">
               <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">Create Purchase Order</h3>
               <button
                 onClick={() => setShowCreate(false)}

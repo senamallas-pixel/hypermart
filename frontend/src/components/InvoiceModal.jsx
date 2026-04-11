@@ -79,7 +79,7 @@ export default function InvoiceModal({ order, shopView, onClose }) {
         </div>
 
         {/* Invoice Content */}
-        <div className="flex-1 overflow-y-auto p-6" ref={invoiceRef}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6" ref={invoiceRef}>
           {/* Header */}
           <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-[#5A5A40]">
             <div>
@@ -141,7 +141,8 @@ export default function InvoiceModal({ order, shopView, onClose }) {
 
           {/* Items Table */}
           <div className="border border-[#1A1A1A]/5 rounded-2xl overflow-hidden mb-6">
-            <table className="w-full text-sm">
+           <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[400px]">
               <thead className="bg-[#F5F5F0]">
                 <tr>
                   <th className="text-left px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">#</th>
@@ -163,6 +164,7 @@ export default function InvoiceModal({ order, shopView, onClose }) {
                 ))}
               </tbody>
             </table>
+           </div>
           </div>
 
           {/* Totals */}

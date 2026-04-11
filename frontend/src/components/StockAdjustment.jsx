@@ -180,7 +180,7 @@ export default function StockAdjustment({ products, shopId, onSaved }) {
 
       <div className="bg-white border border-[#1A1A1A]/10 rounded-[2.5rem] overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-[#F5F5F0]/50 border-b border-[#1A1A1A]/5">
                 <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Product</th>

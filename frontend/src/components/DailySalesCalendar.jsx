@@ -88,7 +88,7 @@ export default function DailySalesCalendar({ analytics }) {
             <Calendar size={18} className="text-[#5A5A40]" />
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/40">Total Revenue</p>
           </div>
-          <p className="font-serif text-3xl font-bold text-[#1A1A1A]">₹{totalRevenue.toLocaleString()}</p>
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A]">₹{totalRevenue.toLocaleString()}</p>
         </div>
 
         <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
@@ -170,7 +170,7 @@ export default function DailySalesCalendar({ analytics }) {
               <motion.div
                 key={`day-${idx}-${cell.day}`}
                 whileHover={hasData ? { scale: 1.02, zIndex: 10 } : {}}
-                className={`bg-white min-h-[100px] p-3 flex flex-col justify-between transition-all relative group ${
+                className={`bg-white min-h-[70px] sm:min-h-[100px] p-2 sm:p-3 flex flex-col justify-between transition-all relative group ${
                   isToday
                     ? 'ring-2 ring-inset ring-[#5A5A40]'
                     : ''

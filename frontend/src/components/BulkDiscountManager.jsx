@@ -159,7 +159,7 @@ function AddDiscountModal({ open, onClose, shopId, products, onCreated }) {
         onClick={onClose}
       >
         <motion.div
-          className="bg-white w-full max-w-xl rounded-[3rem] p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+          className="bg-white w-full max-w-xl rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
@@ -304,7 +304,7 @@ function AddDiscountModal({ open, onClose, shopId, products, onCreated }) {
           ) : (
             <div className="space-y-4">
               {/* Quick value buttons */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {quickValues.map((val) => (
                   <button
                     key={val}

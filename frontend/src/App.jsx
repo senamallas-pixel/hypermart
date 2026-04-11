@@ -787,7 +787,7 @@ function AppShell() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans overflow-x-hidden">
       <TopNav />
-      <main>
+      <main className="pb-16 sm:pb-0">
         <Routes>
           <Route path="/"            element={<Navigate to="/marketplace" replace />} />
           <Route path="/login"       element={<SignIn />} />

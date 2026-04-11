@@ -48,14 +48,14 @@ function SupplierFormModal({ open, onClose, onSubmit, initial, saving }) {
       onClick={onClose}
     >
       <motion.div
-        className="bg-[#F5F5F0] w-full max-w-2xl rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
+        className="bg-[#F5F5F0] w-full max-w-lg sm:max-w-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-8 border-b border-[#1A1A1A]/5 flex justify-between items-center bg-white/50">
+        <div className="p-5 sm:p-8 border-b border-[#1A1A1A]/5 flex justify-between items-center bg-white/50">
           <h2 className="font-serif text-xl font-bold text-[#1A1A1A]">
             {isEdit ? "Edit Supplier" : "Add Supplier"}
           </h2>
@@ -68,7 +68,7 @@ function SupplierFormModal({ open, onClose, onSubmit, initial, saving }) {
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-8 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Name (required) */}
             <div className="space-y-1.5">
@@ -197,7 +197,7 @@ function DeleteConfirmModal({ open, onClose, onConfirm, supplier, deleting }) {
       onClick={onClose}
     >
       <motion.div
-        className="bg-white w-full max-w-md rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
+        className="bg-white w-full max-w-md rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl border border-white/20"
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
@@ -330,7 +330,7 @@ export default function SupplierManager({ shopId }) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-3xl font-bold text-[#1A1A1A]">
+        <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A]">
           Suppliers
         </h1>
         <button
@@ -352,8 +352,7 @@ export default function SupplierManager({ shopId }) {
           <div className="text-center py-20 text-sm text-[#1A1A1A]/40">
             No suppliers yet. Click &ldquo;Add Supplier&rdquo; to get started.
           </div>
-        ) : (
-          <table className="w-full">
+        ) : (         <div className="overflow-x-auto">          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="border-b border-[#1A1A1A]/5">
                 <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 text-left">
@@ -420,6 +419,7 @@ export default function SupplierManager({ shopId }) {
               ))}
             </tbody>
           </table>
+         </div>
         )}
       </div>
 
