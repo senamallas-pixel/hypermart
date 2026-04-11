@@ -22,7 +22,7 @@ import {
   suggestProducts, generateDescription, getLowStockInsight,
   getShopReports, exportShopCSV,
   listSuppliers, listProductDiscounts, listOrderDiscounts,
-  getShopUPI,
+  getShopUPI, getOrderPaymentStatus, markOrderPaymentStatus,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -695,6 +695,79 @@ function BillingPanel({ shopId }) {
   const [shopName, setShopName] = useState('');
   const [showUpiQR, setShowUpiQR] = useState(false);
   const [upiOrderData, setUpiOrderData] = useState(null);
+  const [upiCountdown, setUpiCountdown] = useState(60);
+  const [upiPaymentReceived, setUpiPaymentReceived] = useState(false);
+  const upiTimerRef = useRef(null);
+  const upiPollRef = useRef(null);
+
+  const cleanupUpiTimers = () => {
+    if (upiTimerRef.current) { clearInterval(upiTimerRef.current); upiTimerRef.current = null; }
+    if (upiPollRef.current) { clearInterval(upiPollRef.current); upiPollRef.current = null; }
+  };
+
+  const startUpiMonitoring = (orderData) => {
+    cleanupUpiTimers();
+    setUpiCountdown(60);
+    setUpiPaymentReceived(false);
+    setUpiOrderData(orderData);
+    setShowUpiQR(true);
+
+    // Countdown timer — tick every second
+    let remaining = 60;
+    upiTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      setUpiCountdown(remaining);
+      if (remaining <= 0) {
+        cleanupUpiTimers();
+        // Timeout — close modal, keep order as pending
+        setShowUpiQR(false);
+        setLastOrder(orderData);
+        setUpiOrderData(null);
+      }
+    }, 1000);
+
+    // Poll payment status every 3 seconds
+    upiPollRef.current = setInterval(async () => {
+      try {
+        const res = await getOrderPaymentStatus(orderData.id);
+        if (res.data.payment_status === 'paid') {
+          cleanupUpiTimers();
+          setUpiPaymentReceived(true);
+          // Auto-close after 2 seconds
+          setTimeout(() => {
+            setShowUpiQR(false);
+            setLastOrder({ ...orderData, payment_status: 'paid', payment_method: 'upi' });
+            setUpiOrderData(null);
+            setUpiPaymentReceived(false);
+          }, 2000);
+        }
+      } catch { /* ignore poll errors */ }
+    }, 5000);
+  };
+
+  const handlePaymentReceived = async () => {
+    if (!upiOrderData) return;
+    try {
+      await markOrderPaymentStatus(upiOrderData.id, 'paid');
+    } catch { /* ignore */ }
+    cleanupUpiTimers();
+    setUpiPaymentReceived(true);
+    // Show success animation for 2s, then close
+    setTimeout(() => {
+      setShowUpiQR(false);
+      setLastOrder({ ...upiOrderData, payment_status: 'paid', payment_method: 'upi' });
+      setUpiOrderData(null);
+      setUpiPaymentReceived(false);
+    }, 2000);
+  };
+
+  const handleUpiClose = () => {
+    cleanupUpiTimers();
+    setShowUpiQR(false);
+    setLastOrder(upiOrderData);
+    setUpiOrderData(null);
+    setUpiPaymentReceived(false);
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -808,12 +881,11 @@ function BillingPanel({ shopId }) {
 
   const billTotal = calculations.total;
 
-  const buildUpiUrl = (amount, orderId) => {
-    const pa = encodeURIComponent(shopUpiId);
-    const pn = encodeURIComponent(shopName);
-    const tn = encodeURIComponent(`Order #${orderId}`);
-    const am = amount.toFixed(2);
-    return `upi://pay?pa=${pa}&pn=${pn}&am=${am}&cu=INR&tn=${tn}`;
+  const buildPaymentUrl = (amount, orderId) => {
+    // Points to the backend payment page — customer scans, pays, confirms there
+    // The owner's polling auto-detects the status change
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    return `${baseUrl}/pay/${orderId}`;
   };
 
   const handlePlaceOrder = async () => {
@@ -844,8 +916,7 @@ function BillingPanel({ shopId }) {
           setPlacing(false);
           return;
         }
-        setUpiOrderData(res.data);
-        setShowUpiQR(true);
+        startUpiMonitoring(res.data);
         setPlacing(false);
         return;
       }
@@ -1022,54 +1093,93 @@ function BillingPanel({ shopId }) {
             {showUpiQR && upiOrderData && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                onClick={() => { setShowUpiQR(false); setLastOrder(upiOrderData); setUpiOrderData(null); }}>
+                onClick={handleUpiClose}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
                   className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl"
                   onClick={e => e.stopPropagation()}>
-                  <div className="mb-4">
-                    <div className="w-14 h-14 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                      <span className="text-2xl">📱</span>
-                    </div>
-                    <h3 className="font-serif text-xl font-bold">Scan & Pay</h3>
-                    <p className="text-xs text-[#1A1A1A]/50 mt-1">Order #{upiOrderData.id} · {shopName}</p>
-                  </div>
 
-                  <div className="bg-white border-2 border-[#5A5A40]/20 rounded-2xl p-6 inline-block mb-4">
-                    <QRCodeSVG
-                      value={buildUpiUrl(upiOrderData.total, upiOrderData.id)}
-                      size={220}
-                      level="H"
-                      includeMargin={false}
-                      bgColor="#ffffff"
-                      fgColor="#1A1A1A"
-                    />
-                  </div>
+                  {/* Payment received state */}
+                  {upiPaymentReceived ? (
+                    <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                      className="py-4">
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 12 }}
+                        className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                        <CheckCircle2 size={52} className="text-green-600" />
+                      </motion.div>
+                      <h3 className="font-serif text-2xl font-bold text-green-700 mb-2">Payment Successful!</h3>
+                      <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-3">
+                        <p className="font-serif text-4xl font-bold text-green-700">₹{upiOrderData.total?.toFixed(2)}</p>
+                        <p className="text-sm text-green-600 mt-1 font-medium">Paid via UPI</p>
+                      </div>
+                      <div className="space-y-1 text-sm text-green-600/80">
+                        <p>Order #{upiOrderData.id} · {shopName}</p>
+                        <p className="text-xs">Paid to: {shopUpiId}</p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <>
+                      <div className="mb-4">
+                        <div className="w-14 h-14 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <span className="text-2xl">📱</span>
+                        </div>
+                        <h3 className="font-serif text-xl font-bold">Scan & Pay</h3>
+                        <p className="text-xs text-[#1A1A1A]/50 mt-1">Order #{upiOrderData.id} · {shopName}</p>
+                      </div>
 
-                  <div className="mb-4">
-                    <p className="font-serif text-3xl font-bold text-[#5A5A40]">₹{upiOrderData.total?.toFixed(2)}</p>
-                    <p className="text-xs text-[#1A1A1A]/40 mt-1 font-medium">Pay to: {shopUpiId}</p>
-                  </div>
+                      {/* Countdown timer */}
+                      <div className="mb-3">
+                        <div className="relative w-16 h-16 mx-auto">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                            <circle cx="32" cy="32" r="28" stroke="#e5e5e5" strokeWidth="4" fill="none" />
+                            <circle cx="32" cy="32" r="28" stroke={upiCountdown <= 10 ? '#ef4444' : '#5A5A40'} strokeWidth="4" fill="none"
+                              strokeDasharray={`${(upiCountdown / 60) * 175.9} 175.9`}
+                              strokeLinecap="round" className="transition-all duration-1000" />
+                          </svg>
+                          <span className={`absolute inset-0 flex items-center justify-center text-lg font-bold ${upiCountdown <= 10 ? 'text-red-500' : 'text-[#5A5A40]'}`}>
+                            {upiCountdown}s
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center justify-center gap-3 mb-5">
-                    <span className="text-xs font-bold text-[#1A1A1A]/30 uppercase tracking-widest">Works with</span>
-                  </div>
-                  <div className="flex items-center justify-center gap-4 mb-5">
-                    <span className="bg-[#5f259f]/10 text-[#5f259f] text-[10px] font-bold px-3 py-1.5 rounded-full">PhonePe</span>
-                    <span className="bg-[#137333]/10 text-[#137333] text-[10px] font-bold px-3 py-1.5 rounded-full">GPay</span>
-                    <span className="bg-[#00BAF2]/10 text-[#00BAF2] text-[10px] font-bold px-3 py-1.5 rounded-full">Paytm</span>
-                    <span className="bg-[#1A1A1A]/5 text-[#1A1A1A]/50 text-[10px] font-bold px-3 py-1.5 rounded-full">Any UPI</span>
-                  </div>
+                      <div className="bg-white border-2 border-[#5A5A40]/20 rounded-2xl p-5 inline-block mb-4">
+                        <QRCodeSVG
+                          value={buildPaymentUrl(upiOrderData.total, upiOrderData.id)}
+                          size={200}
+                          level="H"
+                          includeMargin={false}
+                          bgColor="#ffffff"
+                          fgColor="#1A1A1A"
+                        />
+                      </div>
 
-                  <div className="flex gap-2">
-                    <button onClick={() => { setShowUpiQR(false); setLastOrder({ ...upiOrderData, payment_status: 'paid', payment_method: 'upi' }); setUpiOrderData(null); }}
-                      className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-green-700 transition-all flex items-center justify-center gap-2">
-                      <CheckCircle2 size={16} /> Payment Received
-                    </button>
-                    <button onClick={() => { setShowUpiQR(false); setLastOrder(upiOrderData); setUpiOrderData(null); }}
-                      className="px-4 py-3 rounded-xl text-sm font-bold text-[#1A1A1A]/40 border border-[#1A1A1A]/10 hover:bg-[#1A1A1A]/5 transition-all">
-                      Close
-                    </button>
-                  </div>
+                      <div className="mb-3">
+                        <p className="font-serif text-3xl font-bold text-[#5A5A40]">₹{upiOrderData.total?.toFixed(2)}</p>
+                        <p className="text-xs text-[#1A1A1A]/40 mt-1 font-medium">Pay to: {shopUpiId}</p>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-4 mb-3">
+                        <span className="bg-[#5f259f]/10 text-[#5f259f] text-[10px] font-bold px-3 py-1.5 rounded-full">PhonePe</span>
+                        <span className="bg-[#137333]/10 text-[#137333] text-[10px] font-bold px-3 py-1.5 rounded-full">GPay</span>
+                        <span className="bg-[#00BAF2]/10 text-[#00BAF2] text-[10px] font-bold px-3 py-1.5 rounded-full">Paytm</span>
+                        <span className="bg-[#1A1A1A]/5 text-[#1A1A1A]/50 text-[10px] font-bold px-3 py-1.5 rounded-full">Any UPI</span>
+                      </div>
+
+                      {/* Auto-detection hint */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-center gap-2 justify-center">
+                        <Loader2 size={14} className="animate-spin text-blue-500" />
+                        <p className="text-xs text-blue-700 font-medium">Auto-detecting payment… will confirm automatically</p>
+                      </div>
+
+                      <button onClick={handlePaymentReceived}
+                        className="w-full bg-[#5A5A40]/10 text-[#5A5A40] py-3 rounded-xl font-bold text-sm hover:bg-[#5A5A40]/20 transition-all flex items-center justify-center gap-2 mb-2">
+                        <CheckCircle2 size={16} /> Mark as Paid Manually
+                      </button>
+                      <button onClick={handleUpiClose}
+                        className="w-full py-2 rounded-xl text-sm font-bold text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70 transition-colors">
+                        Keep Pending & Close
+                      </button>
+                    </>
+                  )}
                 </motion.div>
               </motion.div>
             )}
@@ -1079,17 +1189,42 @@ function BillingPanel({ shopId }) {
           <AnimatePresence>
             {lastOrder && (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="mt-4 bg-green-50 border border-green-200 rounded-2xl p-4">
+                className={`mt-4 rounded-2xl p-4 border ${
+                  lastOrder.payment_status === 'paid'
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 size={18} className="text-green-600" />
-                  <span className="font-bold text-green-800 text-sm">Order #{lastOrder.id} placed!</span>
+                  {lastOrder.payment_status === 'paid' ? (
+                    <CheckCircle2 size={18} className="text-green-600" />
+                  ) : (
+                    <Clock size={18} className="text-amber-600" />
+                  )}
+                  <span className={`font-bold text-sm ${
+                    lastOrder.payment_status === 'paid' ? 'text-green-800' : 'text-amber-800'
+                  }`}>Order #{lastOrder.id} placed!</span>
+                  <span className={`ml-auto text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                    lastOrder.payment_status === 'paid'
+                      ? 'bg-green-200 text-green-800'
+                      : 'bg-amber-200 text-amber-800'
+                  }`}>
+                    {lastOrder.payment_status === 'paid' ? '✓ Paid' : '⏳ Pending'}
+                  </span>
                 </div>
-                <p className="text-xs text-green-700 mb-3">₹{lastOrder.total} · {lastOrder.delivery_address}</p>
+                <p className={`text-xs mb-3 ${lastOrder.payment_status === 'paid' ? 'text-green-700' : 'text-amber-700'}`}>
+                  ₹{lastOrder.total} · {lastOrder.payment_method === 'upi' ? 'UPI Payment' : lastOrder.payment_method === 'cash' ? 'Cash Payment' : lastOrder.delivery_address}
+                </p>
                 <div className="flex gap-2">
                   <button onClick={() => setInvoiceOrder(lastOrder)}
                     className="flex-1 text-xs font-bold uppercase tracking-widest text-[#5A5A40] border border-[#5A5A40]/30 py-2 rounded-xl hover:bg-[#5A5A40]/5 transition-all">
                     View Invoice
                   </button>
+                  {lastOrder.payment_status !== 'paid' && lastOrder.payment_method === 'upi' && (
+                    <button onClick={() => startUpiMonitoring(lastOrder)}
+                      className="flex-1 text-xs font-bold uppercase tracking-widest text-[#5A5A40] border border-[#5A5A40]/30 py-2 rounded-xl hover:bg-[#5A5A40]/5 transition-all">
+                      Retry UPI
+                    </button>
+                  )}
                   <button onClick={() => setLastOrder(null)}
                     className="px-4 py-2 text-xs font-bold text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70 transition-colors">
                     Dismiss
