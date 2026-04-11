@@ -70,8 +70,40 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
+          set +e
           eas build --platform android --profile "${{ steps.profile.outputs.name }}" --non-interactive --wait --json > build.json
-          node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('build.json','utf8'));const b=Array.isArray(d)?d[0]:d;const id=b?.id||'';const url=b?.artifacts?.buildUrl||'';if(!id){process.exit(1)};fs.appendFileSync(process.env.GITHUB_OUTPUT,'id='+id+'\\nurl='+url+'\\n');"
+          BUILD_EXIT=$?
+          set -e
+
+          BUILD_ID=$(node -e "const fs=require('fs');let d={};try{d=JSON.parse(fs.readFileSync('build.json','utf8'));}catch{} const b=Array.isArray(d)?d[0]:d; process.stdout.write(b?.id||'');")
+          BUILD_URL=$(node -e "const fs=require('fs');let d={};try{d=JSON.parse(fs.readFileSync('build.json','utf8'));}catch{} const b=Array.isArray(d)?d[0]:d; process.stdout.write(b?.artifacts?.buildUrl||'');")
+          DETAILS_URL=$(node -e "const fs=require('fs');let d={};try{d=JSON.parse(fs.readFileSync('build.json','utf8'));}catch{} const b=Array.isArray(d)?d[0]:d; process.stdout.write(b?.detailsPageUrl||'');")
+
+          echo "id=${BUILD_ID}" >> "$GITHUB_OUTPUT"
+          echo "url=${BUILD_URL}" >> "$GITHUB_OUTPUT"
+          echo "details=${DETAILS_URL}" >> "$GITHUB_OUTPUT"
+
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "EAS build failed."
+            if [ -n "${BUILD_ID}" ]; then
+              echo "Build ID: ${BUILD_ID}"
+              eas build:view --build-id "${BUILD_ID}" --json > build-view.json || true
+            fi
+            if [ -n "${DETAILS_URL}" ]; then
+              echo "Build details: ${DETAILS_URL}"
+            fi
+            exit 1
+          fi
+
+      - name: Upload EAS debug logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-debug-${{ github.run_id }}
+          path: |
+            frontend_android/build.json
+            frontend_android/build-view.json
+          if-no-files-found: ignore
 
       - name: Download build artifact
         id: artifact
