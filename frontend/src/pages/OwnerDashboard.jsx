@@ -881,10 +881,17 @@ function BillingPanel({ shopId }) {
 
   const billTotal = calculations.total;
 
-  const buildPaymentUrl = (amount, orderId) => {
-    // Points to the backend payment page — customer scans, pays, confirms there
-    // The owner's polling auto-detects the status change
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const buildQrValue = (amount, orderId) => {
+    const isDev = import.meta.env.DEV;
+    if (isDev) {
+      // Dev: direct upi://pay link — owner manually confirms
+      const pa = encodeURIComponent(shopUpiId);
+      const pn = encodeURIComponent(shopName);
+      const tn = encodeURIComponent(`Order ${orderId}`);
+      return `upi://pay?pa=${pa}&pn=${pn}&am=${amount.toFixed(2)}&cu=INR&tn=${tn}`;
+    }
+    // Production: payment page with auto-detection
+    const baseUrl = import.meta.env.VITE_API_URL || '';
     return `${baseUrl}/pay/${orderId}`;
   };
 
@@ -1143,7 +1150,7 @@ function BillingPanel({ shopId }) {
 
                       <div className="bg-white border-2 border-[#5A5A40]/20 rounded-2xl p-5 inline-block mb-4">
                         <QRCodeSVG
-                          value={buildPaymentUrl(upiOrderData.total, upiOrderData.id)}
+                          value={buildQrValue(upiOrderData.total, upiOrderData.id)}
                           size={200}
                           level="H"
                           includeMargin={false}
@@ -1164,15 +1171,14 @@ function BillingPanel({ shopId }) {
                         <span className="bg-[#1A1A1A]/5 text-[#1A1A1A]/50 text-[10px] font-bold px-3 py-1.5 rounded-full">Any UPI</span>
                       </div>
 
-                      {/* Auto-detection hint */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-center gap-2 justify-center">
-                        <Loader2 size={14} className="animate-spin text-blue-500" />
-                        <p className="text-xs text-blue-700 font-medium">Auto-detecting payment… will confirm automatically</p>
+                      {/* Instruction + Confirm button */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                        <p className="text-xs text-amber-800 font-medium">👆 After customer pays, tap below to confirm</p>
                       </div>
 
                       <button onClick={handlePaymentReceived}
-                        className="w-full bg-[#5A5A40]/10 text-[#5A5A40] py-3 rounded-xl font-bold text-sm hover:bg-[#5A5A40]/20 transition-all flex items-center justify-center gap-2 mb-2">
-                        <CheckCircle2 size={16} /> Mark as Paid Manually
+                        className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-base hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-600/30 mb-2">
+                        <CheckCircle2 size={20} /> ₹{upiOrderData.total?.toFixed(2)} — Confirm Payment Received
                       </button>
                       <button onClick={handleUpiClose}
                         className="w-full py-2 rounded-xl text-sm font-bold text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70 transition-colors">
