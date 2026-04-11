@@ -89,6 +89,73 @@ const SCHEMA_SQL = `
     expires_at   TEXT,
     created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS reviews (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id     INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    customer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating      INTEGER NOT NULL,
+    comment     TEXT,
+    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token      TEXT    UNIQUE NOT NULL,
+    expires_at TEXT    NOT NULL,
+    used       INTEGER DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id        INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    name           TEXT    NOT NULL,
+    contact_person TEXT,
+    phone          TEXT,
+    email          TEXT,
+    address        TEXT,
+    gst_number     TEXT,
+    created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS purchase_orders (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id      INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    supplier_id  INTEGER NOT NULL REFERENCES suppliers(id),
+    total_amount REAL    NOT NULL DEFAULT 0,
+    status       TEXT    NOT NULL DEFAULT 'draft',
+    notes        TEXT,
+    created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    product_id        INTEGER NOT NULL REFERENCES products(id),
+    name              TEXT    NOT NULL,
+    price             REAL    NOT NULL,
+    quantity          INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS product_discounts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id        INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    product_id     INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    product_name   TEXT,
+    type           TEXT    NOT NULL,
+    buy_qty        INTEGER,
+    get_qty        INTEGER,
+    bulk_price     REAL,
+    discount_value REAL,
+    status         TEXT    NOT NULL DEFAULT 'active',
+    valid_till     TEXT,
+    created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
+  CREATE TABLE IF NOT EXISTS order_discounts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id        INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+    min_bill_value REAL    NOT NULL,
+    discount_type  TEXT    NOT NULL DEFAULT 'percentage',
+    discount_value REAL    NOT NULL,
+    status         TEXT    NOT NULL DEFAULT 'active',
+    valid_till     TEXT,
+    created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `;
 
 // Convert undefined → null so sql.js binding never chokes
@@ -124,15 +191,42 @@ class DB {
   createSchema() {
     this._db.exec(SCHEMA_SQL);
     // Migrations: add new columns if missing
-    try { this._db.run("ALTER TABLE shops ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
-    try { this._db.run("ALTER TABLE shops ADD COLUMN schedule TEXT"); } catch (_) {}
-    try { this._db.run("ALTER TABLE shops ADD COLUMN unavailable_dates TEXT"); } catch (_) {}
-    try { this._db.run("ALTER TABLE products ADD COLUMN description TEXT"); } catch (_) {}
+    const migrations = [
+      "ALTER TABLE shops ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE shops ADD COLUMN schedule TEXT",
+      "ALTER TABLE shops ADD COLUMN unavailable_dates TEXT",
+      "ALTER TABLE shops ADD COLUMN delivery_radius REAL",
+      "ALTER TABLE shops ADD COLUMN pincode TEXT",
+      "ALTER TABLE shops ADD COLUMN city TEXT",
+      "ALTER TABLE shops ADD COLUMN state TEXT",
+      "ALTER TABLE shops ADD COLUMN upi_id TEXT",
+      "ALTER TABLE products ADD COLUMN description TEXT",
+      "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 10",
+      "ALTER TABLE products ADD COLUMN expiry_date TEXT",
+      "ALTER TABLE users ADD COLUMN multi_location_enabled INTEGER DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN subtotal REAL",
+      "ALTER TABLE orders ADD COLUMN item_discounts REAL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN bill_discount REAL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN total_discount REAL DEFAULT 0",
+      "ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT 'cash'",
+      "ALTER TABLE orders ADD COLUMN razorpay_order_id TEXT",
+      "ALTER TABLE orders ADD COLUMN razorpay_payment_id TEXT",
+    ];
+    for (const stmt of migrations) {
+      try { this._db.run(stmt); } catch (_) {}
+    }
     this._save();
   }
 
   dropAll() {
     this._db.exec(`
+      DROP TABLE IF EXISTS purchase_order_items;
+      DROP TABLE IF EXISTS purchase_orders;
+      DROP TABLE IF EXISTS product_discounts;
+      DROP TABLE IF EXISTS order_discounts;
+      DROP TABLE IF EXISTS suppliers;
+      DROP TABLE IF EXISTS reviews;
+      DROP TABLE IF EXISTS password_reset_tokens;
       DROP TABLE IF EXISTS order_items;
       DROP TABLE IF EXISTS orders;
       DROP TABLE IF EXISTS products;

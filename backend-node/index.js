@@ -177,55 +177,63 @@ function assertShopOwnership(shop, user, res) {
 
 function serializeUser(u) {
   return {
-    id:           u.id,
-    uid:          u.uid,
-    email:        u.email,
-    display_name: u.display_name,
-    photo_url:    u.photo_url || null,
-    role:         u.role,
-    phone:        u.phone || null,
-    address:      u.address || null,
-    created_at:   u.created_at,
-    last_login:   u.last_login || null,
+    id:                     u.id,
+    uid:                    u.uid,
+    email:                  u.email,
+    display_name:           u.display_name,
+    photo_url:              u.photo_url || null,
+    role:                   u.role,
+    phone:                  u.phone || null,
+    address:                u.address || null,
+    multi_location_enabled: u.multi_location_enabled || 0,
+    created_at:             u.created_at,
+    last_login:             u.last_login || null,
   };
 }
 
 function serializeShop(s) {
   return {
-    id:               s.id,
-    owner_id:         s.owner_id,
-    name:             s.name,
-    address:          s.address,
-    category:         s.category,
-    location_name:    s.location_name,
-    status:           s.status,
-    logo:             s.logo || null,
-    timings:          s.timings || null,
-    lat:              s.lat ?? null,
-    lng:              s.lng ?? null,
-    rating:           s.rating,
-    review_count:     s.review_count,
-    is_open:          s.is_open ?? 1,
-    schedule:         s.schedule ? JSON.parse(s.schedule) : null,
+    id:                s.id,
+    owner_id:          s.owner_id,
+    name:              s.name,
+    address:           s.address,
+    category:          s.category,
+    location_name:     s.location_name,
+    status:            s.status,
+    logo:              s.logo || null,
+    timings:           s.timings || null,
+    lat:               s.lat ?? null,
+    lng:               s.lng ?? null,
+    rating:            s.rating,
+    review_count:      s.review_count,
+    delivery_radius:   s.delivery_radius ?? null,
+    pincode:           s.pincode || null,
+    city:              s.city || null,
+    state:             s.state || null,
+    upi_id:            s.upi_id || null,
+    is_open:           s.is_open ?? 1,
+    schedule:          s.schedule ? JSON.parse(s.schedule) : null,
     unavailable_dates: s.unavailable_dates ? JSON.parse(s.unavailable_dates) : [],
-    created_at:       s.created_at,
+    created_at:        s.created_at,
   };
 }
 
 function serializeProduct(p) {
   return {
-    id:          p.id,
-    shop_id:     p.shop_id,
-    name:        p.name,
-    description: p.description || null,
-    price:       p.price,
-    mrp:         p.mrp,
-    unit:        p.unit,
-    category:    p.category,
-    stock:       p.stock,
-    image:       p.image || null,
-    status:      p.status,
-    created_at:  p.created_at,
+    id:                  p.id,
+    shop_id:             p.shop_id,
+    name:                p.name,
+    description:         p.description || null,
+    price:               p.price,
+    mrp:                 p.mrp,
+    unit:                p.unit,
+    category:            p.category,
+    stock:               p.stock,
+    low_stock_threshold: p.low_stock_threshold ?? 10,
+    expiry_date:         p.expiry_date || null,
+    image:               p.image || null,
+    status:              p.status,
+    created_at:          p.created_at,
   };
 }
 
@@ -243,17 +251,25 @@ function serializeOrderItem(i) {
 function serializeOrder(o) {
   const items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(o.id);
   return {
-    id:               o.id,
-    shop_id:          o.shop_id,
-    shop_name:        o.shop_name,
-    customer_id:      o.customer_id,
-    items:            items.map(serializeOrderItem),
-    total:            o.total,
-    status:           o.status,
-    payment_status:   o.payment_status,
-    delivery_address: o.delivery_address,
-    created_at:       o.created_at,
-    updated_at:       o.updated_at || null,
+    id:                  o.id,
+    shop_id:             o.shop_id,
+    shop_name:           o.shop_name,
+    customer_id:         o.customer_id,
+    items:               items.map(serializeOrderItem),
+    total:               o.total,
+    subtotal:            o.subtotal ?? null,
+    item_discounts:      o.item_discounts ?? null,
+    bill_discount:       o.bill_discount ?? null,
+    total_discount:      o.total_discount ?? null,
+    order_type:          o.order_type || "online",
+    status:              o.status,
+    payment_status:      o.payment_status,
+    payment_method:      o.payment_method || "cash",
+    razorpay_order_id:   o.razorpay_order_id || null,
+    razorpay_payment_id: o.razorpay_payment_id || null,
+    delivery_address:    o.delivery_address,
+    created_at:          o.created_at,
+    updated_at:          o.updated_at || null,
   };
 }
 
@@ -494,7 +510,8 @@ app.get("/shops", (req, res) => {
 // POST /shops
 app.post("/shops", requireRole("owner", "admin"), (req, res) => {
   if (!checkSubscription(req.user, res)) return;
-  const { name, address, category, location_name, logo, timings, lat, lng } = req.body;
+  const { name, address, category, location_name, logo, timings, lat, lng,
+          delivery_radius, pincode, city, state, upi_id } = req.body;
   if (!name || !address || !category || !location_name) {
     return res.status(422).json({ detail: "name, address, category, and location_name are required" });
   }
@@ -503,8 +520,10 @@ app.post("/shops", requireRole("owner", "admin"), (req, res) => {
   if (!SHOP_LOCS.includes(location_name)) return res.status(422).json({ detail: "Invalid location" });
 
   const r = db.prepare(
-    "INSERT INTO shops (owner_id, name, address, category, location_name, logo, timings, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(req.user.id, name.trim(), address, category, location_name, logo || null, timings || null, lat ?? null, lng ?? null);
+    `INSERT INTO shops (owner_id, name, address, category, location_name, logo, timings, lat, lng,
+     delivery_radius, pincode, city, state, upi_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.user.id, name.trim(), address, category, location_name, logo || null, timings || null,
+        lat ?? null, lng ?? null, delivery_radius ?? null, pincode || null, city || null, state || null, upi_id || null);
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(r.lastInsertRowid);
   res.status(201).json(serializeShop(shop));
 });
@@ -562,7 +581,8 @@ app.patch("/shops/:id", requireAuth, (req, res) => {
   if (!shop) return res.status(404).json({ detail: "Shop not found" });
   if (!assertShopOwnership(shop, req.user, res)) return;
 
-  const allowed = ["name", "address", "category", "location_name", "logo", "timings", "lat", "lng", "is_open", "schedule", "unavailable_dates"];
+  const allowed = ["name", "address", "category", "location_name", "logo", "timings", "lat", "lng",
+    "is_open", "schedule", "unavailable_dates", "delivery_radius", "pincode", "city", "state", "upi_id"];
   if (req.user.role === "admin") allowed.push("status");
   const updates = {};
   for (const k of allowed) {
@@ -645,6 +665,33 @@ app.post("/shops/:shopId/products", requireAuth, (req, res) => {
   res.status(201).json(serializeProduct(product));
 });
 
+// PATCH /shops/:shopId/products/bulk-update  (must be before :productId)
+app.patch("/shops/:shopId/products/bulk-update", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { items } = req.body;
+  if (!items || !items.length) return res.status(422).json({ detail: "items are required" });
+  for (const item of items) {
+    const product = db.prepare("SELECT * FROM products WHERE id = ? AND shop_id = ?").get(item.product_id, shopId);
+    if (!product) continue;
+    const updates = [];
+    const values = [];
+    if (item.stock != null) { updates.push("stock = ?"); values.push(item.stock); }
+    if (item.low_stock_threshold != null) { updates.push("low_stock_threshold = ?"); values.push(item.low_stock_threshold); }
+    if (item.expiry_date !== undefined) {
+      updates.push("expiry_date = ?");
+      values.push(item.expiry_date === "" ? null : item.expiry_date);
+    }
+    if (updates.length) {
+      values.push(item.product_id);
+      db.prepare(`UPDATE products SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    }
+  }
+  res.json({ message: "Stock updated", count: items.length });
+});
+
 // PATCH /shops/:shopId/products/:productId
 app.patch("/shops/:shopId/products/:productId", requireAuth, (req, res) => {
   const shopId    = Number(req.params.shopId);
@@ -694,7 +741,8 @@ app.delete("/shops/:shopId/products/:productId", requireAuth, (req, res) => {
 
 // POST /orders
 app.post("/orders", requireRole("customer"), (req, res) => {
-  const { shop_id, items, delivery_address = "Default Address" } = req.body;
+  const { shop_id, items, delivery_address = "Default Address", payment_method = "cash",
+          item_discounts, bill_discount, total_discount } = req.body;
   if (!shop_id || !items || !items.length) {
     return res.status(422).json({ detail: "shop_id and at least one item are required" });
   }
@@ -702,6 +750,8 @@ app.post("/orders", requireRole("customer"), (req, res) => {
   if (!shop || shop.status !== "approved") {
     return res.status(404).json({ detail: "Shop not found or not available" });
   }
+  const pm = payment_method || "cash";
+  const paymentStatus = pm === "cash" ? "paid" : "pending";
 
   const placeOrderTx = db.transaction(() => {
     const orderItems = [];
@@ -723,9 +773,13 @@ app.post("/orders", requireRole("customer"), (req, res) => {
     }
 
     const total_rounded = Math.round(total * 100) / 100;
+    const finalTotal = total_discount ? Math.max(0, Math.round((total - total_discount) * 100) / 100) : total_rounded;
     const r = db.prepare(
-      "INSERT INTO orders (shop_id, shop_name, customer_id, total, delivery_address, order_type) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(shop.id, shop.name, req.user.id, total_rounded, delivery_address, "online");
+      `INSERT INTO orders (shop_id, shop_name, customer_id, total, subtotal, item_discounts, bill_discount, total_discount,
+       delivery_address, order_type, payment_method, payment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(shop.id, shop.name, req.user.id, finalTotal, total_rounded,
+          item_discounts || 0, bill_discount || 0, total_discount || 0,
+          delivery_address, "online", pm, paymentStatus);
     const orderId = r.lastInsertRowid;
 
     for (const { product, quantity } of orderItems) {
@@ -816,7 +870,8 @@ app.post("/shops/:shopId/walkin-order", requireRole("owner", "admin"), (req, res
     return res.status(403).json({ detail: "Shop must be approved to create orders" });
   }
 
-  const { items, customer_name = "Walk-in Customer", payment_status = "paid" } = req.body;
+  const { items, customer_name = "Walk-in Customer", payment_status = "paid",
+          payment_method = "cash", item_discounts, bill_discount, total_discount } = req.body;
   if (!items || !items.length) {
     return res.status(422).json({ detail: "At least one item is required" });
   }
@@ -844,9 +899,14 @@ app.post("/shops/:shopId/walkin-order", requireRole("owner", "admin"), (req, res
     }
 
     const total_rounded = Math.round(total * 100) / 100;
+    const finalTotal = total_discount ? Math.max(0, Math.round((total - total_discount) * 100) / 100) : total_rounded;
     const r = db.prepare(
-      "INSERT INTO orders (shop_id, shop_name, customer_id, total, status, payment_status, delivery_address, order_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(shop.id, shop.name, req.user.id, total_rounded, "delivered", payment_status, "Walk-in: " + customer_name, "walk_in");
+      `INSERT INTO orders (shop_id, shop_name, customer_id, total, subtotal, item_discounts, bill_discount, total_discount,
+       status, payment_status, payment_method, delivery_address, order_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(shop.id, shop.name, req.user.id, finalTotal, total_rounded,
+          item_discounts || 0, bill_discount || 0, total_discount || 0,
+          "delivered", payment_status, payment_method || "cash",
+          "In-Store: " + customer_name, "walkin");
     const orderId = r.lastInsertRowid;
 
     for (const { product, quantity } of orderItems) {
@@ -1261,6 +1321,488 @@ app.post("/ai/sales-forecast", requireAuth, async (req, res) => {
   } catch (_) {
     res.json({ forecast, insight: null, avg_daily_revenue: Math.round(avgRevenue * 100) / 100 });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEWS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post("/shops/:shopId/reviews", requireRole("customer"), (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  const { rating, comment } = req.body;
+  if (!rating || rating < 1 || rating > 5) return res.status(422).json({ detail: "Rating must be between 1 and 5" });
+  const existing = db.prepare("SELECT id FROM reviews WHERE shop_id = ? AND customer_id = ?").get(shopId, req.user.id);
+  if (existing) return res.status(400).json({ detail: "You have already reviewed this shop" });
+  const r = db.prepare("INSERT INTO reviews (shop_id, customer_id, rating, comment) VALUES (?, ?, ?, ?)").run(shopId, req.user.id, rating, comment || null);
+  const avg = db.prepare("SELECT AVG(rating) as a, COUNT(*) as c FROM reviews WHERE shop_id = ?").get(shopId);
+  db.prepare("UPDATE shops SET rating = ?, review_count = ? WHERE id = ?").run(Math.round((avg.a || 0) * 10) / 10, avg.c, shopId);
+  const review = db.prepare("SELECT * FROM reviews WHERE id = ?").get(r.lastInsertRowid);
+  res.status(201).json({ ...review, customer_name: req.user.display_name });
+});
+
+app.get("/shops/:shopId/reviews", (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  const reviews = db.prepare("SELECT r.*, u.display_name as customer_name FROM reviews r JOIN users u ON u.id = r.customer_id WHERE r.shop_id = ? ORDER BY r.created_at DESC").all(shopId);
+  res.json(reviews);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER CANCEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post("/orders/:orderId/cancel", requireAuth, (req, res) => {
+  const orderId = Number(req.params.orderId);
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  if (!order) return res.status(404).json({ detail: "Order not found" });
+  if (order.customer_id !== req.user.id && req.user.role !== "admin") {
+    return res.status(403).json({ detail: "Not your order" });
+  }
+  if (order.status !== "pending") return res.status(400).json({ detail: "Only pending orders can be cancelled" });
+  const items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(orderId);
+  for (const item of items) {
+    db.prepare("UPDATE products SET stock = stock + ? WHERE id = ?").run(item.quantity, item.product_id);
+  }
+  db.prepare("UPDATE orders SET status = 'rejected', updated_at = ? WHERE id = ?").run(new Date().toISOString(), orderId);
+  const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  res.json(serializeOrder(updated));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT SEARCH
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/products/search", (req, res) => {
+  const q = req.query.q || "";
+  if (!q.trim()) return res.json([]);
+  const products = db.prepare(
+    `SELECT p.*, s.name as shop_name, s.status as shop_status FROM products p
+     JOIN shops s ON s.id = p.shop_id
+     WHERE s.status = 'approved' AND p.status = 'active'
+     AND (p.name LIKE ? OR p.category LIKE ?)
+     ORDER BY p.name LIMIT 50`
+  ).all(`%${q}%`, `%${q}%`);
+  res.json(products.map(p => ({ ...serializeProduct(p), shop_name: p.shop_name })));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PASSWORD RESET
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post("/auth/forgot-password", (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(422).json({ detail: "Email is required" });
+  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  // Always return success to prevent email enumeration
+  if (!user) return res.json({ message: "If an account with that email exists, a reset token has been generated." });
+  const crypto = require("crypto");
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 3600000).toISOString();
+  db.prepare("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)").run(user.id, token, expiresAt);
+  res.json({ message: "If an account with that email exists, a reset token has been generated.", token });
+});
+
+app.post("/auth/reset-password", (req, res) => {
+  const { token, new_password } = req.body;
+  if (!token || !new_password) return res.status(422).json({ detail: "Token and new password are required" });
+  if (new_password.length < 6) return res.status(422).json({ detail: "Password must be at least 6 characters" });
+  const resetToken = db.prepare("SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0").get(token);
+  if (!resetToken) return res.status(400).json({ detail: "Invalid or expired token" });
+  if (new Date(resetToken.expires_at) < new Date()) return res.status(400).json({ detail: "Token has expired" });
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(new_password), resetToken.user_id);
+  db.prepare("UPDATE password_reset_tokens SET used = 1 WHERE id = ?").run(resetToken.id);
+  res.json({ message: "Password reset successfully" });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPLIERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/suppliers", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const suppliers = db.prepare("SELECT * FROM suppliers WHERE shop_id = ? ORDER BY name").all(shopId);
+  res.json(suppliers);
+});
+
+app.post("/shops/:shopId/suppliers", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { name, contact_person, phone, email, address, gst_number } = req.body;
+  if (!name) return res.status(422).json({ detail: "Supplier name is required" });
+  const r = db.prepare(
+    "INSERT INTO suppliers (shop_id, name, contact_person, phone, email, address, gst_number) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(shopId, name, contact_person || null, phone || null, email || null, address || null, gst_number || null);
+  const supplier = db.prepare("SELECT * FROM suppliers WHERE id = ?").get(r.lastInsertRowid);
+  res.status(201).json(supplier);
+});
+
+app.patch("/shops/:shopId/suppliers/:supplierId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const supplierId = Number(req.params.supplierId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const supplier = db.prepare("SELECT * FROM suppliers WHERE id = ? AND shop_id = ?").get(supplierId, shopId);
+  if (!supplier) return res.status(404).json({ detail: "Supplier not found" });
+  const fields = ["name", "contact_person", "phone", "email", "address", "gst_number"];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (req.body[f] !== undefined) { updates.push(`${f} = ?`); values.push(req.body[f]); }
+  }
+  if (updates.length) {
+    values.push(supplierId);
+    db.prepare(`UPDATE suppliers SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  }
+  res.json(db.prepare("SELECT * FROM suppliers WHERE id = ?").get(supplierId));
+});
+
+app.delete("/shops/:shopId/suppliers/:supplierId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const supplierId = Number(req.params.supplierId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const supplier = db.prepare("SELECT * FROM suppliers WHERE id = ? AND shop_id = ?").get(supplierId, shopId);
+  if (!supplier) return res.status(404).json({ detail: "Supplier not found" });
+  db.prepare("DELETE FROM suppliers WHERE id = ?").run(supplierId);
+  res.status(204).end();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PURCHASE ORDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/purchase-orders", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const pos = db.prepare("SELECT * FROM purchase_orders WHERE shop_id = ? ORDER BY created_at DESC").all(shopId);
+  res.json(pos.map(po => {
+    const items = db.prepare("SELECT * FROM purchase_order_items WHERE purchase_order_id = ?").all(po.id);
+    return { ...po, items };
+  }));
+});
+
+app.post("/shops/:shopId/purchase-orders", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { supplier_id, items, notes } = req.body;
+  if (!supplier_id || !items || !items.length) return res.status(422).json({ detail: "supplier_id and items are required" });
+  let totalAmount = 0;
+  for (const item of items) totalAmount += (item.price || 0) * (item.quantity || 0);
+  const r = db.prepare(
+    "INSERT INTO purchase_orders (shop_id, supplier_id, total_amount, notes) VALUES (?, ?, ?, ?)"
+  ).run(shopId, supplier_id, Math.round(totalAmount * 100) / 100, notes || null);
+  const poId = r.lastInsertRowid;
+  for (const item of items) {
+    db.prepare(
+      "INSERT INTO purchase_order_items (purchase_order_id, product_id, name, price, quantity) VALUES (?, ?, ?, ?, ?)"
+    ).run(poId, item.product_id, item.name, item.price, item.quantity);
+  }
+  const po = db.prepare("SELECT * FROM purchase_orders WHERE id = ?").get(poId);
+  const poItems = db.prepare("SELECT * FROM purchase_order_items WHERE purchase_order_id = ?").all(poId);
+  res.status(201).json({ ...po, items: poItems });
+});
+
+app.get("/shops/:shopId/purchase-orders/:poId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const poId = Number(req.params.poId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const po = db.prepare("SELECT * FROM purchase_orders WHERE id = ? AND shop_id = ?").get(poId, shopId);
+  if (!po) return res.status(404).json({ detail: "Purchase order not found" });
+  const items = db.prepare("SELECT * FROM purchase_order_items WHERE purchase_order_id = ?").all(poId);
+  res.json({ ...po, items });
+});
+
+app.patch("/shops/:shopId/purchase-orders/:poId/status", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const poId = Number(req.params.poId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const po = db.prepare("SELECT * FROM purchase_orders WHERE id = ? AND shop_id = ?").get(poId, shopId);
+  if (!po) return res.status(404).json({ detail: "Purchase order not found" });
+  const { status } = req.body;
+  if (!["draft", "sent", "received", "cancelled"].includes(status)) return res.status(422).json({ detail: "Invalid status" });
+  db.prepare("UPDATE purchase_orders SET status = ? WHERE id = ?").run(status, poId);
+  if (status === "received") {
+    const items = db.prepare("SELECT * FROM purchase_order_items WHERE purchase_order_id = ?").all(poId);
+    for (const item of items) {
+      db.prepare("UPDATE products SET stock = stock + ? WHERE id = ?").run(item.quantity, item.product_id);
+    }
+  }
+  const updated = db.prepare("SELECT * FROM purchase_orders WHERE id = ?").get(poId);
+  const items = db.prepare("SELECT * FROM purchase_order_items WHERE purchase_order_id = ?").all(poId);
+  res.json({ ...updated, items });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT DISCOUNTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/product-discounts", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const discounts = db.prepare("SELECT * FROM product_discounts WHERE shop_id = ? ORDER BY created_at DESC").all(shopId);
+  res.json(discounts);
+});
+
+app.post("/shops/:shopId/product-discounts", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { product_id, product_name, type, buy_qty, get_qty, bulk_price, discount_value, valid_till } = req.body;
+  if (!product_id || !type) return res.status(422).json({ detail: "product_id and type are required" });
+  const r = db.prepare(
+    "INSERT INTO product_discounts (shop_id, product_id, product_name, type, buy_qty, get_qty, bulk_price, discount_value, valid_till) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(shopId, product_id, product_name || null, type, buy_qty || null, get_qty || null, bulk_price || null, discount_value || null, valid_till || null);
+  res.status(201).json(db.prepare("SELECT * FROM product_discounts WHERE id = ?").get(r.lastInsertRowid));
+});
+
+app.patch("/shops/:shopId/product-discounts/:discountId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const discountId = Number(req.params.discountId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const disc = db.prepare("SELECT * FROM product_discounts WHERE id = ? AND shop_id = ?").get(discountId, shopId);
+  if (!disc) return res.status(404).json({ detail: "Discount not found" });
+  const fields = ["product_id", "product_name", "type", "buy_qty", "get_qty", "bulk_price", "discount_value", "status", "valid_till"];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (req.body[f] !== undefined) { updates.push(`${f} = ?`); values.push(req.body[f]); }
+  }
+  if (updates.length) {
+    values.push(discountId);
+    db.prepare(`UPDATE product_discounts SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  }
+  res.json(db.prepare("SELECT * FROM product_discounts WHERE id = ?").get(discountId));
+});
+
+app.delete("/shops/:shopId/product-discounts/:discountId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const discountId = Number(req.params.discountId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const disc = db.prepare("SELECT * FROM product_discounts WHERE id = ? AND shop_id = ?").get(discountId, shopId);
+  if (!disc) return res.status(404).json({ detail: "Discount not found" });
+  db.prepare("DELETE FROM product_discounts WHERE id = ?").run(discountId);
+  res.status(204).end();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER DISCOUNTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/order-discounts", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const discounts = db.prepare("SELECT * FROM order_discounts WHERE shop_id = ? ORDER BY min_bill_value").all(shopId);
+  res.json(discounts);
+});
+
+app.post("/shops/:shopId/order-discounts", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { min_bill_value, discount_type = "percentage", discount_value, valid_till } = req.body;
+  if (min_bill_value == null || discount_value == null) return res.status(422).json({ detail: "min_bill_value and discount_value are required" });
+  const r = db.prepare(
+    "INSERT INTO order_discounts (shop_id, min_bill_value, discount_type, discount_value, valid_till) VALUES (?, ?, ?, ?, ?)"
+  ).run(shopId, min_bill_value, discount_type, discount_value, valid_till || null);
+  res.status(201).json(db.prepare("SELECT * FROM order_discounts WHERE id = ?").get(r.lastInsertRowid));
+});
+
+app.patch("/shops/:shopId/order-discounts/:discountId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const discountId = Number(req.params.discountId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const disc = db.prepare("SELECT * FROM order_discounts WHERE id = ? AND shop_id = ?").get(discountId, shopId);
+  if (!disc) return res.status(404).json({ detail: "Discount not found" });
+  const fields = ["min_bill_value", "discount_type", "discount_value", "status", "valid_till"];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (req.body[f] !== undefined) { updates.push(`${f} = ?`); values.push(req.body[f]); }
+  }
+  if (updates.length) {
+    values.push(discountId);
+    db.prepare(`UPDATE order_discounts SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+  }
+  res.json(db.prepare("SELECT * FROM order_discounts WHERE id = ?").get(discountId));
+});
+
+app.delete("/shops/:shopId/order-discounts/:discountId", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const discountId = Number(req.params.discountId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const disc = db.prepare("SELECT * FROM order_discounts WHERE id = ? AND shop_id = ?").get(discountId, shopId);
+  if (!disc) return res.status(404).json({ detail: "Discount not found" });
+  db.prepare("DELETE FROM order_discounts WHERE id = ?").run(discountId);
+  res.status(204).end();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMBINED DISCOUNTS (public — for customer checkout)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/discounts", (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const now = new Date().toISOString();
+  const productDiscounts = db.prepare(
+    "SELECT * FROM product_discounts WHERE shop_id = ? AND status = 'active'"
+  ).all(shopId).filter(d => !d.valid_till || d.valid_till > now);
+  const orderDiscounts = db.prepare(
+    "SELECT * FROM order_discounts WHERE shop_id = ? AND status = 'active'"
+  ).all(shopId).filter(d => !d.valid_till || d.valid_till > now);
+  res.json({ product_discounts: productDiscounts, order_discounts: orderDiscounts });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-LOCATION TOGGLE
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.patch("/users/:userId/multi-location", requireRole("admin"), (req, res) => {
+  const userId = Number(req.params.userId);
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  if (!user) return res.status(404).json({ detail: "User not found" });
+  const { multi_location_enabled } = req.body;
+  db.prepare("UPDATE users SET multi_location_enabled = ? WHERE id = ?").run(multi_location_enabled, userId);
+  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  res.json(serializeUser(updated));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHOP UPI (public)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/upi", (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  res.json({ upi_id: shop.upi_id || "", shop_name: shop.name });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENTS (Razorpay)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RAZORPAY_KEY_ID     = process.env.RAZORPAY_KEY_ID || "";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "";
+
+app.post("/payments/create-order", requireAuth, (req, res) => {
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({ detail: "Razorpay is not configured on this server" });
+  }
+  const { order_id } = req.body;
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(order_id);
+  if (!order) return res.status(404).json({ detail: "Order not found" });
+  if (order.customer_id !== req.user.id) return res.status(403).json({ detail: "Not your order" });
+  if (order.payment_status === "paid") return res.status(400).json({ detail: "Order is already paid" });
+
+  const Razorpay = require("razorpay");
+  const instance = new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET });
+  const amountPaise = Math.round(order.total * 100);
+  instance.orders.create({ amount: amountPaise, currency: "INR", receipt: `order_${order.id}` }, (err, rzOrder) => {
+    if (err) return res.status(500).json({ detail: "Failed to create Razorpay order" });
+    db.prepare("UPDATE orders SET razorpay_order_id = ?, payment_method = 'razorpay' WHERE id = ?").run(rzOrder.id, order.id);
+    res.json({ razorpay_order_id: rzOrder.id, amount: amountPaise, currency: "INR", key_id: RAZORPAY_KEY_ID });
+  });
+});
+
+app.post("/payments/verify", requireAuth, (req, res) => {
+  if (!RAZORPAY_KEY_SECRET) return res.status(503).json({ detail: "Razorpay is not configured on this server" });
+  const { order_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(order_id);
+  if (!order) return res.status(404).json({ detail: "Order not found" });
+  if (order.customer_id !== req.user.id) return res.status(403).json({ detail: "Not your order" });
+
+  const crypto = require("crypto");
+  const message = `${razorpay_order_id}|${razorpay_payment_id}`;
+  const expected = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET).update(message).digest("hex");
+  if (expected !== razorpay_signature) return res.status(400).json({ detail: "Payment verification failed — invalid signature" });
+
+  db.prepare("UPDATE orders SET razorpay_payment_id = ?, payment_status = 'paid', payment_method = 'razorpay' WHERE id = ?").run(razorpay_payment_id, order.id);
+  res.json({ status: "success", order_id: order.id, payment_status: "paid" });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get("/shops/:shopId/reports", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { date_from, date_to } = req.query;
+  let where = "WHERE o.shop_id = ?";
+  const params = [shopId];
+  if (date_from) { where += " AND o.created_at >= ?"; params.push(date_from); }
+  if (date_to) { where += " AND o.created_at <= ?"; params.push(date_to + "T23:59:59"); }
+  const orders = db.prepare(`SELECT o.* FROM orders o ${where} ORDER BY o.created_at DESC`).all(...params);
+  const totalRevenue = orders.reduce((s, o) => s + (o.status === "delivered" ? o.total : 0), 0);
+  const totalOrders = orders.length;
+  res.json({
+    total_revenue: Math.round(totalRevenue * 100) / 100,
+    total_orders: totalOrders,
+    orders: orders.map(serializeOrder),
+  });
+});
+
+app.get("/shops/:shopId/reports/csv", requireAuth, (req, res) => {
+  const shopId = Number(req.params.shopId);
+  const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(shopId);
+  if (!shop) return res.status(404).json({ detail: "Shop not found" });
+  if (!assertShopOwnership(shop, req.user, res)) return;
+  const { date_from, date_to } = req.query;
+  let where = "WHERE o.shop_id = ?";
+  const params = [shopId];
+  if (date_from) { where += " AND o.created_at >= ?"; params.push(date_from); }
+  if (date_to) { where += " AND o.created_at <= ?"; params.push(date_to + "T23:59:59"); }
+  const orders = db.prepare(`SELECT o.* FROM orders o ${where} ORDER BY o.created_at DESC`).all(...params);
+  let csv = "Order ID,Date,Total,Status,Payment Status,Payment Method,Type\n";
+  for (const o of orders) {
+    csv += `${o.id},${o.created_at},${o.total},${o.status},${o.payment_status},${o.payment_method || "cash"},${o.order_type || "online"}\n`;
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename=report_shop_${shopId}.csv`);
+  res.send(csv);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE USER ACCOUNT (self)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.delete("/users/me", requireAuth, (req, res) => {
+  db.prepare("DELETE FROM users WHERE id = ?").run(req.user.id);
+  res.status(204).end();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

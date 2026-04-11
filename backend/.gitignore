@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+env/
+*.egg-info/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+uploads/*
+!uploads/.gitkeep

@@ -22,6 +22,7 @@ import {
   suggestProducts, generateDescription, getLowStockInsight,
   getShopReports, exportShopCSV,
   listSuppliers, listProductDiscounts, listOrderDiscounts,
+  createRazorpayOrder, verifyRazorpayPayment,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 import InvoiceModal from '../components/InvoiceModal';
@@ -799,6 +800,52 @@ function BillingPanel({ shopId }) {
 
   const billTotal = calculations.total;
 
+  const openRazorpayCheckout = async (order) => {
+    try {
+      const rzRes = await createRazorpayOrder(order.id);
+      const rz = rzRes.data;
+      const options = {
+        key: rz.key_id,
+        amount: rz.amount,
+        currency: rz.currency,
+        name: 'HyperMart',
+        description: `Walk-in Order #${order.id}`,
+        order_id: rz.razorpay_order_id,
+        method: { upi: true, card: false, netbanking: false, wallet: false },
+        handler: async (response) => {
+          try {
+            await verifyRazorpayPayment({
+              order_id:            order.id,
+              razorpay_order_id:   response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature:  response.razorpay_signature,
+            });
+          } catch { /* verification failed — order stays pending */ }
+          setLastOrder({ ...order, payment_status: 'paid', payment_method: 'upi' });
+          setPlacing(false);
+        },
+        modal: {
+          ondismiss: () => {
+            setLastOrder(order);
+            setPlacing(false);
+          },
+        },
+        prefill: { name: customerName || 'Walk-in Customer' },
+      };
+      if (window.Razorpay) {
+        new window.Razorpay(options).open();
+      } else {
+        alert('Razorpay SDK not loaded. Order placed — collect UPI payment manually.');
+        setLastOrder(order);
+        setPlacing(false);
+      }
+    } catch {
+      alert('Could not initiate Razorpay UPI payment. Order placed — collect payment manually.');
+      setLastOrder(order);
+      setPlacing(false);
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (!bill.length) return;
     setPlacing(true);
@@ -807,18 +854,26 @@ function BillingPanel({ shopId }) {
         items: bill.map(b => ({ product_id: b.product.id, quantity: b.quantity })),
         customer_name: customerName || 'Walk-in Customer',
         payment_method: walkinPayMethod,
-        payment_status: paymentStatus,
+        payment_status: walkinPayMethod === 'upi' ? 'pending' : paymentStatus,
         subtotal: calculations.subtotal,
         item_discounts: calculations.itemDiscounts,
         bill_discount: calculations.billDiscount,
         total_discount: calculations.totalDiscount,
       });
-      setLastOrder(res.data);
+
       setBill([]);
       setCustomerName('');
       // refresh products to reflect stock changes
       const pRes = await listProducts(shopId);
       setProducts(pRes.data);
+
+      // If UPI selected, open Razorpay checkout for UPI QR/scanner
+      if (walkinPayMethod === 'upi') {
+        await openRazorpayCheckout(res.data);
+        return;
+      }
+
+      setLastOrder(res.data);
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to place order');
     } finally {
@@ -953,7 +1008,7 @@ function BillingPanel({ shopId }) {
                 <div className="flex gap-2">
                   {[
                     { key: 'cash', label: '💵 Cash' },
-                    { key: 'upi',  label: '📱 UPI' },
+                    { key: 'upi',  label: '📱 UPI (Razorpay)' },
                   ].map(m => (
                     <button key={m.key} onClick={() => setWalkinPayMethod(m.key)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${walkinPayMethod === m.key ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/50 border-[#1A1A1A]/10 hover:border-[#5A5A40]'}`}>
@@ -961,8 +1016,14 @@ function BillingPanel({ shopId }) {
                     </button>
                   ))}
                 </div>
+                {walkinPayMethod === 'upi' && (
+                  <p className="text-[10px] text-[#5A5A40] mt-1.5 text-center font-medium">
+                    Razorpay UPI QR / scanner will open after billing
+                  </p>
+                )}
               </div>
-              {/* Payment Status */}
+              {/* Payment Status — only for cash */}
+              {walkinPayMethod !== 'upi' && (
               <div className="flex gap-2 mb-4">
                 {['paid', 'pending'].map(s => (
                   <button key={s} onClick={() => setPaymentStatus(s)}
@@ -971,9 +1032,10 @@ function BillingPanel({ shopId }) {
                   </button>
                 ))}
               </div>
+              )}
               <button onClick={handlePlaceOrder} disabled={placing}
                 className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {placing ? <><Loader2 size={18} className="animate-spin" /> Processing...</> : <><Receipt size={18} /> Bill ₹{billTotal.toFixed(2)}</>}
+                {placing ? <><Loader2 size={18} className="animate-spin" /> Processing...</> : walkinPayMethod === 'upi' ? <><Receipt size={18} /> Pay ₹{billTotal.toFixed(2)} via UPI</> : <><Receipt size={18} /> Bill ₹{billTotal.toFixed(2)}</>}
               </button>
             </>
           )}
