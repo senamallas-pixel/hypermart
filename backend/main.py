@@ -7,9 +7,9 @@ import os
 import csv
 import io
 import uuid
-import shutil
 import secrets
 import pathlib
+import base64
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 from collections import defaultdict
@@ -18,11 +18,12 @@ from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Re
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, text, Date
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import cloudinary
+import cloudinary.uploader
 
 from dotenv import load_dotenv
 load_dotenv()  # Load .env before ai.py reads OPENAI_API_KEY
@@ -50,14 +51,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Static uploads & AI router ──────────────────────────────────────────────────
-UPLOAD_DIR = pathlib.Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+# ── Cloudinary uploads & AI router ──────────────────────────────────────────────
 app.include_router(ai_router)
 
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
+
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+CLOUDINARY_FOLDER = os.getenv("CLOUDINARY_FOLDER", "hypermart")
+
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
 
 
 @app.on_event("startup")
@@ -1210,19 +1221,34 @@ def shop_analytics(
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    if not (CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET):
+        raise HTTPException(500, "Cloudinary is not configured on server")
+
     ext = pathlib.Path(file.filename or "image.bin").suffix.lower()
     if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
         raise HTTPException(400, "Only image files are allowed (jpg, png, gif, webp)")
+
     # Read file and enforce size limit
     contents = await file.read()
     max_bytes = MAX_UPLOAD_MB * 1024 * 1024
     if len(contents) > max_bytes:
         raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_MB}MB")
-    filename = f"{uuid.uuid4()}{ext}"
-    dest = UPLOAD_DIR / filename
-    with dest.open("wb") as f:
-        f.write(contents)
-    return {"url": f"/uploads/{filename}"}
+
+    mime_type = file.content_type or "application/octet-stream"
+    data_uri = f"data:{mime_type};base64,{base64.b64encode(contents).decode('utf-8')}"
+
+    try:
+        uploaded = cloudinary.uploader.upload(
+            data_uri,
+            folder=CLOUDINARY_FOLDER,
+            public_id=str(uuid.uuid4()),
+            overwrite=False,
+            resource_type="image",
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Cloudinary upload failed: {exc}")
+
+    return {"url": uploaded.get("secure_url")}
 
 
 # ═══════════════════════════════════════════════════════════════════
