@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Lock, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, Bell, Shield, Trash2, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { changePassword } from '../api/client';
+import { changePassword, deleteMyAccount } from '../api/client';
 
 export default function CustomerSettings() {
   const navigate = useNavigate();
@@ -436,10 +436,15 @@ export default function CustomerSettings() {
                       </motion.button>
                       <motion.button
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          // Implement deletion logic
-                          alert('Account deletion not yet implemented');
-                          setShowDeleteConfirm(false);
+                        onClick={async () => {
+                          try {
+                            await deleteMyAccount();
+                            signOut();
+                            navigate('/login');
+                          } catch (err) {
+                            alert(err.response?.data?.detail || 'Failed to delete account');
+                            setShowDeleteConfirm(false);
+                          }
                         }}
                         className="flex-1 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700"
                       >

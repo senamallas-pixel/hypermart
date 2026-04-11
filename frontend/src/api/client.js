@@ -24,8 +24,10 @@ export const login    = (data) => api.post("/auth/login",    data);
 export const getMe            = ()         => api.get("/users/me");
 export const updateMe         = (data)     => api.patch("/users/me",        data);
 export const changePassword   = (data)     => api.post("/users/me/change-password", data);
+export const deleteMyAccount  = ()         => api.delete("/users/me");
 export const listUsers        = ()         => api.get("/users");
 export const changeRole       = (id, role) => api.patch(`/users/${id}/role`, { role });
+export const deleteUser       = (id)       => api.delete(`/users/${id}`);
 
 // ── Subscriptions ─────────────────────────────────────────────────
 
@@ -60,11 +62,16 @@ export const placeWalkinOrder  = (shopId, data)     => api.post(`/shops/${shopId
 export const getMyOrders       = (page = 1)         => api.get('/orders/me', { params: { page } });
 export const getShopOrders     = (shopId, page = 1) => api.get(`/shops/${shopId}/orders`, { params: { page } });
 export const updateOrderStatus = (orderId, status)  => api.patch(`/orders/${orderId}/status`, { status });
+export const cancelOrder       = (orderId)          => api.post(`/orders/${orderId}/cancel`);
 
 // ── Analytics ─────────────────────────────────────────────────────
 
 export const getPlatformAnalytics = ()       => api.get('/analytics/platform');
 export const getShopAnalytics     = (shopId) => api.get(`/shops/${shopId}/analytics`);
+export const getShopReports       = (shopId, from, to) =>
+  api.get(`/shops/${shopId}/reports`, { params: { date_from: from, date_to: to } });
+export const exportShopCSV        = (shopId, from, to) =>
+  api.get(`/shops/${shopId}/reports/csv`, { params: { date_from: from, date_to: to }, responseType: 'blob' });
 
 // ── File Upload ───────────────────────────────────────────────────
 
@@ -75,6 +82,20 @@ export const uploadFile = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+
+// ── Reviews ───────────────────────────────────────────────────────
+
+export const getShopReviews  = (shopId)       => api.get(`/shops/${shopId}/reviews`);
+export const createReview    = (shopId, data) => api.post(`/shops/${shopId}/reviews`, data);
+
+// ── Auth extras ──────────────────────────────────────────────────
+
+export const forgotPassword  = (email)        => api.post('/auth/forgot-password', { email });
+export const resetPassword   = (token, new_password) => api.post('/auth/reset-password', { token, new_password });
+
+// ── Product Search ───────────────────────────────────────────────
+
+export const searchProducts  = (q, params = {}) => api.get('/products/search', { params: { q, ...params } });
 
 // ── AI ────────────────────────────────────────────────────────────
 

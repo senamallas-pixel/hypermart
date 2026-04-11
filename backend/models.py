@@ -203,3 +203,33 @@ class Subscription(Base):
 
     def __repr__(self):
         return f"<Subscription user={self.user_id} status={self.status}>"
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    shop_id     = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating      = Column(Integer, nullable=False)
+    comment     = Column(Text, nullable=True)
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    shop     = relationship("Shop",  backref="reviews")
+    customer = relationship("User",  backref="reviews")
+
+    def __repr__(self):
+        return f"<Review shop={self.shop_id} rating={self.rating}>"
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token      = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used       = Column(Integer, default=0)
+
+    def __repr__(self):
+        return f"<PasswordResetToken user={self.user_id}>"

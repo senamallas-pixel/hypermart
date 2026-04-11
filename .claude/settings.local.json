@@ -12,7 +12,8 @@
       "Bash(python3 -c \"import main; print\\('Backend imports OK'\\)\")",
       "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 --version)",
       "Bash(npx vite:*)",
-      "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload)"
+      "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 seed.py --reset)"
     ]
   }
 }

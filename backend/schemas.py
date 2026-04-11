@@ -376,3 +376,45 @@ class SubscriptionOut(OrmBase):
     starts_at:   Optional[datetime]
     expires_at:  Optional[datetime]
     created_at:  datetime
+
+
+# ── Reviews ──────────────────────────────────────────────────────────
+
+class ReviewCreate(BaseModel):
+    rating:  int
+    comment: Optional[str] = None
+
+    @field_validator("rating")
+    @classmethod
+    def valid_rating(cls, v: int) -> int:
+        if v < 1 or v > 5:
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+
+class ReviewOut(OrmBase):
+    id:            int
+    shop_id:       int
+    customer_id:   int
+    customer_name: str = ""
+    rating:        int
+    comment:       Optional[str]
+    created_at:    datetime
+
+
+# ── Password Reset ───────────────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token:        str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v

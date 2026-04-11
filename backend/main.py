@@ -4,14 +4,19 @@ JWT auth, password hashing, subscription system, full CRUD.
 """
 
 import os
+import csv
+import io
 import uuid
 import shutil
+import secrets
 import pathlib
 from datetime import datetime, date, timedelta
 from typing import Optional, List
+from collections import defaultdict
 
-from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -47,6 +52,9 @@ UPLOAD_DIR = pathlib.Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(ai_router)
+
+
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
 
 
 @app.on_event("startup")
@@ -273,6 +281,32 @@ def change_user_role(
     db.commit()
     db.refresh(user)
     return user
+
+
+@app.delete("/users/me", status_code=204)
+def delete_my_account(
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete the current user's account and all associated data."""
+    if current_user.role == M.UserRole.admin:
+        raise HTTPException(400, "Admin accounts cannot be self-deleted")
+    db.delete(current_user)
+    db.commit()
+
+
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    _: M.User = Depends(require_role(M.UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    """Admin: delete any user by ID."""
+    user = db.get(M.User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+    db.delete(user)
+    db.commit()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -813,9 +847,14 @@ def shop_analytics(
         for r in top_rows
     ]
     # Monthly revenue — last 6 months
+    MONTH_ABBR = {
+        "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
+        "05": "May", "06": "Jun", "07": "Jul", "08": "Aug",
+        "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
+    }
     monthly_rows = (
         db.query(
-            func.strftime("%b", M.Order.created_at).label("month"),
+            func.strftime("%Y-%m", M.Order.created_at).label("ym"),
             func.sum(M.Order.total).label("revenue"),
         )
         .filter(
@@ -823,11 +862,12 @@ def shop_analytics(
             M.Order.created_at >= six_months_ago,
         )
         .group_by(func.strftime("%Y-%m", M.Order.created_at))
-        .order_by(M.Order.created_at)
+        .order_by(func.strftime("%Y-%m", M.Order.created_at))
         .all()
     )
     monthly_revenue = [
-        {"month": r.month, "revenue": round(float(r.revenue), 2)}
+        {"month": MONTH_ABBR.get(r.ym.split("-")[1], r.ym) if r.ym else "N/A",
+         "revenue": round(float(r.revenue), 2)}
         for r in monthly_rows
     ]
     # Orders by status
@@ -863,10 +903,15 @@ async def upload_file(file: UploadFile = File(...)):
     ext = pathlib.Path(file.filename or "image.bin").suffix.lower()
     if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
         raise HTTPException(400, "Only image files are allowed (jpg, png, gif, webp)")
+    # Read file and enforce size limit
+    contents = await file.read()
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+    if len(contents) > max_bytes:
+        raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_MB}MB")
     filename = f"{uuid.uuid4()}{ext}"
     dest = UPLOAD_DIR / filename
     with dest.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+        f.write(contents)
     return {"url": f"/uploads/{filename}"}
 
 
@@ -911,6 +956,282 @@ def walkin_order(
     db.commit()
     db.refresh(order)
     return order
+
+
+# ═══════════════════════════════════════════════════════════════════
+# REVIEWS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/shops/{shop_id}/reviews", response_model=S.ReviewOut, status_code=201)
+def create_review(
+    shop_id: int,
+    payload: S.ReviewCreate,
+    current_user: M.User = Depends(require_role(M.UserRole.customer)),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    existing = (
+        db.query(M.Review)
+        .filter(M.Review.shop_id == shop_id, M.Review.customer_id == current_user.id)
+        .first()
+    )
+    if existing:
+        raise HTTPException(400, "You have already reviewed this shop")
+    review = M.Review(
+        shop_id=shop_id,
+        customer_id=current_user.id,
+        rating=payload.rating,
+        comment=payload.comment,
+    )
+    db.add(review)
+    db.flush()
+    # Update shop aggregate rating
+    avg = db.query(func.avg(M.Review.rating)).filter(M.Review.shop_id == shop_id).scalar() or 0
+    cnt = db.query(M.Review).filter(M.Review.shop_id == shop_id).count()
+    shop.rating = round(float(avg), 1)
+    shop.review_count = cnt
+    db.commit()
+    db.refresh(review)
+    return {
+        **{c.name: getattr(review, c.name) for c in review.__table__.columns},
+        "customer_name": current_user.display_name,
+    }
+
+
+@app.get("/shops/{shop_id}/reviews", response_model=List[S.ReviewOut])
+def list_reviews(shop_id: int, db: Session = Depends(get_db)):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    reviews = (
+        db.query(M.Review)
+        .filter(M.Review.shop_id == shop_id)
+        .order_by(M.Review.created_at.desc())
+        .all()
+    )
+    result = []
+    for r in reviews:
+        customer = db.get(M.User, r.customer_id)
+        result.append({
+            **{c.name: getattr(r, c.name) for c in r.__table__.columns},
+            "customer_name": customer.display_name if customer else "Unknown",
+        })
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ORDER CANCELLATION
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/orders/{order_id}/cancel", response_model=S.OrderOut)
+def cancel_order(
+    order_id: int,
+    current_user: M.User = Depends(require_role(M.UserRole.customer)),
+    db: Session = Depends(get_db),
+):
+    """Customer can cancel their own pending order."""
+    order = db.get(M.Order, order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.customer_id != current_user.id:
+        raise HTTPException(403, "Not your order")
+    if order.status != M.OrderStatus.pending:
+        raise HTTPException(422, "Only pending orders can be cancelled")
+    # Restore stock
+    for item in order.items:
+        product = db.get(M.Product, item.product_id)
+        if product:
+            product.stock += item.quantity
+    order.status = M.OrderStatus.rejected
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+# ═══════════════════════════════════════════════════════════════════
+# DATE-RANGE REPORTS + CSV EXPORT
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/shops/{shop_id}/reports")
+def shop_reports(
+    shop_id: int,
+    date_from: date = Query(default=None),
+    date_to: date = Query(default=None),
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+    if not date_from:
+        date_from = date.today()
+    if not date_to:
+        date_to = date.today()
+
+    orders = (
+        db.query(M.Order)
+        .filter(
+            M.Order.shop_id == shop_id,
+            M.Order.status == M.OrderStatus.delivered,
+            func.date(M.Order.created_at) >= date_from.isoformat(),
+            func.date(M.Order.created_at) <= date_to.isoformat(),
+        )
+        .all()
+    )
+
+    total_revenue = sum(o.total for o in orders)
+    total_orders = len(orders)
+    avg_order_value = round(total_revenue / total_orders, 2) if total_orders else 0
+
+    daily = defaultdict(float)
+    category_rev = defaultdict(float)
+    top_items = defaultdict(lambda: {"qty": 0, "revenue": 0.0})
+    for o in orders:
+        day = o.created_at.strftime("%Y-%m-%d")
+        daily[day] += o.total
+        for item in o.items:
+            product = db.get(M.Product, item.product_id)
+            cat = product.category.value if product else "Unknown"
+            category_rev[cat] += item.price * item.quantity
+            top_items[item.name]["qty"] += item.quantity
+            top_items[item.name]["revenue"] += item.price * item.quantity
+
+    return {
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "total_revenue": round(total_revenue, 2),
+        "total_orders": total_orders,
+        "avg_order_value": avg_order_value,
+        "daily_sales": [{"day": k, "revenue": round(v, 2)} for k, v in sorted(daily.items())],
+        "category_revenue": [{"category": k, "revenue": round(v, 2)} for k, v in category_rev.items()],
+        "top_products": sorted(
+            [{"name": k, **v} for k, v in top_items.items()],
+            key=lambda x: x["qty"], reverse=True
+        )[:10],
+    }
+
+
+@app.get("/shops/{shop_id}/reports/csv")
+def shop_reports_csv(
+    shop_id: int,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shop = db.get(M.Shop, shop_id)
+    if not shop:
+        raise HTTPException(404, "Shop not found")
+    _assert_shop_ownership(shop, current_user)
+
+    orders = (
+        db.query(M.Order)
+        .filter(
+            M.Order.shop_id == shop_id,
+            M.Order.status == M.OrderStatus.delivered,
+            func.date(M.Order.created_at) >= date_from.isoformat(),
+            func.date(M.Order.created_at) <= date_to.isoformat(),
+        )
+        .all()
+    )
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Order ID", "Date", "Items", "Total", "Payment Status"])
+    for o in orders:
+        items_str = " | ".join(f"{i.name} x{i.quantity}" for i in o.items)
+        w.writerow([o.id, o.created_at.strftime("%d/%m/%Y"), items_str, o.total, o.payment_status.value])
+
+    buf.seek(0)
+    fname = f"hypermart-{shop_id}-{date_from}-{date_to}.csv"
+    return StreamingResponse(
+        buf,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PASSWORD RESET (dev: prints token to console)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.post("/auth/forgot-password")
+def forgot_password(payload: S.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(M.User).filter_by(email=str(payload.email)).first()
+    if not user:
+        return {"ok": True}  # Don't reveal if email exists
+    token = secrets.token_urlsafe(32)
+    db.add(M.PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=datetime.utcnow() + timedelta(hours=1),
+    ))
+    db.commit()
+    # In dev, print to console. In prod, send email via SMTP/SendGrid.
+    print(f"\n[PASSWORD RESET] Token for {user.email}: {token}\n")
+    return {"ok": True}
+
+
+@app.post("/auth/reset-password")
+def reset_password(payload: S.ResetPasswordRequest, db: Session = Depends(get_db)):
+    record = db.query(M.PasswordResetToken).filter_by(token=payload.token, used=0).first()
+    if not record or record.expires_at < datetime.utcnow():
+        raise HTTPException(400, "Invalid or expired reset token")
+    user = db.get(M.User, record.user_id)
+    if not user:
+        raise HTTPException(400, "User not found")
+    user.password_hash = hash_password(payload.new_password)
+    record.used = 1
+    db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PRODUCT SEARCH (across all shops)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/products/search")
+def search_products(
+    q: str = Query(..., min_length=1),
+    location: Optional[M.ShopLocation] = None,
+    category: Optional[M.ShopCategory] = None,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Search products across all approved shops."""
+    query = (
+        db.query(M.Product)
+        .join(M.Shop, M.Product.shop_id == M.Shop.id)
+        .filter(
+            M.Shop.status == M.ShopStatus.approved,
+            M.Product.status == M.ProductStatus.active,
+            M.Product.name.ilike(f"%{q}%"),
+        )
+    )
+    if location:
+        query = query.filter(M.Shop.location_name == location)
+    if category:
+        query = query.filter(M.Product.category == category)
+    total = query.count()
+    products = query.order_by(M.Product.name).offset((page - 1) * size).limit(size).all()
+    return {
+        "items": [
+            {
+                "id": p.id, "shop_id": p.shop_id, "shop_name": p.shop.name,
+                "name": p.name, "description": p.description,
+                "price": p.price, "mrp": p.mrp, "unit": p.unit,
+                "category": p.category.value, "stock": p.stock,
+                "image": p.image, "status": p.status.value,
+            }
+            for p in products
+        ],
+        "total": total, "page": page, "size": size,
+    }
 
 
 # ── Private helpers ──────────────────────────────────────────────────────────

@@ -88,7 +88,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
       setSuggestLoading(true);
       try {
         const res = await suggestProducts(form.category, val.trim());
-        setNameSuggestions(res.data.suggestions || []);
+        setNameSuggestions(Array.isArray(res.data) ? res.data : res.data.suggestions || []);
       } catch { setNameSuggestions([]); }
       finally { setSuggestLoading(false); }
     }, 400);
@@ -2300,7 +2300,7 @@ export default function OwnerDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard icon={DollarSign} label="Today's Sales"     value={`₹${(analytics.today_sales || 0).toLocaleString()}`} sub="Today" accent="bg-green-100" />
               <StatCard icon={ShoppingBag} label="Today's Orders"    value={analytics.today_orders || 0} sub="Today" accent="bg-blue-100" />
-              <StatCard icon={TrendingUp}  label="Total Revenue"     value={`₹${(analytics.total_revenue || 0).toLocaleString()}`} sub="All time" />
+              <StatCard icon={TrendingUp}  label="Total Revenue"     value={`₹${((analytics.category_revenue || []).reduce((s, c) => s + c.revenue, 0)).toLocaleString()}`} sub="Delivered orders" />
               <StatCard icon={Package}    label="Products"           value={analytics.total_products || 0} sub="In inventory" />
             </div>
             {/* Mini trend line */}

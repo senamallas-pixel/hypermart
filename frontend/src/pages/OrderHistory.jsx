@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Loader2, Calendar, MapPin, Package, ChevronRight, Search, Filter, Eye, Clock, CheckCircle2, AlertCircle, ShoppingBag, Truck, DollarSign } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, MapPin, Package, ChevronRight, Search, Filter, Eye, Clock, CheckCircle2, AlertCircle, ShoppingBag, Truck, DollarSign, XCircle, Printer } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getMyOrders } from '../api/client';
+import { getMyOrders, cancelOrder } from '../api/client';
+import InvoiceModal from '../components/InvoiceModal';
 
 export default function OrderHistory() {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ export default function OrderHistory() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [cancellingId, setCancellingId] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   useEffect(() => {
     const loadOrders = async () => {
