@@ -8,8 +8,13 @@ import { listShops, listProducts } from '../../api/client';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing } from '../../constants/theme';
-import { LOCATIONS, CATEGORIES } from '../../constants/config';
-import { API_URL } from '../../constants/config';
+import { LOCATIONS, CATEGORIES, API_URL } from '../../constants/config';
+
+const fixImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_URL}${url}`;
+};
 
 export default function MarketplaceScreen({ navigation }) {
   const { currentUser, search, setSearch, activeLocation, setActiveLocation, addToCart, cart, clearCart } = useApp();
@@ -86,7 +91,7 @@ export default function MarketplaceScreen({ navigation }) {
           overflow: 'hidden',
         }}>
           {shop.logo ? (
-            <Image source={{ uri: `${API_URL}${shop.logo}` }} style={{ width: 56, height: 56 }} />
+            <Image source={{ uri: fixImageUrl(shop.logo) }} style={{ width: 56, height: 56 }} />
           ) : (
             <Text style={{ fontSize: 24 }}>{'\uD83C\uDFEA'}</Text>
           )}

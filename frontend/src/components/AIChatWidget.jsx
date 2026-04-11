@@ -239,9 +239,9 @@ export default function AIChatWidget() {
       {/* Chat Panel */}
       {open && (
         <div
-          className="fixed bottom-20 right-4 z-50 flex flex-col rounded-2xl overflow-hidden shadow-2xl
-                     border border-[#E8E8E0] bg-[#F5F5F0]"
-          style={{ width: '340px', height: '480px', animation: 'slideUp 0.22s ease-out' }}
+          className="fixed bottom-20 right-4 left-4 sm:left-auto z-50 flex flex-col rounded-2xl overflow-hidden shadow-2xl
+                     border border-[#E8E8E0] bg-[#F5F5F0] sm:w-[340px]"
+          style={{ height: '480px', maxHeight: 'calc(100vh - 120px)', animation: 'slideUp 0.22s ease-out' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-[#4A7C59] text-white">

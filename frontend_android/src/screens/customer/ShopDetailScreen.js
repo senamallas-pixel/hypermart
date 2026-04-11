@@ -10,9 +10,15 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing } from '../../constants/theme';
 import { API_URL } from '../../constants/config';
 
+const fixImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_URL}${url}`;
+};
+
 export default function ShopDetailScreen({ route, navigation }) {
   const { shop } = route.params;
-  const { addToCart, cart, clearCart, currentUser, cartItemCount } = useApp();
+  const { addToCart, updateQuantity, cart, clearCart, currentUser, cartItemCount } = useApp();
   const { t } = useTranslation();
 
   const [products, setProducts] = useState([]);
@@ -105,7 +111,7 @@ export default function ShopDetailScreen({ route, navigation }) {
           justifyContent: 'center', alignItems: 'center',
         }}>
           {p.image ? (
-            <Image source={{ uri: `${API_URL}${p.image}` }} style={{ width: 72, height: 72 }} resizeMode="cover" />
+            <Image source={{ uri: fixImageUrl(p.image) }} style={{ width: 72, height: 72 }} resizeMode="cover" />
           ) : (
             <Text style={{ fontSize: 28 }}>{'\uD83D\uDCE6'}</Text>
           )}
@@ -134,9 +140,7 @@ export default function ShopDetailScreen({ route, navigation }) {
                 backgroundColor: Colors.primary, borderRadius: BorderRadius.md, overflow: 'hidden',
               }}>
                 <TouchableOpacity
-                  onPress={() => {
-                    const { updateQuantity } = require('../../context/AppContext');
-                  }}
+                  onPress={() => updateQuantity(p.id, qty - 1)}
                   style={{ paddingHorizontal: 10, paddingVertical: 6 }}
                 >
                   <Text style={{ color: '#fff', fontWeight: '700' }}>-</Text>
@@ -193,7 +197,7 @@ export default function ShopDetailScreen({ route, navigation }) {
             alignItems: 'center', overflow: 'hidden',
           }}>
             {shop.logo ? (
-              <Image source={{ uri: `${API_URL}${shop.logo}` }} style={{ width: 56, height: 56 }} />
+              <Image source={{ uri: fixImageUrl(shop.logo) }} style={{ width: 56, height: 56 }} />
             ) : (
               <Text style={{ fontSize: 24 }}>{'\uD83C\uDFEA'}</Text>
             )}

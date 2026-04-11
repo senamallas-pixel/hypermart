@@ -140,10 +140,10 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <ClipboardList size={28} className="text-[#5A5A40]" />
-          <h2 className="font-serif text-3xl font-bold text-[#1A1A1A]">Purchase Orders</h2>
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A]">Purchase Orders</h2>
         </div>
         <button
           onClick={openCreateModal}
@@ -166,7 +166,8 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
         </div>
       ) : (
         <div className="bg-white border border-[#1A1A1A]/10 rounded-[2.5rem] overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="border-b border-[#1A1A1A]/10">
                 <th className="text-left p-6 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">PO ID</th>
@@ -240,6 +241,7 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -288,7 +290,7 @@ export default function PurchaseOrderManager({ shopId, products, suppliers }) {
             </div>
 
             {/* Items table */}
-            <div className="px-10 py-8 max-h-[60vh] overflow-y-auto">
+            <div className="px-5 sm:px-10 py-5 sm:py-8 max-h-[60vh] overflow-y-auto">
               <div className="bg-white border border-[#1A1A1A]/10 rounded-[2.5rem] overflow-hidden shadow-sm">
                 <table className="w-full text-sm">
                   <thead>

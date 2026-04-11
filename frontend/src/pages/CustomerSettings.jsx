@@ -110,7 +110,7 @@ export default function CustomerSettings() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex gap-2 border-b border-[#1A1A1A]/10"
+          className="mb-8 flex gap-1 sm:gap-2 border-b border-[#1A1A1A]/10 overflow-x-auto no-scrollbar"
         >
           {[
             { id: 'password', label: 'Password', icon: Lock },
@@ -122,7 +122,7 @@ export default function CustomerSettings() {
               <motion.button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 font-semibold border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 font-semibold text-sm border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-[#5A5A40] border-[#5A5A40]'
                     : 'text-[#5A5A40]/60 border-transparent hover:text-[#5A5A40]'

@@ -127,7 +127,7 @@ export default function OrderHistory() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 flex gap-3"
+          className="mb-6 flex flex-col sm:flex-row gap-3"
         >
           <div className="flex-1 relative">
             <Search size={18} className="absolute left-3 top-3 text-[#5A5A40]/40" />

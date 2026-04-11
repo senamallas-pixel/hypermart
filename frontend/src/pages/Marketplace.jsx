@@ -295,7 +295,7 @@ function ShopProductsView({ shop, onBack }) {
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-[#1A1A1A] text-white px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm whitespace-nowrap">
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-[#1A1A1A] text-white px-4 sm:px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm max-w-[90vw] text-center">
             {toast}
           </motion.div>
         )}
@@ -309,7 +309,7 @@ function ShopProductsView({ shop, onBack }) {
         </button>
 
         <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/15 border border-white/20 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 shadow-lg">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-white/15 border border-white/20 rounded-2xl flex items-center justify-center overflow-hidden flex-shrink-0 shadow-lg">
             {shop.logo
               ? <img src={fixImageUrl(shop.logo)} alt={shop.name} className="w-full h-full object-cover" />
               : <Store size={28} className="text-white/50" />}
@@ -374,7 +374,7 @@ function ShopProductsView({ shop, onBack }) {
         )}
 
         {/* Products grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
           {loading
             ? Array(12).fill(0).map((_, i) => <div key={i} className="aspect-[3/4] bg-white animate-pulse rounded-2xl" />)
             : filteredProducts.length > 0
@@ -710,7 +710,7 @@ function RouteMapModal({ userLocation, shop, onClose }) {
         </div>
 
         {/* Leaflet Map */}
-        <div className="relative flex-1" style={{ minHeight: 380 }}>
+        <div className="relative flex-1" style={{ minHeight: 280 }}>
           {loadingRoute && (
             <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/70 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-2">
@@ -722,7 +722,7 @@ function RouteMapModal({ userLocation, shop, onClose }) {
           <MapContainer
             center={[midLat, midLng]}
             zoom={13}
-            style={{ width: '100%', height: '100%', minHeight: 380 }}
+            style={{ width: '100%', height: '100%', minHeight: 280 }}
             zoomControl={true}
             scrollWheelZoom={true}
           >
@@ -755,7 +755,7 @@ function RouteMapModal({ userLocation, shop, onClose }) {
         </div>
 
         {/* Bottom action bar */}
-        <div className="px-5 py-4 border-t border-[#1A1A1A]/5 flex items-center gap-3">
+        <div className="px-4 sm:px-5 py-4 border-t border-[#1A1A1A]/5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {routeInfo && (
             <div className="flex-1">
               <div className="flex items-center gap-4">
@@ -777,7 +777,7 @@ function RouteMapModal({ userLocation, shop, onClose }) {
             </div>
           )}
           <button onClick={openInGoogleMaps}
-            className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm flex items-center gap-2 shrink-0">
+            className="bg-[#5A5A40] text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all shadow-sm flex items-center justify-center gap-2 shrink-0">
             <Navigation size={14} /> Open in Google Maps
           </button>
         </div>

@@ -161,10 +161,10 @@ export default function AdminPanel() {
       </div>
 
       {/* Tabs with animated underline */}
-      <div className="flex gap-4 mb-6 border-b border-[#1A1A1A]/10 overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 sm:gap-4 mb-6 border-b border-[#1A1A1A]/10 overflow-x-auto no-scrollbar">
         {ADMIN_TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`pb-4 px-2 text-sm font-bold uppercase tracking-widest transition-all relative shrink-0 ${tab === t ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/40'}`}>
+            className={`pb-4 px-2 text-xs sm:text-sm font-bold uppercase tracking-normal sm:tracking-widest transition-all relative shrink-0 ${tab === t ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/40'}`}>
             {tabLabels[t]}
             {tab === t && <motion.div layoutId="admin-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5A5A40]" />}
           </button>
@@ -181,7 +181,7 @@ export default function AdminPanel() {
         ) : tab === 'pending' ? (
           /* ── Pending Approvals ── */
           shops.length > 0 ? (
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {shops.map(shop => (
                 <div key={shop.id} className="bg-[#F5F5F0]/30 rounded-3xl border border-[#1A1A1A]/5 overflow-hidden flex flex-col">
                   <div className="aspect-[4/3] bg-[#F5F5F0] relative overflow-hidden">

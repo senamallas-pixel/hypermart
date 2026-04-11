@@ -86,7 +86,7 @@ function TabButton({ active, onClick, label }) {
   return (
     <button
       onClick={onClick}
-      className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative whitespace-nowrap ${active ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/30 hover:text-[#1A1A1A]/50'}`}
+      className={`pb-4 text-xs sm:text-sm font-bold uppercase tracking-normal sm:tracking-widest transition-all relative whitespace-nowrap ${active ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/30 hover:text-[#1A1A1A]/50'}`}
     >
       {label}
       {active && <motion.div layoutId="owner-tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5A5A40]" />}
@@ -341,7 +341,7 @@ function ShopRegistrationForm({ onSaved }) {
           <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Shop name *" value={form.name} onChange={set('name')} required />
           <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Full address *" value={form.address} onChange={set('address')} required />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.category} onChange={set('category')}>
               {SHOP_CATS.map(c => <option key={c}>{c}</option>)}
@@ -3047,18 +3047,18 @@ export default function OwnerDashboard() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto p-4 sm:p-8">
       {/* ── Shop Identity Header (mock design) ────────────────────── */}
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 bg-white border border-[#1A1A1A]/10 rounded-3xl flex items-center justify-center text-[#5A5A40] shadow-sm overflow-hidden shrink-0">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="w-14 h-14 sm:w-20 sm:h-20 bg-white border border-[#1A1A1A]/10 rounded-2xl sm:rounded-3xl flex items-center justify-center text-[#5A5A40] shadow-sm overflow-hidden shrink-0">
             {selectedShop?.logo ? (
               <img src={selectedShop.logo} alt={selectedShop.name} className="w-full h-full object-cover" />
             ) : <Store size={32} />}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[#5A5A40] font-bold uppercase tracking-[0.2em] text-[10px] mb-2">
               Welcome back, {(currentUser?.display_name || 'Owner').split(' ')[0]}
             </p>
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="font-serif text-3xl font-bold">{selectedShop?.name}</h2>
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
+              <h2 className="font-serif text-xl sm:text-3xl font-bold truncate">{selectedShop?.name}</h2>
               <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full ${
                 selectedShop?.status === 'approved' ? 'bg-green-100 text-green-700' :
                 selectedShop?.status === 'pending' ? 'bg-amber-100 text-amber-700' :
@@ -3093,7 +3093,7 @@ export default function OwnerDashboard() {
       )}
 
       {/* ── Tabs (mock animated underline) ─────────────────────────── */}
-      <div className="flex gap-8 mb-8 border-b border-[#1A1A1A]/5 overflow-x-auto no-scrollbar">
+      <div className="flex gap-4 sm:gap-8 mb-8 border-b border-[#1A1A1A]/5 overflow-x-auto no-scrollbar">
         {TABS.map(t => (
           <TabButton key={t} active={tab === t} onClick={() => setTab(t)} label={t} />
         ))}

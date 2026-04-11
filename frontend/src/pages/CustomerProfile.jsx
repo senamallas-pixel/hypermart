@@ -114,10 +114,10 @@ export default function CustomerProfile() {
         >
           {/* Photo Section */}
           <div className="p-6 border-b border-[#1A1A1A]/5">
-            <div className="flex items-center gap-6">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
               {/* Avatar */}
               <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#5A5A40] to-[#1A1A1A] flex items-center justify-center text-white overflow-hidden">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-[#5A5A40] to-[#1A1A1A] flex items-center justify-center text-white overflow-hidden">
                   {formData.photo_url ? (
                     <img src={formData.photo_url} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -144,8 +144,8 @@ export default function CustomerProfile() {
               </div>
 
               {/* User Info */}
-              <div>
-                <h2 className="text-2xl font-bold text-[#1A1A1A]">{formData.display_name || 'Customer'}</h2>
+              <div className="text-center sm:text-left">
+                <h2 className="text-xl sm:text-2xl font-bold text-[#1A1A1A]">{formData.display_name || 'Customer'}</h2>
                 <p className="text-[#5A5A40]/60 text-sm mt-1">{formData.email}</p>
                 <div className="flex items-center gap-2 mt-3 text-[#5A5A40]">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />

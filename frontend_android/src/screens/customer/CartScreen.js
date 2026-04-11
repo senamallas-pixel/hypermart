@@ -10,6 +10,12 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing } from '../../constants/theme';
 import { API_URL } from '../../constants/config';
 
+const fixImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${API_URL}${url}`;
+};
+
 export default function CartScreen({ navigation }) {
   const { cart, cartItemCount, cartTotal, updateQuantity, removeFromCart, clearCart, currentUser } = useApp();
   const { t } = useTranslation();
@@ -84,7 +90,7 @@ export default function CartScreen({ navigation }) {
         justifyContent: 'center', alignItems: 'center',
       }}>
         {item.image ? (
-          <Image source={{ uri: `${API_URL}${item.image}` }} style={{ width: 56, height: 56 }} resizeMode="cover" />
+          <Image source={{ uri: fixImageUrl(item.image) }} style={{ width: 56, height: 56 }} resizeMode="cover" />
         ) : (
           <Text style={{ fontSize: 22 }}>{'\uD83D\uDCE6'}</Text>
         )}

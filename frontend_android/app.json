@@ -29,7 +29,8 @@
     "plugins": [
       "expo-location",
       "expo-image-picker",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
