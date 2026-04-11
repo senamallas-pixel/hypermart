@@ -12,11 +12,15 @@
     "test:watch": "jest --watchAll"
   },
   "jest": {
-    "preset": "jest-expo",
-    "setupFilesAfterFramework": ["@testing-library/jest-native/extend-expect"],
-    "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|react-native-maps)"
-    ]
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "transform": {
+      "^.+\\.[jt]sx?$": "babel-jest"
+    },
+    "moduleNameMapper": {
+      "expo-secure-store": "<rootDir>/__mocks__/expo-secure-store.js",
+      "axios": "<rootDir>/__mocks__/axios.js"
+    }
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
