@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/Users/pedda/Source/Main/hypermart/*.json /c/Users/pedda/Source/Main/hypermart/*.ts /c/Users/pedda/Source/Main/hypermart/*.md)",
+      "Bash(xargs wc:*)",
+      "Bash(ls -lh /c/Users/pedda/Source/Main/hypermart/backend/*.py)",
+      "Bash(wc -l /c/Users/pedda/Source/Main/hypermart/backend/*.py /c/Users/pedda/Source/Main/hypermart/frontend/src/pages/*.jsx /c/Users/pedda/Source/Main/hypermart/frontend/src/components/*.jsx)",
+      "Bash(wc -l /c/Users/pedda/Source/Main/hypermart/frontend/public/locales/*/translation.json)",
+      "Bash(python -c \"import main; print\\('Backend imports OK'\\)\")",
+      "Bash(where python3:*)",
+      "Bash(where python:*)",
+      "Bash(python3 -c \"import main; print\\('Backend imports OK'\\)\")",
+      "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 --version)",
+      "Bash(npx vite:*)",
+      "Bash(/c/Users/pedda/AppData/Local/Python/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload)"
+    ]
+  }
+}

@@ -4,6 +4,6 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/hypermart-v2/',
-  server: { port: 5174 },
+  base: '/',
+  server: { port: 5173 },
 });

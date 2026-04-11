@@ -236,6 +236,20 @@ def update_me(
     return current_user
 
 
+@app.post("/users/me/change-password")
+def change_password(
+    payload: S.ChangePasswordRequest,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Change the current user's password."""
+    if not current_user.password_hash or not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"detail": "Password changed successfully"}
+
+
 @app.get("/users", response_model=List[S.UserOut])
 def list_users(
     _: M.User = Depends(require_role(M.UserRole.admin)),
@@ -352,6 +366,32 @@ def list_shops(
     total = q.count()
     items = q.order_by(M.Shop.created_at.desc()).offset((page - 1) * size).limit(size).all()
     return {"items": items, "total": total, "page": page, "size": size}
+
+
+@app.get("/shops/nearby", response_model=List[S.ShopOut])
+def nearby_shops(
+    lat: float = Query(..., description="Latitude"),
+    lng: float = Query(..., description="Longitude"),
+    radius: float = Query(2.0, ge=0.1, le=50, description="Radius in km"),
+    db: Session = Depends(get_db),
+):
+    """Return approved shops within a given radius (km) of a point.
+    Uses a simple bounding-box filter + Haversine approximation for SQLite."""
+    # ~1 degree latitude ≈ 111 km
+    delta_lat = radius / 111.0
+    delta_lng = radius / (111.0 * max(abs(float(lat)) * 0.0175, 0.01))  # rough cos(lat) correction
+    shops = (
+        db.query(M.Shop)
+        .filter(
+            M.Shop.status == M.ShopStatus.approved,
+            M.Shop.lat.isnot(None),
+            M.Shop.lng.isnot(None),
+            M.Shop.lat.between(lat - delta_lat, lat + delta_lat),
+            M.Shop.lng.between(lng - delta_lng, lng + delta_lng),
+        )
+        .all()
+    )
+    return shops
 
 
 @app.post("/shops", response_model=S.ShopOut, status_code=201)
@@ -628,14 +668,56 @@ def platform_analytics(
         .scalar()
         or 0.0
     )
+    total_rev = db.query(func.sum(M.Order.total)).scalar() or 0.0
     active_subs = db.query(M.Subscription).filter(M.Subscription.status == M.SubscriptionStatus.active).count()
+
+    # Orders by status
+    status_rows = db.query(M.Order.status, func.count(M.Order.id)).group_by(M.Order.status).all()
+    orders_by_status = {
+        str(s.value if hasattr(s, "value") else s): cnt
+        for s, cnt in status_rows
+    }
+
+    # Shops by category
+    cat_rows = db.query(M.Shop.category, func.count(M.Shop.id)).group_by(M.Shop.category).all()
+    shops_by_category = {
+        str(c.value if hasattr(c, "value") else c): cnt
+        for c, cnt in cat_rows
+    }
+
+    # Top shops by revenue
+    top_rows = (
+        db.query(
+            M.Order.shop_id,
+            M.Order.shop_name,
+            func.sum(M.Order.total).label("revenue"),
+            func.count(M.Order.id).label("order_count"),
+        )
+        .filter(M.Order.status == M.OrderStatus.delivered)
+        .group_by(M.Order.shop_id, M.Order.shop_name)
+        .order_by(func.sum(M.Order.total).desc())
+        .limit(10)
+        .all()
+    )
+    top_shops = [
+        {"shop_id": r.shop_id, "shop_name": r.shop_name,
+         "revenue": round(float(r.revenue), 2), "order_count": r.order_count}
+        for r in top_rows
+    ]
+
     return {
         "total_shops":       db.query(M.Shop).count(),
         "approved_shops":    db.query(M.Shop).filter(M.Shop.status == M.ShopStatus.approved).count(),
+        "pending_shops":     db.query(M.Shop).filter(M.Shop.status == M.ShopStatus.pending).count(),
         "total_users":       db.query(M.User).count(),
+        "total_owners":      db.query(M.User).filter(M.User.role == M.UserRole.owner).count(),
         "total_orders":      db.query(M.Order).count(),
+        "total_revenue":     round(total_rev, 2),
         "delivered_revenue": round(delivered_rev, 2),
         "active_subscriptions": active_subs,
+        "orders_by_status":  orders_by_status,
+        "shops_by_category": shops_by_category,
+        "top_shops":         top_shops,
     }
 
 

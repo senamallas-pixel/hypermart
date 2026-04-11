@@ -12,10 +12,11 @@ import {
   listShops, updateShopStatus,
   listUsers, changeRole,
   getPlatformAnalytics,
+  listSubscriptions,
 } from '../api/client';
 import { useApp } from '../context/AppContext';
 
-const ADMIN_TABS = ['Shops', 'Users', 'Analytics'];
+const ADMIN_TABS = ['Shops', 'Users', 'Analytics', 'Subscriptions'];
 
 // ── Stat Card ─────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, sub }) {
@@ -170,10 +171,10 @@ function UsersTab() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  const handleChangeRole = async (uid, newRole) => {
-    if (uid === currentUser?.uid) { alert("You can't change your own role."); return; }
-    setActing(uid);
-    try { await changeRole(uid, newRole); reload(); }
+  const handleChangeRole = async (userId, newRole) => {
+    if (userId === currentUser?.id) { alert("You can't change your own role."); return; }
+    setActing(userId);
+    try { await changeRole(userId, newRole); reload(); }
     catch (err) { alert(err.response?.data?.detail || 'Failed to change role.'); }
     finally { setActing(null); }
   };
@@ -201,7 +202,7 @@ function UsersTab() {
             </thead>
             <tbody className="divide-y divide-[#1A1A1A]/5">
               {users.map(user => (
-                <tr key={user.uid} className="hover:bg-[#F5F5F0]/50 transition-colors">
+                <tr key={user.id} className="hover:bg-[#F5F5F0]/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-[#5A5A40]/10 rounded-xl flex items-center justify-center">
@@ -217,11 +218,11 @@ function UsersTab() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    {user.uid !== currentUser?.uid && (
+                    {user.id !== currentUser?.id && (
                       <select
                         value={user.role}
-                        disabled={acting === user.uid}
-                        onChange={e => handleChangeRole(user.uid, e.target.value)}
+                        disabled={acting === user.id}
+                        onChange={e => handleChangeRole(user.id, e.target.value)}
                         className="bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest outline-none focus:border-[#5A5A40] transition-colors appearance-none cursor-pointer disabled:opacity-50"
                       >
                         <option value="customer">Customer</option>
@@ -258,7 +259,7 @@ function AnalyticsTab() {
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={DollarSign}   label="Total Revenue"    value={`₹${(data.total_revenue || 0).toLocaleString()}`} sub="Platform-wide" />
+        <StatCard icon={DollarSign}   label="Delivered Revenue" value={`₹${(data.delivered_revenue || 0).toLocaleString()}`} sub={`₹${(data.total_revenue || 0).toLocaleString()} total`} />
         <StatCard icon={ShoppingBag}  label="Total Orders"     value={data.total_orders || 0} sub="All time" />
         <StatCard icon={Store}        label="Active Shops"      value={data.approved_shops || 0} sub={`${data.pending_shops || 0} pending`} />
         <StatCard icon={Users}        label="Total Users"       value={data.total_users || 0} sub={`${data.total_owners || 0} owners`} />
@@ -340,6 +341,71 @@ function AnalyticsTab() {
   );
 }
 
+// ── Subscriptions Tab ─────────────────────────────────────────────
+function SubscriptionsTab() {
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    listSubscriptions()
+      .then(r => setSubs(r.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const STATUS_BADGE = {
+    active:  'bg-green-50 text-green-700 border-green-100',
+    pending: 'bg-amber-50 text-amber-700 border-amber-100',
+    expired: 'bg-red-50 text-red-700 border-red-100',
+  };
+
+  if (loading) return <div className="py-20 text-center"><Loader2 size={32} className="animate-spin mx-auto text-[#5A5A40]" /></div>;
+
+  return (
+    <div>
+      {subs.length === 0 ? (
+        <div className="py-20 text-center bg-white border border-[#1A1A1A]/10 rounded-3xl">
+          <DollarSign size={40} className="mx-auto text-[#5A5A40]/20 mb-4" />
+          <p className="text-[#1A1A1A]/30 italic">No subscriptions found.</p>
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-[#1A1A1A]/10 overflow-hidden bg-white">
+          <table className="w-full text-sm">
+            <thead className="border-b border-[#1A1A1A]/5 bg-[#F5F5F0]">
+              <tr>
+                <th className="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">User ID</th>
+                <th className="text-left px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Plan</th>
+                <th className="text-left px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Status</th>
+                <th className="text-left px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 hidden sm:table-cell">Starts</th>
+                <th className="text-left px-4 py-4 text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 hidden sm:table-cell">Expires</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1A1A1A]/5">
+              {subs.map(sub => (
+                <tr key={sub.id} className="hover:bg-[#F5F5F0]/50 transition-colors">
+                  <td className="px-6 py-4 font-bold">{sub.user_id}</td>
+                  <td className="px-4 py-4 text-xs">₹{sub.plan_amount}/month</td>
+                  <td className="px-4 py-4">
+                    <span className={`text-[9px] font-bold uppercase tracking-widest border px-2 py-0.5 rounded ${STATUS_BADGE[sub.status] || 'bg-gray-50 text-gray-700'}`}>
+                      {sub.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-xs text-[#1A1A1A]/50 hidden sm:table-cell">
+                    {sub.starts_at ? new Date(sub.starts_at).toLocaleDateString('en-IN') : '—'}
+                  </td>
+                  <td className="px-4 py-4 text-xs text-[#1A1A1A]/50 hidden sm:table-cell">
+                    {sub.expires_at ? new Date(sub.expires_at).toLocaleDateString('en-IN') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Admin Panel ──────────────────────────────────────────────
 export default function AdminPanel() {
   const [tab, setTab] = useState('Shops');
@@ -361,9 +427,10 @@ export default function AdminPanel() {
         ))}
       </div>
 
-      {tab === 'Shops'     && <ShopsTab />}
-      {tab === 'Users'     && <UsersTab />}
-      {tab === 'Analytics' && <AnalyticsTab />}
+      {tab === 'Shops'         && <ShopsTab />}
+      {tab === 'Users'         && <UsersTab />}
+      {tab === 'Analytics'     && <AnalyticsTab />}
+      {tab === 'Subscriptions' && <SubscriptionsTab />}
     </motion.div>
   );
 }

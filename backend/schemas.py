@@ -68,6 +68,18 @@ class RegisterRequest(BaseModel):
         return v.strip()
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password:     str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("New password must be at least 6 characters")
+        return v
+
+
 class LoginRequest(BaseModel):
     email:    EmailStr
     password: str
@@ -285,10 +297,16 @@ class OrderStatusUpdate(BaseModel):
 class PlatformAnalytics(BaseModel):
     total_shops:          int
     approved_shops:       int
+    pending_shops:        int = 0
     total_users:          int
+    total_owners:         int = 0
     total_orders:         int
+    total_revenue:        float = 0.0
     delivered_revenue:    float
     active_subscriptions: int = 0
+    orders_by_status:     Dict[str, int] = {}
+    shops_by_category:    Dict[str, int] = {}
+    top_shops:            List[Dict] = []
 
 
 # ── Analytics sub-schemas ─────────────────────────────────────────────────────

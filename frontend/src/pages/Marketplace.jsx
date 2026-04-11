@@ -655,7 +655,7 @@ function NearbyShopsSection({ onSelectShop }) {
     setLoading(true); setError(null);
     try {
       const res = await nearbyShops(lat, lng, r);
-      setNearbyList(res.data.items);
+      setNearbyList(Array.isArray(res.data) ? res.data : res.data.items || []);
     } catch {
       setError(t('messages.failedToLoadShops'));
     } finally { setLoading(false); }

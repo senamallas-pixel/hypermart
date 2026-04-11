@@ -1,60 +1,34 @@
-﻿# HyperMart â€” Full Product & Implementation Reference
+# HyperMart — Full Product Requirements Document
 
-**Version:** 3.1  
-**Date:** April 11, 2026  
-**Status:** Implemented (Active Development)  
-**Stack:** React 18 (JSX) Â· Vite 6 Â· Python Â· FastAPI 0.115 Â· SQLAlchemy 2 Â· SQLite Â· JWT (python-jose) Â· Gemini 2.0 Flash Â· Tailwind CSS 4 Â· React-Leaflet  
-**Local Dev:** http://localhost:5173/  
-**API Docs:** http://localhost:8000/docs (Swagger UI)  
+**Version:** 3.1
+**Date:** April 11, 2026
+**Status:** Implemented (Active Development)
+**Stack:** React 18 (JSX) · Vite 6 · Python · FastAPI 0.115 · SQLAlchemy 2 · SQLite · JWT (python-jose) · Gemini 2.0 Flash · Tailwind CSS 4 · React-Leaflet
+**Local Dev:** http://localhost:5173/
+**API Docs:** http://localhost:8000/docs (Swagger UI)
 **Repository:** https://github.com/senamallas-pixel/hypermart
 
 ---
 
 ## Table of Contents
 
-**Part A â€” Product Requirements**
 1. [Executive Summary](#1-executive-summary)
 2. [Goals & Success Metrics](#2-goals--success-metrics)
 3. [User Roles & Permissions](#3-user-roles--permissions)
 4. [Authentication & Session Management](#4-authentication--session-management)
 5. [System Architecture](#5-system-architecture)
 6. [Feature Specifications](#6-feature-specifications)
-7. [AI Features â€” Agentic RAG System](#7-ai-features--agentic-rag-system)
-8. [Map & Location Features](#8-map--location-features)
+7. [AI Features — Gemini Integration](#7-ai-features--gemini-integration)
+8. [Map & Geolocation](#8-map--geolocation)
 9. [Subscription System](#9-subscription-system)
 10. [Multi-Language Support](#10-multi-language-support)
-11. [UI/UX Specifications](#11-uiux-specifications)
+11. [Admin Panel](#11-admin-panel)
 12. [Navigation & Routing](#12-navigation--routing)
-13. [Error Handling & Edge Cases](#13-error-handling--edge-cases)
-14. [Known Limitations & Backlog](#14-known-limitations--backlog)
-15. [Acceptance Criteria Checklist](#15-acceptance-criteria-checklist)
-
-**Part B â€” Implementation**
-16. [Project Structure](#16-project-structure)
-17. [Quick Start](#17-quick-start)
-18. [Backend â€” database.py](#18-backend--databasepy)
-19. [Backend â€” models.py](#19-backend--modelspy)
-20. [Backend â€” schemas.py](#20-backend--schemaspy)
-21. [Backend â€” main.py](#21-backend--mainpy)
-22. [Backend â€” ai.py (Gemini)](#22-backend--aipy-gemini)
-23. [Backend â€” seed.py](#23-backend--seedpy)
-24. [Backend â€” requirements.txt](#24-backend--requirementstxt)
-25. [Frontend â€” api/client.js](#25-frontend--apiclientjs)
-26. [Frontend â€” context/AppContext.jsx](#26-frontend--contextappcontextjsx)
-27. [Frontend â€” pages/Marketplace.jsx](#27-frontend--pagesmarketplacejsx)
-28. [Frontend â€” pages/OwnerDashboard.jsx](#28-frontend--pagesownerdashboardjsx)
-29. [Frontend â€” pages/AdminPanel.jsx](#29-frontend--pagesadminpaneljsx)
-30. [Frontend â€” components/AIAssistant.jsx](#30-frontend--componentsaiassistantjsx)
-31. [Frontend â€” App.jsx](#31-frontend--appjsx)
-32. [Database Schema Reference](#32-database-schema-reference)
-33. [Full API Reference](#33-full-api-reference)
-34. [Order Status Pipeline](#34-order-status-pipeline)
-35. [PRD â†’ Implementation Map](#35-prd--implementation-map)
-36. [Production Checklist](#36-production-checklist)
-
----
-
-# PART A â€” PRODUCT REQUIREMENTS
+13. [UI/UX Specifications](#13-uiux-specifications)
+14. [Environment Variables](#14-environment-variables)
+15. [Error Handling & Edge Cases](#15-error-handling--edge-cases)
+16. [Known Limitations & Backlog](#16-known-limitations--backlog)
+17. [Acceptance Criteria Checklist](#17-acceptance-criteria-checklist)
 
 ---
 
@@ -68,7 +42,7 @@ HyperMart is a **hyperlocal marketplace web application** that bridges neighbour
 |---------|-------|
 | **Customer** | Discover, browse, and order from nearby shops in one app, filtered by locality and category |
 | **Shop Owner** | Digital storefront, inventory control, order management, and AI-powered product tools with no setup friction |
-| **Admin** | Full platform governance â€” shop approvals, user management, platform-wide oversight |
+| **Admin** | Full platform governance — shop approvals, user management, platform-wide oversight |
 
 ---
 
@@ -86,7 +60,7 @@ HyperMart is a **hyperlocal marketplace web application** that bridges neighbour
 | Metric | Target |
 |--------|--------|
 | Shop onboarding time | < 5 minutes from registration to pending approval |
-| Order placement steps | â‰¤ 3 taps from shop page to order confirmation |
+| Order placement steps | ≤ 3 taps from shop page to order confirmation |
 | Admin approval turnaround | < 24 hours (process SLA, not technical) |
 | Page load (LCP) | < 2.5 seconds on 4G |
 | API reads per customer session | < 500 |
@@ -99,43 +73,38 @@ HyperMart is a **hyperlocal marketplace web application** that bridges neighbour
 
 | Action | `customer` | `owner` | `admin` |
 |--------|:---------:|:-------:|:-------:|
-| Browse approved shops | âœ“ | âœ“ | âœ“ |
-| Add to cart & place orders | âœ“ | âœ— | âœ— |
-| View own order history | âœ“ | âœ— | âœ— |
-| Register a shop | âœ— | âœ“ | âœ— |
-| Manage own shop inventory | âœ— | âœ“ | âœ“ |
-| Manage own shop orders | âœ— | âœ“ | âœ“ |
-| Generate bills (POS) | âœ— | âœ“ | âœ“ |
-| Use AI product tools | âœ— | âœ“ | âœ“ |
-| Approve / suspend shops | âœ— | âœ— | âœ“ |
-| Manage all users & roles | âœ— | âœ— | âœ“ |
-| View platform-wide analytics | âœ— | âœ— | âœ“ |
+| Browse approved shops | ✓ | ✓ | ✓ |
+| Add to cart & place orders | ✓ | ✗ | ✗ |
+| View own order history | ✓ | ✗ | ✗ |
+| Register a shop | ✗ | ✓ | ✗ |
+| Manage own shop inventory | ✗ | ✓ | ✓ |
+| Manage own shop orders | ✗ | ✓ | ✓ |
+| Generate bills (POS) | ✗ | ✓ | ✓ |
+| Use AI product tools | ✗ | ✓ | ✓ |
+| Approve / suspend shops | ✗ | ✗ | ✓ |
+| Manage all users & roles | ✗ | ✗ | ✓ |
+| View platform-wide analytics | ✗ | ✗ | ✓ |
 
 ### Role Assignment Flow
 
 ```
-User signs in with Google
-         â”‚
-         â–¼
-  users/{uid} exists?
-    â”œâ”€â”€ NO  â†’ /role-selection
-    â”‚         User picks: customer | owner
-    â”‚         Write profile to DB
-    â”‚         Redirect to role home
-    â”‚
-    â””â”€â”€ YES â†’ Read role from DB
-              Admin override: senamallas@gmail.com â†’ force admin
-              Redirect to role home
+User registers via email + password
+         │
+         ▼
+  Role chosen at registration time
+    ├── customer → redirect to /marketplace
+    ├── owner   → redirect to /owner (pending Subscription auto-created)
+    └── admin   → auto-assigned if email === senamallas@gmail.com
 ```
 
 ### Admin Override Rule
 
-```typescript
-// Applied on every auth state check
-if (user.email === 'senamallas@gmail.com' && role !== 'admin') {
-  await updateUserRole(user.uid, 'admin');
-  role = 'admin';
-}
+```python
+# Applied server-side in get_current_user() dependency
+ADMIN_EMAIL = "senamallas@gmail.com"
+if user.email == ADMIN_EMAIL and user.role != UserRole.admin:
+    user.role = UserRole.admin
+    db.commit()
 ```
 
 ### Role Home Redirects
@@ -152,9 +121,9 @@ if (user.email === 'senamallas@gmail.com' && role !== 'admin') {
 
 ### Provider
 
-- **Email + Password** â€” native credentials, no OAuth provider
-- `POST /auth/register` â€” creates account, returns JWT + user object
-- `POST /auth/login` â€” verifies credentials, returns JWT + user object
+- **Email + Password** — native credentials, no OAuth provider
+- `POST /auth/register` — creates account, returns JWT + user object
+- `POST /auth/login` — verifies credentials, returns JWT + user object
 - Tokens are HS256 JWTs signed server-side, valid for **30 days**
 - Token stored in `sessionStorage` (`hypermart_token`) and attached as `Authorization: Bearer <token>` on all API requests via an Axios interceptor
 - On app mount, `GET /users/me` is called to restore the session from a stored token
@@ -185,16 +154,6 @@ if (token) {
 }
 ```
 
-### Admin Override Rule
-
-```python
-# Applied server-side in get_current_user() dependency
-ADMIN_EMAIL = "senamallas@gmail.com"
-if user.email == ADMIN_EMAIL and user.role != UserRole.admin:
-    user.role = UserRole.admin
-    db.commit()
-```
-
 ### Sign-Out
 
 Clears `hypermart_token` from `sessionStorage` and resets `AppContext` state. Redirects to `/login`.
@@ -203,13 +162,12 @@ Clears `hypermart_token` from `sessionStorage` and resets `AppContext` state. Re
 
 | Route | Auth Required | Allowed Roles |
 |-------|:------------:|--------------|
-| `/login` | No | â€” (sign-in / register page) |
-| `/marketplace` | Yes | `customer`, `admin` |
-| `/marketplace/orders` | Yes | `customer` |
+| `/login` | No | — (sign-in / register page) |
+| `/marketplace` | Yes | all authenticated users |
 | `/owner` | Yes | `owner`, `admin` |
 | `/admin` | Yes | `admin` |
-| `/profile` | Yes | `customer` |
-| `/settings` | Yes | `customer` |
+| `/profile` | Yes | all authenticated users |
+| `/settings` | Yes | all authenticated users |
 | `/orders` | Yes | `customer` |
 
 ---
@@ -217,39 +175,39 @@ Clears `hypermart_token` from `sessionStorage` and resets `AppContext` state. Re
 ## 5. System Architecture
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚                        Browser (SPA)                         â”‚
-â”‚                                                              â”‚
-â”‚   React 18 (JSX) Â· Vite 6 Â· Motion Â· Leaflet                â”‚
-â”‚  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”              â”‚
-â”‚  â”‚ Customer  â”‚  â”‚   Owner    â”‚  â”‚   Admin    â”‚              â”‚
-â”‚  â”‚Marketplaceâ”‚  â”‚ Dashboard  â”‚  â”‚   Panel    â”‚              â”‚
-â”‚  â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜              â”‚
-â”‚        â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                      â”‚
-â”‚                â”Œâ”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”                               â”‚
-â”‚                â”‚  AppContext  â”‚  Auth Â· Cart Â· i18n          â”‚
-â”‚                â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜                               â”‚
-â”‚                api/client.js  (Axios Â· JWT Bearer)           â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                         â”‚ HTTP / JSON  (port 8000)
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚           Python / FastAPI  (All-in-one â€” port 8000)         â”‚
-â”‚                                                              â”‚
-â”‚  main.py       â† Auth, Users, Shops, Products, Orders,      â”‚
-â”‚                  Analytics, File Upload, Walk-in POS         â”‚
-â”‚  ai.py         â† AI routes  /ai/*  (mounted via router)     â”‚
-â”‚  models.py     â† SQLAlchemy ORM (5 tables)                  â”‚
-â”‚  schemas.py    â† Pydantic v2 request/response models        â”‚
-â”‚  database.py   â† SQLite engine + WAL + session factory      â”‚
-â”‚                                                              â”‚
-â”‚  Swagger UI at GET /docs                                     â”‚
-â””â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-       â”‚ SQLAlchemy ORM             â”‚ httpx async
-â”Œâ”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”              â”Œâ”€â”€â”€â”€â”€â”€â–¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  SQLite DB  â”‚              â”‚  Google Gemini 2.0 Flash API    â”‚
-â”‚ hypermart.dbâ”‚              â”‚  (AI suggestions, descriptions, â”‚
-â”‚  5 tables   â”‚              â”‚   low-stock insights, chat)     â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜              â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────────────────────────────────────────────┐
+│                        Browser (SPA)                         │
+│                                                              │
+│   React 18 (JSX) · Vite 6 · Motion · Leaflet                │
+│  ┌───────────┐  ┌────────────┐  ┌────────────┐              │
+│  │ Customer  │  │   Owner    │  │   Admin    │              │
+│  │Marketplace│  │ Dashboard  │  │   Panel    │              │
+│  └─────┬─────┘  └─────┬──────┘  └─────┬──────┘              │
+│        └──────────────┼───────────────┘                      │
+│                ┌──────▼──────┐                               │
+│                │  AppContext  │  Auth · Cart · i18n          │
+│                └──────┬──────┘                               │
+│                api/client.js  (Axios · JWT Bearer)           │
+└────────────────────────┼─────────────────────────────────────┘
+                         │ HTTP / JSON  (port 8000)
+┌────────────────────────▼─────────────────────────────────────┐
+│           Python / FastAPI  (All-in-one — port 8000)         │
+│                                                              │
+│  main.py       ← Auth, Users, Shops, Products, Orders,      │
+│                  Analytics, File Upload, Walk-in POS         │
+│  ai.py         ← AI routes  /ai/*  (mounted via router)     │
+│  models.py     ← SQLAlchemy ORM (6 tables)                  │
+│  schemas.py    ← Pydantic v2 request/response models        │
+│  database.py   ← SQLite engine + WAL + session factory      │
+│                                                              │
+│  Swagger UI at GET /docs                                     │
+└──────┬───────────────────────────────┬───────────────────────┘
+       │ SQLAlchemy ORM             │ httpx async
+┌──────▼─────────────┐        ┌──────▼──────────────────────────┐
+│  SQLite DB         │        │  Google Gemini 2.0 Flash API    │
+│  hypermart.db      │        │  (AI suggestions, descriptions, │
+│  6 tables          │        │   low-stock insights, chat)     │
+└────────────────────┘        └─────────────────────────────────┘
 ```
 
 ### Key Architecture Decisions
@@ -260,19 +218,9 @@ Clears `hypermart_token` from `sessionStorage` and resets `AppContext` state. Re
 | SQLite + SQLAlchemy | Zero-infra local dev; swap to PostgreSQL via single `DATABASE_URL` env var |
 | JWT (HS256, 30-day) | Stateless auth; token stored in `sessionStorage`, sent as Bearer header |
 | Gemini via `httpx` (no SDK) | Lightweight; no google-generativeai dependency; API key kept server-side |
-| HashRouter | GitHub Pages SPA routing â€” no server config needed |
+| HashRouter | GitHub Pages SPA routing — no server config needed |
 | Cart in `useReducer` + localStorage | No external lib; single-shop constraint enforced in reducer |
 | React-Leaflet map | Owner can pin shop location on a map when editing settings |
-
-### Key Architecture Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| SQLite + SQLAlchemy | Zero-infra local dev; swap to PostgreSQL via single env var for prod |
-| FastAPI | Async, typed, auto-generates OpenAPI docs at `/docs` |
-| HashRouter | GitHub Pages SPA routing â€” no server config needed |
-| Gemini proxied through backend | API key stays server-side; rate limits enforced centrally |
-| Cart in `useReducer` | No external lib needed; single-shop constraint enforced in reducer |
 
 ---
 
@@ -280,7 +228,7 @@ Clears `hypermart_token` from `sessionStorage` and resets `AppContext` state. Re
 
 ### 6.1 Sign-In / Register Page (`/login`)
 
-Two-tab card (Sign In Â· Register). If already authenticated, redirects immediately to role home.
+Two-tab card (Sign In · Register). If already authenticated, redirects immediately to role home.
 
 #### Sign In tab
 
@@ -288,7 +236,7 @@ Two-tab card (Sign In Â· Register). If already authenticated, redirects immedi
 |---------|--------|
 | Email input | `type="email"`, `autocomplete="email"` |
 | Password input | Toggle show/hide eye icon |
-| Submit | `POST /auth/login` â†’ JWT stored in `sessionStorage` |
+| Submit | `POST /auth/login` → JWT stored in `sessionStorage` |
 | Demo buttons | One-click fill for Customer / Owner / Admin demo credentials |
 | Error state | Inline error message below form |
 
@@ -300,7 +248,7 @@ Two-tab card (Sign In Â· Register). If already authenticated, redirects immedi
 | Email, phone (optional) | Standard inputs |
 | Password | Min 6 chars |
 | Role selector | Customer / Shop Owner cards |
-| Submit | `POST /auth/register` â†’ JWT stored, redirect to role home |
+| Submit | `POST /auth/register` → JWT stored, redirect to role home |
 
 **Demo credentials** (auto-populated by demo buttons):
 
@@ -343,22 +291,12 @@ Role is chosen at registration and stored in the database. No separate role-sele
 #### Shop Card
 - Logo (fallback: initial letter avatar)
 - Shop name, category badge, rating, address, timings
-- "View Shop" CTA â†’ navigates to `/marketplace/:shopId`
+- "View Shop" CTA → opens product view within the Marketplace page (internal state, not a separate route)
 
-#### Shop Detail (`/marketplace/:shopId`)
-- Responsive product grid: 2 cols â†’ 6 cols across breakpoints
+#### Shop Detail (inline within Marketplace)
+- Responsive product grid: 2 cols → 6 cols across breakpoints
 - Product card: image, name, price, MRP (strikethrough), unit, Add button
 - Quantity controls appear after first Add (min 1, remove at 0)
-
-#### My Orders (`/marketplace/orders`)
-
-| Column | Value |
-|--------|-------|
-| Order ID | Truncated doc ID |
-| Shop name | Denormalized at order creation |
-| Items summary | "3 items Â· â‚¹240" |
-| Status badge | Colour-coded pipeline status |
-| Date | `createdAt` formatted |
 
 ---
 
@@ -368,7 +306,7 @@ Role is chosen at registration and stored in the database. No separate role-sele
 
 ```typescript
 interface CartItem {
-  productId: string;
+  productId: number;
   name: string;
   price: number;
   quantity: number;
@@ -377,7 +315,7 @@ interface CartItem {
 }
 
 interface CartState {
-  shopId: string | null;
+  shopId: number | null;
   shopName: string | null;
   items: CartItem[];
 }
@@ -385,20 +323,20 @@ interface CartState {
 
 #### Business Rules
 
-1. **Single-shop constraint** â€” adding from a different shop shows: "Your cart has items from [Shop A]. Clear and add from [Shop B]?"
+1. **Single-shop constraint** — adding from a different shop shows: "Your cart has items from [Shop A]. Clear and add from [Shop B]?"
 2. Minimum quantity is 1; removing the last unit removes the item entirely
-3. Cart total = Î£ (price Ã— quantity)
+3. Cart total = Σ (price × quantity)
 
 #### Place Order Flow
 
-```typescript
+```javascript
 // POST /orders
 {
-  shopId:          cart.shopId,
-  items:           cart.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
-  deliveryAddress: 'Default Address'   // TODO: user address flow
+  shop_id:          cart.shopId,
+  items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
+  delivery_address: 'Default Address'   // TODO: user address flow
 }
-// On success: clearCart() â†’ success toast
+// On success: clearCart() → success toast
 ```
 
 ---
@@ -407,17 +345,17 @@ interface CartState {
 
 Six-tab interface. Shop selector at top when owner has multiple shops. Subscription banner shown if subscription is not active.
 
-#### Tab 1 â€” Overview
+#### Tab 1 — Overview
 
 | Widget | Source |
 |--------|--------|
-| Today's Sales (â‚¹) | `GET /shops/{id}/analytics` â†’ `today_sales` |
+| Today's Sales (₹) | `GET /shops/{id}/analytics` → `today_sales` |
 | Orders Today | `today_orders` |
 | Total Products | `total_products` |
-| Low-Stock Alert count | `low_stock_items` (stock â‰¤ 5) |
-| AI low-stock insight | `POST /ai/low-stock-insight` â€” narrative advice |
+| Low-Stock Alert count | `low_stock_items` (stock ≤ 5) |
+| AI low-stock insight | `POST /ai/low-stock-insight` — narrative advice |
 
-#### Tab 2 â€” Analytics
+#### Tab 2 — Analytics
 
 | Widget | Source |
 |--------|--------|
@@ -427,43 +365,42 @@ Six-tab interface. Shop selector at top when owner has multiple shops. Subscript
 | Monthly Revenue Chart | `monthly_revenue` (last 6 months) |
 | Orders by Status | `orders_by_status` donut/badge breakdown |
 | Daily Sales Calendar | Full month calendar with per-day revenue markers |
-| AI Sales Forecast | `POST /ai/sales-forecast` â€” narrative 7-day outlook |
+| AI Sales Forecast | `POST /ai/sales-forecast` — narrative 7-day outlook |
 
-#### Tab 3 â€” Billing (In-Store POS)
+#### Tab 3 — Billing (In-Store POS)
 
 1. Owner searches products by name (client-side filter)
 2. Adds to bill with `+`/`-` quantity controls
 3. Views line items, subtotals, grand total
-4. **"Place Walk-in Order"** â†’ `POST /shops/{id}/walkin-order` â€” deducts stock, records order with status `delivered` + payment `paid`
-5. **Print Invoice** â†’ opens `InvoiceModal` with formatted printable receipt
+4. **"Place Walk-in Order"** → `POST /shops/{id}/walkin-order` — deducts stock, records order with status `delivered` + payment `paid`
+5. **Print Invoice** → opens `InvoiceModal` with formatted printable receipt
 
 **Walk-in Order payload:**
 ```json
 {
-  "items": [{ "product_id": 5, "quantity": 2 }],
-  "customer_name": "Walk-in Customer"
+  "items": [{ "product_id": 5, "quantity": 2 }]
 }
 ```
 
-#### Tab 4 â€” Inventory
+#### Tab 4 — Inventory
 
-Product table columns: Image Â· Name Â· Description Â· Category Â· Price Â· MRP Â· Stock Â· Unit Â· Status Â· Actions
+Product table columns: Image · Name · Description · Category · Price · MRP · Stock · Unit · Status · Actions
 
-**Add/Edit Modal fields:** Name Â· AI-suggested name (debounced 400 ms) Â· AI-generated description (`âœ¨ AI Generate`) Â· Price Â· MRP Â· Stock Â· Unit Â· Category Â· Image URL / Upload Â· Status
+**Add/Edit Modal fields:** Name · AI-suggested name (debounced 400 ms) · AI-generated description (`✨ AI Generate`) · Price · MRP · Stock · Unit · Category · Image URL / Upload · Status
 
-AI name suggestions: `POST /ai/suggest-products` called after 400 ms when owner types â‰¥ 2 characters.
+AI name suggestions: `POST /ai/suggest-products` called after 400 ms when owner types ≥ 2 characters.
 AI description: `POST /ai/generate-description` called on button click.
-Image upload: `POST /upload` â€” stores file in `uploads/`, returns relative URL.
+Image upload: `POST /upload` — stores file in `uploads/`, returns relative URL.
 
 **Delete rule:** Blocked with HTTP 409 if product has active (non-terminal) orders.
 
-#### Tab 5 â€” Orders
+#### Tab 5 — Orders
 
 Order pipeline:
 
 ```
-pending â†’ accepted â†’ ready â†’ out_for_delivery â†’ delivered
-pending / accepted â†’ rejected (terminal)
+pending → accepted → ready → out_for_delivery → delivered
+pending / accepted → rejected (terminal)
 ```
 
 | Status | Owner Action | Badge colour |
@@ -473,43 +410,20 @@ pending / accepted â†’ rejected (terminal)
 | `ready` | Mark Out for Delivery | Indigo |
 | `out_for_delivery` | Mark Delivered | Purple |
 | `delivered` | View invoice | Green |
-| `rejected` | â€” | Red |
+| `rejected` | — | Red |
 
-#### Tab 6 â€” Settings
+#### Tab 6 — Settings
 
 - Edit shop name, address, category, location, timings, logo URL/upload
 - **Leaflet map** (react-leaflet): owner clicks to pin exact lat/lng for the shop
-- Subscription status card: plan amount (â‚¹10/month), status (pending / active / expired), expiry date
-- **"Activate / Renew Subscription"** button â†’ `POST /subscriptions/activate` (mock payment, adds 30 days)
+- Subscription status card: plan amount (₹10/month), status (pending / active / expired), expiry date
+- **"Activate / Renew Subscription"** button → `POST /subscriptions/activate` (mock payment, adds 30 days)
 
 ---
 
 ### 6.6 Admin Panel (`/admin`)
 
-#### Shops Tab
-
-Table: Shop Name Â· Owner Â· Category Â· Location Â· Status Â· Created Â· Actions
-
-| Status | Actions |
-|--------|---------|
-| `pending` | Approve, Reject |
-| `approved` | Suspend |
-| `suspended` | Approve |
-
-Filters: All / Pending / Approved / Suspended
-
-#### Users Tab
-
-Table: Name Â· Email Â· Role Â· Joined Â· Change Role (dropdown)
-
-#### Analytics Tab
-
-| Metric | Source |
-|--------|--------|
-| Total / Approved shops | `GET /analytics/platform` |
-| Total users | platform analytics |
-| Total orders | platform analytics |
-| Delivered revenue | platform analytics |
+See [Section 11](#11-admin-panel) for full spec.
 
 ---
 
@@ -518,10 +432,10 @@ Table: Name Â· Email Â· Role Â· Joined Â· Change Role (dropdown)
 | Section | Content |
 |---------|---------|
 | Avatar | Uploaded photo (served from `/uploads/`) or initial-letter fallback |
-| Photo upload | `POST /upload` â†’ stored in `uploads/`, URL saved via `PATCH /users/me` |
-| Name | Editable â†’ `PATCH /users/me` |
+| Photo upload | `POST /upload` → stored in `uploads/`, URL saved via `PATCH /users/me` |
+| Name | Editable → `PATCH /users/me` |
 | Email | Display-only |
-| Phone | Editable â†’ `PATCH /users/me` |
+| Phone | Editable → `PATCH /users/me` |
 | Save | Updates DB and refreshes `currentUser` in `AppContext` |
 
 ---
@@ -532,34 +446,44 @@ Dedicated page for customers to view all past orders with search and status filt
 
 | Element | Detail |
 |---------|--------|
-| Order list | Paginated, newest first â€” `GET /orders/me` |
+| Order list | Paginated, newest first — `GET /orders/me` |
 | Search | Filter by order ID or shop name (client-side) |
 | Status filter | All / pending / accepted / ready / out_for_delivery / delivered / rejected |
-| Order card | Order ID Â· Shop name Â· Items summary Â· Total Â· Status badge Â· Date |
+| Order card | Order ID · Shop name · Items summary · Total · Status badge · Date |
 | Order detail modal | Full item list, delivery address, timestamps, **Print Invoice** button |
-| Invoice modal | `InvoiceModal` component â€” printable, opens `window.open` print dialog |
+| Invoice modal | `InvoiceModal` component — printable, opens `window.open` print dialog |
 
 ---
 
 ### 6.9 Customer Settings (`/settings`)
 
-Three-tab settings panel accessible to customers.
+Three-section settings panel accessible to customers.
 
-#### Password tab
+#### Password section
 - Current password + New password + Confirm fields
 - `POST /users/me/change-password`
-- Validates: new â‰¥ 8 chars, confirm match
+- Validates: new ≥ 6 chars, confirm match
 
-#### Notifications tab
+#### Notifications section
 - Toggle preferences for email/SMS notifications (UI-only, not persisted to backend currently)
 
-#### Account tab
+#### Account section
 - Sign-out confirmation dialog
 - Account deletion placeholder (not yet wired to API)
 
 ---
 
-## 7. AI Features
+### 6.10 Additional Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Admin Profile Management | via Admin Panel | Admin user management features |
+| Owner Profile | via Owner Dashboard | Owner profile editing page |
+| User Profile View | — | Public user profile view |
+
+---
+
+## 7. AI Features — Gemini Integration
 
 > **Status:** Implemented. AI routes are mounted directly in the FastAPI backend (`ai.py`) as a sub-router. `GEMINI_API_KEY` never reaches the browser.
 
@@ -569,22 +493,22 @@ Three-tab settings panel accessible to customers.
 
 ```
 Browser
-  â””â”€â–º POST /ai/chat  (FastAPI route â€” same server, port 8000)
-            â”‚
-            â–¼
-     Python FastAPI  (ai.py â€” APIRouter mounted in main.py)
-            â”‚
+  └─► POST /ai/chat  (FastAPI route — same server, port 8000)
+            │
+            ▼
+     Python FastAPI  (ai.py — APIRouter mounted in main.py)
+            │
        httpx async client
-            â”‚
-            â–¼
+            │
+            ▼
      Google Gemini 2.0 Flash REST API
      (generativelanguage.googleapis.com)
-            â”‚
-            â–¼
-     Text response â†’ returned to browser
+            │
+            ▼
+     Text response → returned to browser
 ```
 
-**No Qdrant, no LangChain, no vector embeddings.** All AI calls are direct prompt â†’ Gemini 2.0 Flash â†’ response. The backend crafts role-appropriate system prompts and passes conversation history.
+**No Qdrant, no LangChain, no vector embeddings.** All AI calls are direct prompt → Gemini 2.0 Flash → response. The backend crafts role-appropriate system prompts and passes conversation history.
 
 ---
 
@@ -663,9 +587,9 @@ useMapEvents — onClick to capture lat/lng
 
 ---
 
-### 8.2 Nearby Shops API
+### 8.2 Nearby Shops (Future)
 
-`GET /shops/nearby?lat=&lng=&radius=` is available in `api/client.js` via `nearbyShops(lat, lng, radius)`. This helper is present for a future customer "Near Me" filter in the Marketplace; the endpoint is not yet surfaced in the Marketplace UI.
+The `nearbyShops(lat, lng, radius)` helper exists in `api/client.js` for a future customer "Near Me" filter. The backend endpoint is not yet implemented — this is a **backlog item**.
 
 ---
 
@@ -711,11 +635,11 @@ def _check_subscription(user: M.User, db: Session) -> None:
         return
     sub = db.query(M.Subscription).filter(M.Subscription.user_id == user.id).first()
     if not sub or sub.status != M.SubscriptionStatus.active:
-        raise HTTPException(402, "Active subscription required. Subscribe for ₹10/month.")
+        raise HTTPException(402, "Active subscription required. Subscribe for Rs.10/month.")
     if sub.expires_at and sub.expires_at < datetime.utcnow():
         sub.status = M.SubscriptionStatus.expired
         db.commit()
-        raise HTTPException(402, "Your subscription has expired. Please renew for ₹10/month.")
+        raise HTTPException(402, "Your subscription has expired. Please renew.")
 ```
 
 ### 9.5 Admin Subscription View
@@ -746,7 +670,7 @@ def _check_subscription(user: M.User, db: Session) -> None:
 
 **LanguageSelector component** (`src/components/LanguageSelector.jsx`):
 - Globe icon button in app header, visible to all authenticated users
-- Dropdown shows: 🇺🇸 English / 🇮🇳 हिन्दी / 🇮🇳 తెలుగు
+- Dropdown shows: English / हिन्दी / తెలుగు
 - Calls `setLanguage(code)` from `AppContext`
 
 **AppContext integration:**
@@ -796,9 +720,44 @@ Admin account: `senamallas@gmail.com` — auto-promoted to `admin` role on every
 Unauthenticated → redirect to `/login`.
 Wrong role → redirect to role home page.
 
+**Bottom Navigation Bar:**
+- Marketplace (all roles), Orders (customer), Owner Dashboard (owner), Admin Panel (admin)
+- Profile, Settings, Sign Out
+- LanguageSelector, AIChatWidget
+
 ---
 
-## 13. Environment Variables
+## 13. UI/UX Specifications
+
+### 13.1 Design System
+
+| Aspect | Implementation |
+|--------|---------------|
+| Styling framework | Tailwind CSS 4 utility classes |
+| Animations | Framer Motion (`motion` package) |
+| Icons | Lucide React |
+| Maps | React-Leaflet (OpenStreetMap tiles) |
+| Responsive breakpoints | Mobile-first; 2-col → 6-col product grids across breakpoints |
+
+### 13.2 Visual Patterns
+
+- **Cards:** Used for shop listings, products, stats widgets, and order summaries
+- **Tabs:** Owner Dashboard (6 tabs), Admin Panel (4 tabs), SignIn (2 tabs)
+- **Modals:** Product add/edit, order detail, invoice print, cart checkout
+- **Badges:** Colour-coded status indicators for orders and shops
+- **Toasts:** Success/error notifications for actions (order placed, product saved, etc.)
+- **Floating action:** AI chat widget bottom-right corner
+
+### 13.3 Mobile Considerations
+
+- Bottom navigation bar for primary navigation
+- Horizontal scrollable category chips
+- Touch-friendly quantity controls (+/- buttons)
+- Full-width cards on mobile, grid on desktop
+
+---
+
+## 14. Environment Variables
 
 | Variable | Location | Purpose |
 |----------|----------|---------|
@@ -807,6 +766,96 @@ Wrong role → redirect to role home page.
 | `GEMINI_API_KEY` | backend OS env | Google AI Studio API key — AI features disabled if absent |
 | `DATABASE_URL` | backend OS env | SQLite path (default: `sqlite:///./hypermart.db`). Swap for Postgres URL in production |
 | `SQL_ECHO` | backend OS env | `true` to log all SQL queries — dev only |
+
+---
+
+## 15. Error Handling & Edge Cases
+
+### 15.1 Backend Error Responses
+
+| HTTP Code | Scenario |
+|-----------|----------|
+| 400 | Duplicate email on registration; invalid file type on upload |
+| 401 | Missing/expired JWT; invalid credentials on login |
+| 402 | Owner subscription missing, pending, or expired |
+| 403 | Insufficient role permissions; shop ownership mismatch |
+| 404 | Resource not found (shop, product, order, user, subscription) |
+| 409 | Delete product with active (non-terminal) orders |
+| 422 | Validation failure (Pydantic); invalid order status transition; product not in shop; insufficient stock |
+| 503 | Gemini API key not configured |
+
+### 15.2 Frontend Error Handling
+
+- **Auth errors (401):** Clear token, redirect to `/login`
+- **Subscription errors (402):** Show subscription activation banner on Owner Dashboard
+- **Network errors:** Toast notification with retry suggestion
+- **AI unavailable:** All AI UI elements hidden when `GET /ai/status` returns `{available: false}`
+
+### 15.3 Edge Cases
+
+| Case | Handling |
+|------|---------|
+| Cart from different shop | Confirm dialog: "Clear cart and switch?" |
+| Stock insufficient at checkout | HTTP 422 with product name in error message |
+| Owner with expired subscription tries to create shop | HTTP 402; subscription auto-marked as expired |
+| Concurrent order status updates | Last-write-wins (no optimistic locking in v3.1) |
+
+---
+
+## 16. Known Limitations & Backlog
+
+### Current Limitations (v3.1)
+
+| Limitation | Notes |
+|------------|-------|
+| No email verification | Registration accepts any email format without confirmation |
+| No password reset flow | Users cannot recover forgotten passwords |
+| No real payment gateway | Subscription activation is a mock (instant, no payment) |
+| Notifications UI-only | Toggle preferences not persisted to backend |
+| No nearby shops endpoint | `nearbyShops` client helper exists but backend endpoint missing |
+| No `POST /users/me/change-password` endpoint | Frontend references it but backend does not implement it |
+| No image size limit | File upload has no max size enforcement |
+| Walk-in orders use owner as customer | Walk-in orders record the owner's user ID as customer |
+| Account deletion | UI placeholder only, not wired to API |
+| No test suite | pytest listed in requirements but no tests written |
+
+### Backlog (Future Versions)
+
+- Nearby Shops API (`GET /shops/nearby?lat=&lng=&radius=`) — distance-based filtering for customers
+- Password change backend endpoint (`POST /users/me/change-password`)
+- Real payment gateway integration (Razorpay / Stripe)
+- Email verification + password reset flow
+- Push notifications / SMS alerts for order status changes
+- Customer delivery address management (save multiple addresses)
+- Shop ratings & reviews by customers
+- Product search across all shops
+- Order cancellation by customer (before acceptance)
+- Redis sessions for horizontal scaling
+
+---
+
+## 17. Acceptance Criteria Checklist
+
+| # | Criteria | Status |
+|---|----------|--------|
+| 1 | Customer can register, login, browse shops, add to cart, place order | ✓ |
+| 2 | Owner can register, activate subscription, create shop, add products | ✓ |
+| 3 | Owner can manage orders through full status pipeline | ✓ |
+| 4 | Owner can use AI product suggestions and descriptions | ✓ |
+| 5 | Owner can create walk-in (POS) orders with invoice printing | ✓ |
+| 6 | Owner can pin shop location on Leaflet map | ✓ |
+| 7 | Admin can approve/suspend shops and manage user roles | ✓ |
+| 8 | Admin can view platform-wide analytics and subscriptions | ✓ |
+| 9 | AI chat widget works for all roles with role-aware personas | ✓ |
+| 10 | Multi-language support (en/hi/te) with persistent preference | ✓ |
+| 11 | JWT auth with 30-day tokens and session restore on reload | ✓ |
+| 12 | Single-shop cart constraint enforced | ✓ |
+| 13 | Order status transitions enforced with valid-transition checks | ✓ |
+| 14 | Product deletion blocked when active orders exist | ✓ |
+| 15 | Demo seed data with 5 users, 6 shops, 35+ products | ✓ |
+| 16 | Swagger UI accessible at `/docs` | ✓ |
+| 17 | App works with HashRouter (GitHub Pages compatible) | ✓ |
+| 18 | Graceful AI degradation when Gemini key absent | ✓ |
 
 ---
 
