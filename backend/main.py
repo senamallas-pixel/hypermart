@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, text
+from sqlalchemy import func, and_, text, Date
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -93,6 +93,25 @@ def startup():
             except Exception:
                 pass  # Column already exists
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Database helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./hypermart.db")
+IS_POSTGRESQL = DATABASE_URL.startswith("postgresql")
+
+def get_date_func(column):
+    """Get database-agnostic date extraction function"""
+    if IS_POSTGRESQL:
+        return func.cast(column, Date)
+    return func.date(column)
+
+def get_yearmonth_func(column):
+    """Get database-agnostic year-month extraction function"""
+    if IS_POSTGRESQL:
+        return func.to_char(column, 'YYYY-MM')
+    return func.strftime("%Y-%m", column)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Security helpers
@@ -1035,14 +1054,14 @@ def shop_analytics(
     # Daily sales — last 7 days (gaps filled with 0)
     daily_rows = (
         db.query(
-            func.date(M.Order.created_at).label("day"),
+            get_date_func(M.Order.created_at).label("day"),
             func.sum(M.Order.total).label("revenue"),
         )
         .filter(
             M.Order.shop_id == shop_id,
-            func.date(M.Order.created_at) >= seven_days_ago,
+            get_date_func(M.Order.created_at) >= seven_days_ago,
         )
-        .group_by("day").order_by("day").all()
+        .group_by(get_date_func(M.Order.created_at)).order_by("day").all()
     )
     day_map = {r.day: round(float(r.revenue), 2) for r in daily_rows}
     daily_sales = [
@@ -1100,15 +1119,15 @@ def shop_analytics(
     }
     monthly_rows = (
         db.query(
-            func.strftime("%Y-%m", M.Order.created_at).label("ym"),
+            get_yearmonth_func(M.Order.created_at).label("ym"),
             func.sum(M.Order.total).label("revenue"),
         )
         .filter(
             M.Order.shop_id == shop_id,
             M.Order.created_at >= six_months_ago,
         )
-        .group_by(func.strftime("%Y-%m", M.Order.created_at))
-        .order_by(func.strftime("%Y-%m", M.Order.created_at))
+        .group_by(get_yearmonth_func(M.Order.created_at))
+        .order_by(get_yearmonth_func(M.Order.created_at))
         .all()
     )
     monthly_revenue = [
@@ -1132,17 +1151,17 @@ def shop_analytics(
     month_end   = date.today().isoformat()
     mds_rows = (
         db.query(
-            func.date(M.Order.created_at).label("day"),
+            get_date_func(M.Order.created_at).label("day"),
             M.Order.order_type,
             func.sum(M.Order.total).label("revenue"),
             func.count(M.Order.id).label("cnt"),
         )
         .filter(
             M.Order.shop_id == shop_id,
-            func.date(M.Order.created_at) >= month_start,
-            func.date(M.Order.created_at) <= month_end,
+            get_date_func(M.Order.created_at) >= month_start,
+            get_date_func(M.Order.created_at) <= month_end,
         )
-        .group_by(func.date(M.Order.created_at), M.Order.order_type)
+        .group_by(get_date_func(M.Order.created_at), M.Order.order_type)
         .all()
     )
     mds_map = {}  # date_str -> {revenue, walk_in, online, orders}
