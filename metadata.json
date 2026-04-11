@@ -1,7 +1,0 @@
-{
-  "name": "HyperMart",
-  "description": "A SaaS + Marketplace platform for local shops to manage inventory, billing, and get discovered by nearby customers.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}
