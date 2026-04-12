@@ -93,6 +93,9 @@ export function AppProvider({ children }) {
     setActiveLocationState(loc);
   }, []);
 
+  // Global search → shop navigation
+  const [targetShopId, setTargetShopId] = useState(null);
+
   // Restore session from stored JWT token on mount
   useEffect(() => {
     const token = sessionStorage.getItem('hypermart_token');
@@ -160,6 +163,7 @@ export function AppProvider({ children }) {
       cart, cartItemCount, cartTotal,
       addToCart, removeFromCart, updateQuantity, clearCart,
       search, setSearch, activeLocation, setActiveLocation,
+      targetShopId, setTargetShopId,
       aiAvailable,
       language, setLanguage,
     }}>

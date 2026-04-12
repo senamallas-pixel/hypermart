@@ -19,6 +19,7 @@ import OrderHistory       from './pages/OrderHistory';
 import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
 import LanguageSelector   from './components/LanguageSelector';
+import GlobalSearch       from './components/GlobalSearch';
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
@@ -288,13 +289,7 @@ function TopNav() {
           <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">HyperMart</span>
         </button>
 
-        {isMarketplace && (
-          <div className="flex-1 max-w-xs sm:max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" size={14} />
-            <input type="text" placeholder="Search shops or categories&hellip;" value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-[#F5F5F0] rounded-xl text-sm outline-none focus:ring-2 ring-[#5A5A40]/15 transition-all placeholder:text-[#1A1A1A]/30" />
-          </div>
-        )}
+        <GlobalSearch />
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-all cursor-pointer">

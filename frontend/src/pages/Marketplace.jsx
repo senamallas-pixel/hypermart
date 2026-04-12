@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview, getShopDiscounts } from '../api/client';
+import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -215,9 +215,10 @@ function ShopProductsView({ shop, onBack }) {
   const { currentUser, cart, addToCart, updateQuantity, clearCart } = useApp();
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [showCart, setShowCart] = useState(false);
-  const [placing, setPlacing]   = useState(false);
-  const [toast, setToast]       = useState(null);
+  const [showCart, setShowCart]         = useState(false);
+  const [placing, setPlacing]           = useState(false);
+  const [toast, setToast]               = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [activeFilter, setActiveFilter] = useState(t('common.all'));
   const [needsLogin, setNeedsLogin]     = useState(false);
   const [reviews, setReviews]           = useState([]);
@@ -277,7 +278,67 @@ function ShopProductsView({ shop, onBack }) {
     if (!currentUser) { setNeedsLogin(true); return; }
     setPlacing(true);
     try {
-      await placeOrder({ shop_id: shop.id, items: shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })), delivery_address: 'Default Address' });
+      const res = await placeOrder({
+        shop_id:          shop.id,
+        items:            shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })),
+        delivery_address: 'Default Address',
+        payment_method:   paymentMethod,
+      });
+
+      if (paymentMethod === 'razorpay') {
+        try {
+          const rzRes = await createRazorpayOrder(res.data.id);
+          const rz = rzRes.data;
+          const options = {
+            key:         rz.key_id,
+            amount:      rz.amount,
+            currency:    rz.currency,
+            name:        'HyperMart',
+            description: `Order #${res.data.id}`,
+            order_id:    rz.razorpay_order_id,
+            handler: async (response) => {
+              try {
+                await verifyRazorpayPayment({
+                  order_id:            res.data.id,
+                  razorpay_order_id:   response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature:  response.razorpay_signature,
+                });
+              } catch { /* verification failed — order stays */ }
+              clearCart();
+              setShowCart(false);
+              setPlacing(false);
+              setToast('Payment successful! Order placed.');
+              setTimeout(() => setToast(null), 4000);
+            },
+            modal: {
+              ondismiss: () => {
+                clearCart();
+                setShowCart(false);
+                setPlacing(false);
+                setToast(t('messages.orderPlaced'));
+                setTimeout(() => setToast(null), 3000);
+              },
+            },
+            prefill: { email: currentUser.email, contact: currentUser.phone || '' },
+          };
+          if (window.Razorpay) {
+            new window.Razorpay(options).open();
+          } else {
+            clearCart(); setShowCart(false); setPlacing(false);
+            setToast(t('messages.orderPlaced'));
+            setTimeout(() => setToast(null), 3000);
+          }
+          return;
+        } catch {
+          clearCart(); setShowCart(false);
+          setToast(t('messages.orderPlaced'));
+          setTimeout(() => setToast(null), 3000);
+          setPlacing(false);
+          return;
+        }
+      }
+
       clearCart();
       setShowCart(false);
       setToast(t('messages.orderPlaced'));
@@ -546,9 +607,36 @@ function ShopProductsView({ shop, onBack }) {
                   <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest text-xs">{t('marketplace.total')}</span>
                   <span className="font-serif text-2xl font-bold">&#8377;{shopTotal}</span>
                 </div>
+
+                {/* Payment method selector */}
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Payment Method</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: 'cash',     label: 'Cash on Delivery', icon: '💵' },
+                      { key: 'razorpay', label: 'Pay Online',        icon: '💳' },
+                    ].map(m => (
+                      <button key={m.key} onClick={() => setPaymentMethod(m.key)}
+                        className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-bold transition-all ${
+                          paymentMethod === m.key
+                            ? 'border-[#5A5A40] bg-[#5A5A40]/10 text-[#5A5A40]'
+                            : 'border-[#1A1A1A]/10 text-[#1A1A1A]/50 hover:border-[#5A5A40]/30'
+                        }`}>
+                        <span className="text-lg">{m.icon}</span>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <button onClick={handlePlaceOrder} disabled={placing}
                   className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
-                  {placing ? `${t('marketplace.placingOrder')}…` : <><span>{t('marketplace.placeOrder')}</span><ChevronRight size={18} /></>}
+                  {placing
+                    ? <><Loader2 size={16} className="animate-spin" />{t('marketplace.placingOrder')}…</>
+                    : paymentMethod === 'razorpay'
+                      ? <><span>Pay Online</span><ChevronRight size={18} /></>
+                      : <><span>{t('marketplace.placeOrder')}</span><ChevronRight size={18} /></>
+                  }
                 </button>
               </div>
             </motion.div>
@@ -1071,7 +1159,7 @@ function MarketplaceBanner({ location }) {
 // ── Main Marketplace ───────────────────────────────────────────────
 export default function Marketplace() {
   const { t } = useTranslation();
-  const { currentUser, search, setSearch, activeLocation } = useApp();
+  const { currentUser, search, setSearch, activeLocation, targetShopId, setTargetShopId } = useApp();
   const [shops, setShops]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -1097,6 +1185,15 @@ export default function Marketplace() {
   }, [activeLocation, t]);
 
   useEffect(() => { fetchShops(); }, [fetchShops]);
+
+  // Global search → auto-open shop
+  useEffect(() => {
+    if (targetShopId && shops.length > 0) {
+      const shop = shops.find(s => s.id === targetShopId);
+      if (shop) setSelectedShop(shop);
+      setTargetShopId(null);
+    }
+  }, [targetShopId, shops, setTargetShopId]);
 
   const shopsByCategory = useMemo(() => {
     const q = debounced.toLowerCase();

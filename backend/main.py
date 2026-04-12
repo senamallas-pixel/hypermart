@@ -459,7 +459,8 @@ def list_shops(
         q = q.filter(M.Shop.category == category)
     if search:
         like = f"%{search}%"
-        q = q.filter(M.Shop.name.ilike(like) | M.Shop.category.ilike(like))
+        from sqlalchemy import cast, String as SAString
+        q = q.filter(M.Shop.name.ilike(like) | cast(M.Shop.category, SAString).ilike(like))
     total = q.count()
     items = q.order_by(M.Shop.created_at.desc()).offset((page - 1) * size).limit(size).all()
     return {"items": items, "total": total, "page": page, "size": size}
