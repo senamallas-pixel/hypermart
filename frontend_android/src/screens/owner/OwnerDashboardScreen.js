@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  Image, ActivityIndicator, Alert, RefreshControl, Modal,
+  Image, ActivityIndicator, Alert, RefreshControl, Modal, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -87,6 +87,7 @@ export default function OwnerDashboardScreen() {
   const [walkinPayMethod, setWalkinPayMethod] = useState('cash');
   const [walkinLoading, setWalkinLoading] = useState(false);
   const [billingOrders, setBillingOrders] = useState([]);
+  const [showUPIModal, setShowUPIModal] = useState(false);
 
   // Shop logo upload state
   const [shopLogoLoading, setShopLogoLoading] = useState(false);
@@ -384,6 +385,20 @@ export default function OwnerDashboardScreen() {
     if (!selectedShop) return;
     const validItems = walkinItems.filter(i => i.product_id && i.quantity);
     if (validItems.length === 0) { Alert.alert('Error', 'Add at least one product'); return; }
+    // For UPI, show QR modal first — actual recording happens after customer confirms payment
+    if (walkinPayMethod === 'upi') {
+      if (!selectedShop.upi_id) {
+        Alert.alert('UPI Not Set Up', 'Add a UPI ID in Shop Settings to accept UPI payments.');
+        return;
+      }
+      setShowUPIModal(true);
+      return;
+    }
+    await submitWalkinOrder();
+  };
+
+  const submitWalkinOrder = async () => {
+    const validItems = walkinItems.filter(i => i.product_id && i.quantity);
     setWalkinLoading(true);
     try {
       await placeWalkinOrder(selectedShop.id, {
@@ -395,6 +410,7 @@ export default function OwnerDashboardScreen() {
         payment_status: 'paid',
       });
       setWalkinItems([{ product_id: '', quantity: '1', name: '', price: '', unit: '', searchText: '', showSearch: false }]);
+      setShowUPIModal(false);
       loadOrders();
       Alert.alert('Success', 'Walk-in order recorded');
     } catch (err) {
@@ -1060,41 +1076,186 @@ export default function OwnerDashboardScreen() {
             <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>Walk-in / Counter Sale</Text>
 
             {/* Product picker rows */}
-            {walkinItems.map((item, idx) => (
-              <View key={idx} style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <View style={{ flex: 1 }}>
-                  <TextInput
-                    style={[inputStyle, { marginBottom: 4 }]}
-                    placeholder="Product ID"
-                    placeholderTextColor={Colors.textLight}
-                    keyboardType="numeric"
-                    value={item.product_id}
-                    onChangeText={v => {
-                      const rows = [...walkinItems];
-                      rows[idx] = { ...rows[idx], product_id: v };
-                      const p = products.find(pr => String(pr.id) === v);
-                      if (p) rows[idx] = { ...rows[idx], name: p.name, price: String(p.price) };
-                      setWalkinItems(rows);
-                    }}
-                  />
-                  {item.name ? <Text style={{ fontSize: 11, color: Colors.textSecondary, marginLeft: 4, marginTop: -2 }}>{item.name} — {'\u20B9'}{item.price}</Text> : null}
+            {walkinItems.map((item, idx) => {
+              const filteredProds = products.filter(p =>
+                (p.stock == null || p.stock > 0) &&
+                (!item.searchText || p.name.toLowerCase().includes(item.searchText.toLowerCase()))
+              );
+              return (
+                <View key={idx} style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, ...Shadow.sm }}>
+                  {/* Selected product chip OR search input */}
+                  {item.product_id ? (
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 10,
+                      backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.md,
+                      padding: 10, marginBottom: 8,
+                    }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }}>{item.name}</Text>
+                        <Text style={{ fontSize: 12, color: Colors.primary, fontWeight: '600' }}>
+                          ₹{item.price}{item.unit ? ` / ${item.unit}` : ''}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          const rows = [...walkinItems];
+                          rows[idx] = { ...rows[idx], product_id: '', name: '', price: '', unit: '', searchText: '', showSearch: false };
+                          setWalkinItems(rows);
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={20} color={Colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ marginBottom: 8 }}>
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        backgroundColor: Colors.background, borderRadius: BorderRadius.md,
+                        paddingHorizontal: 12, borderWidth: 1,
+                        borderColor: item.showSearch ? Colors.primary : Colors.border, gap: 8,
+                      }}>
+                        <Ionicons name="search-outline" size={15} color={Colors.textMuted} />
+                        <TextInput
+                          style={{ flex: 1, fontSize: 14, color: Colors.textPrimary, paddingVertical: 11 }}
+                          placeholder="Search product by name..."
+                          placeholderTextColor={Colors.textLight}
+                          value={item.searchText}
+                          onFocus={() => {
+                            const rows = [...walkinItems];
+                            rows[idx] = { ...rows[idx], showSearch: true };
+                            setWalkinItems(rows);
+                          }}
+                          onChangeText={v => {
+                            const rows = [...walkinItems];
+                            rows[idx] = { ...rows[idx], searchText: v, showSearch: true };
+                            setWalkinItems(rows);
+                          }}
+                        />
+                        {item.searchText ? (
+                          <TouchableOpacity onPress={() => {
+                            const rows = [...walkinItems];
+                            rows[idx] = { ...rows[idx], searchText: '', showSearch: false };
+                            setWalkinItems(rows);
+                          }}>
+                            <Ionicons name="close" size={15} color={Colors.textMuted} />
+                          </TouchableOpacity>
+                        ) : (
+                          <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
+                        )}
+                      </View>
+                      {item.showSearch && filteredProds.length > 0 && (
+                        <View style={{
+                          backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+                          borderWidth: 1, borderColor: Colors.border, marginTop: 4,
+                          maxHeight: 200, overflow: 'hidden', ...Shadow.md,
+                        }}>
+                          <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                            {filteredProds.slice(0, 8).map((p, pi) => (
+                              <TouchableOpacity
+                                key={p.id}
+                                onPress={() => {
+                                  const rows = [...walkinItems];
+                                  rows[idx] = { ...rows[idx], product_id: String(p.id), name: p.name, price: String(p.price), unit: p.unit || '', searchText: '', showSearch: false };
+                                  setWalkinItems(rows);
+                                }}
+                                style={{
+                                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                  paddingHorizontal: 12, paddingVertical: 10,
+                                  borderBottomWidth: pi < filteredProds.slice(0, 8).length - 1 ? 1 : 0,
+                                  borderBottomColor: Colors.border,
+                                }}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textPrimary }}>{p.name}</Text>
+                                  <Text style={{ fontSize: 11, color: Colors.textMuted }}>
+                                    {p.stock != null ? `Stock: ${p.stock}` : 'In stock'}{p.unit ? ` · ${p.unit}` : ''}
+                                  </Text>
+                                </View>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.primary }}>₹{p.price}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                      {item.showSearch && filteredProds.length === 0 && (
+                        <View style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: Colors.white, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border, marginTop: 4 }}>
+                          <Text style={{ fontSize: 12, color: Colors.textMuted }}>No products found</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Qty stepper + delete */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 }}>QTY</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          const rows = [...walkinItems];
+                          const qty = Math.max(1, parseInt(rows[idx].quantity || '1') - 1);
+                          rows[idx] = { ...rows[idx], quantity: String(qty) };
+                          setWalkinItems(rows);
+                        }}
+                        style={{
+                          width: 32, height: 32, borderRadius: BorderRadius.sm,
+                          backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+                          justifyContent: 'center', alignItems: 'center',
+                        }}
+                      >
+                        <Ionicons name="remove" size={14} color={Colors.textPrimary} />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={{ width: 48, textAlign: 'center', fontSize: 15, fontWeight: '700', color: Colors.textPrimary, paddingVertical: 4 }}
+                        keyboardType="numeric"
+                        value={item.quantity}
+                        onChangeText={v => {
+                          const rows = [...walkinItems];
+                          rows[idx] = { ...rows[idx], quantity: v };
+                          setWalkinItems(rows);
+                        }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          const rows = [...walkinItems];
+                          rows[idx] = { ...rows[idx], quantity: String(parseInt(rows[idx].quantity || '0') + 1) };
+                          setWalkinItems(rows);
+                        }}
+                        style={{
+                          width: 32, height: 32, borderRadius: BorderRadius.sm,
+                          backgroundColor: Colors.primary,
+                          justifyContent: 'center', alignItems: 'center',
+                        }}
+                      >
+                        <Ionicons name="add" size={14} color="#fff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setWalkinItems(prev => prev.filter((_, i) => i !== idx))}
+                        style={{ marginLeft: 10, padding: 4 }}
+                        disabled={walkinItems.length === 1}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={walkinItems.length === 1 ? Colors.border : Colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Row total */}
+                  {item.product_id && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+                      <Text style={{ fontSize: 12, color: Colors.textMuted }}>
+                        {'₹'}{item.price} × {item.quantity || 0} ={' '}
+                        <Text style={{ fontWeight: '800', color: Colors.primary }}>
+                          ₹{(parseFloat(item.price || 0) * parseInt(item.quantity || 0)).toFixed(2)}
+                        </Text>
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <TextInput
-                  style={[inputStyle, { width: 60, marginBottom: 0, textAlign: 'center' }]}
-                  placeholder="Qty"
-                  placeholderTextColor={Colors.textLight}
-                  keyboardType="numeric"
-                  value={item.quantity}
-                  onChangeText={v => { const rows = [...walkinItems]; rows[idx].quantity = v; setWalkinItems(rows); }}
-                />
-                <TouchableOpacity onPress={() => setWalkinItems(prev => prev.filter((_, i) => i !== idx))} style={{ padding: 4 }}>
-                  <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-                </TouchableOpacity>
-              </View>
-            ))}
+              );
+            })}
 
             <TouchableOpacity
-              onPress={() => setWalkinItems(prev => [...prev, { product_id: '', quantity: '1', name: '', price: '' }])}
+              onPress={() => setWalkinItems(prev => [...prev, { product_id: '', quantity: '1', name: '', price: '', unit: '', searchText: '', showSearch: false }])}
               style={{
                 borderWidth: 1.5, borderColor: Colors.primary, borderStyle: 'dashed',
                 borderRadius: BorderRadius.md, padding: 10, alignItems: 'center', marginBottom: Spacing.md,
@@ -1105,35 +1266,87 @@ export default function OwnerDashboardScreen() {
               <Text style={{ color: Colors.primary, fontWeight: '700' }}>Add Item</Text>
             </TouchableOpacity>
 
+            {/* Bill total summary */}
+            {walkinItems.some(i => i.product_id) && (
+              <View style={{
+                backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+                padding: Spacing.md, marginBottom: Spacing.md, ...Shadow.sm,
+                borderLeftWidth: 3, borderLeftColor: Colors.primary,
+              }}>
+                {walkinItems.filter(i => i.product_id).map((i, k) => (
+                  <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, color: Colors.textSecondary }} numberOfLines={1}>{i.name} × {i.quantity}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textPrimary }}>
+                      ₹{(parseFloat(i.price || 0) * parseInt(i.quantity || 0)).toFixed(2)}
+                    </Text>
+                  </View>
+                ))}
+                <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 6 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.textPrimary }}>Total</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.primary }}>
+                    ₹{walkinItems.reduce((sum, i) => sum + (parseFloat(i.price || 0) * parseInt(i.quantity || 0)), 0).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Payment method */}
             <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, marginBottom: 8 }}>PAYMENT METHOD</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: Spacing.md }}>
-              {['cash', 'upi', 'card'].map(m => (
+              {[
+                { key: 'cash', label: 'Cash', icon: 'cash-outline' },
+                { key: 'upi', label: 'UPI', icon: 'phone-portrait-outline' },
+                { key: 'card', label: 'Card', icon: 'card-outline' },
+              ].map(m => (
                 <TouchableOpacity
-                  key={m}
-                  onPress={() => setWalkinPayMethod(m)}
+                  key={m.key}
+                  onPress={() => setWalkinPayMethod(m.key)}
                   style={{
-                    flex: 1, paddingVertical: 10, borderRadius: BorderRadius.md, borderWidth: 1.5, alignItems: 'center',
-                    borderColor: walkinPayMethod === m ? Colors.primary : Colors.border,
-                    backgroundColor: walkinPayMethod === m ? Colors.primary + '10' : Colors.white,
+                    flex: 1, paddingVertical: 10, borderRadius: BorderRadius.md, borderWidth: 1.5,
+                    alignItems: 'center', gap: 4,
+                    borderColor: walkinPayMethod === m.key ? Colors.primary : Colors.border,
+                    backgroundColor: walkinPayMethod === m.key ? Colors.primaryBg : Colors.white,
                   }}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '700', textTransform: 'capitalize', color: walkinPayMethod === m ? Colors.primary : Colors.textMuted }}>{m}</Text>
+                  <Ionicons name={m.icon} size={16} color={walkinPayMethod === m.key ? Colors.primary : Colors.textMuted} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: walkinPayMethod === m.key ? Colors.primary : Colors.textMuted }}>{m.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
+            {/* UPI not configured warning */}
+            {walkinPayMethod === 'upi' && !selectedShop?.upi_id && (
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 7,
+                backgroundColor: Colors.warningBg, borderRadius: BorderRadius.md,
+                padding: Spacing.md, marginBottom: Spacing.md,
+              }}>
+                <Ionicons name="warning-outline" size={16} color={Colors.warningDark} />
+                <Text style={{ fontSize: 12, color: Colors.warningDark, fontWeight: '600', flex: 1 }}>
+                  No UPI ID set up. Add it in Shop Settings to accept UPI payments.
+                </Text>
+              </View>
+            )}
+
             <TouchableOpacity
               onPress={handleWalkinOrder}
-              disabled={walkinLoading}
+              disabled={walkinLoading || (walkinPayMethod === 'upi' && !selectedShop?.upi_id)}
               style={{
                 backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
-                paddingVertical: 14, alignItems: 'center', opacity: walkinLoading ? 0.6 : 1,
+                paddingVertical: 14, alignItems: 'center',
+                opacity: (walkinLoading || (walkinPayMethod === 'upi' && !selectedShop?.upi_id)) ? 0.5 : 1,
                 flexDirection: 'row', justifyContent: 'center', gap: 8,
+                ...Shadow.md,
               }}
             >
               {walkinLoading ? (
                 <ActivityIndicator color="#fff" size="small" />
+              ) : walkinPayMethod === 'upi' ? (
+                <>
+                  <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Show UPI QR</Text>
+                </>
               ) : (
                 <>
                   <Ionicons name="receipt-outline" size={18} color="#fff" />
@@ -1141,19 +1354,6 @@ export default function OwnerDashboardScreen() {
                 </>
               )}
             </TouchableOpacity>
-
-            {/* Quick product reference */}
-            {products.length > 0 && (
-              <View style={{ marginTop: Spacing.lg }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 8, color: Colors.textSecondary }}>Products (tap ID to copy)</Text>
-                {products.slice(0, 10).map(p => (
-                  <View key={p.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
-                    <Text style={{ fontSize: 13, color: Colors.textPrimary }}>#{p.id} {p.name}</Text>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.primary }}>{'\u20B9'}{p.price}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
 
             {/* Suppliers section */}
             <View style={{ marginTop: Spacing.xl }}>
@@ -1576,6 +1776,103 @@ export default function OwnerDashboardScreen() {
                 <Text style={{ fontWeight: '600', color: '#fff' }}>Add</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+      {/* ─── UPI QR Modal (Billing) ─── */}
+      <Modal visible={showUPIModal} animationType="slide" transparent>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
+          <View style={{
+            backgroundColor: Colors.white,
+            borderTopLeftRadius: BorderRadius.xxl, borderTopRightRadius: BorderRadius.xxl,
+            padding: Spacing.xxl,
+          }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+              <View>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: Colors.textPrimary }}>UPI Payment</Text>
+                <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 2 }}>Show QR to customer to scan</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowUPIModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={22} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* QR Code */}
+            {selectedShop?.upi_id && (() => {
+              const billTotal = walkinItems.reduce((s, i) => s + (parseFloat(i.price || 0) * parseInt(i.quantity || 0)), 0);
+              const upiUri = `upi://pay?pa=${encodeURIComponent(selectedShop.upi_id)}&pn=${encodeURIComponent(selectedShop.name || '')}&am=${billTotal.toFixed(2)}&cu=INR`;
+              const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiUri)}`;
+              return (
+                <View style={{ alignItems: 'center', marginBottom: Spacing.xl }}>
+                  <View style={{
+                    padding: 12, backgroundColor: Colors.white,
+                    borderRadius: BorderRadius.xl, ...Shadow.md,
+                    borderWidth: 1, borderColor: Colors.border,
+                  }}>
+                    <Image
+                      source={{ uri: qrUrl }}
+                      style={{ width: 200, height: 200, borderRadius: BorderRadius.md }}
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.md }}>
+                    <Ionicons name="phone-portrait-outline" size={14} color={Colors.textMuted} />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.3 }}>
+                      {selectedShop.upi_id}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'center', marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, color: Colors.textMuted }}>Amount</Text>
+                    <Text style={{ fontSize: 28, fontWeight: '800', color: Colors.primary }}>
+                      ₹{billTotal.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Open UPI app button */}
+            <TouchableOpacity
+              onPress={() => {
+                const billTotal = walkinItems.reduce((s, i) => s + (parseFloat(i.price || 0) * parseInt(i.quantity || 0)), 0);
+                const uri = `upi://pay?pa=${encodeURIComponent(selectedShop?.upi_id || '')}&pn=${encodeURIComponent(selectedShop?.name || '')}&am=${billTotal.toFixed(2)}&cu=INR`;
+                Linking.openURL(uri).catch(() => Alert.alert('Error', 'No UPI app found on this device'));
+              }}
+              style={{
+                backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.lg,
+                paddingVertical: 13, alignItems: 'center', marginBottom: 10,
+                borderWidth: 1.5, borderColor: Colors.primary,
+                flexDirection: 'row', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <Ionicons name="phone-portrait-outline" size={16} color={Colors.primary} />
+              <Text style={{ fontWeight: '700', fontSize: 13, color: Colors.primary }}>Open UPI App</Text>
+            </TouchableOpacity>
+
+            {/* Confirm & record */}
+            <TouchableOpacity
+              onPress={submitWalkinOrder}
+              disabled={walkinLoading}
+              style={{
+                backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+                paddingVertical: 15, alignItems: 'center',
+                flexDirection: 'row', justifyContent: 'center', gap: 8,
+                opacity: walkinLoading ? 0.6 : 1, ...Shadow.md,
+              }}
+            >
+              {walkinLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Customer Paid — Record Sale</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <Text style={{ textAlign: 'center', fontSize: 11, color: Colors.textMuted, marginTop: 12, lineHeight: 17 }}>
+              After the customer scans and pays, tap "Customer Paid" to record the sale.
+            </Text>
           </View>
         </View>
       </Modal>
