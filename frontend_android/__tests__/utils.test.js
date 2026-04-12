@@ -136,6 +136,70 @@ describe('buildUPIUri', () => {
   });
 });
 
+// ── Walk-in billing helpers ─────────────────────────────────────
+const walkinBillTotal = (items) =>
+  Math.round(
+    items.reduce((sum, i) => sum + parseFloat(i.price || 0) * parseInt(i.quantity || 0), 0) * 100
+  ) / 100;
+
+describe('walkinBillTotal (billing tab)', () => {
+  test('returns 0 for empty items', () => {
+    expect(walkinBillTotal([])).toBe(0);
+  });
+
+  test('returns 0 when no product is selected yet', () => {
+    const items = [{ product_id: '', quantity: '1', price: '', searchText: '', showSearch: false }];
+    expect(walkinBillTotal(items)).toBe(0);
+  });
+
+  test('calculates total for single selected item', () => {
+    const items = [{ product_id: '5', name: 'Milk', price: '25', quantity: '3', unit: 'L', searchText: '', showSearch: false }];
+    expect(walkinBillTotal(items)).toBe(75);
+  });
+
+  test('calculates total for multiple items', () => {
+    const items = [
+      { product_id: '1', name: 'Bread', price: '40', quantity: '2', unit: 'pcs', searchText: '', showSearch: false },
+      { product_id: '2', name: 'Butter', price: '55.5', quantity: '1', unit: 'pack', searchText: '', showSearch: false },
+    ];
+    expect(walkinBillTotal(items)).toBe(135.5);
+  });
+
+  test('ignores unselected rows (no product_id)', () => {
+    const items = [
+      { product_id: '1', name: 'Rice', price: '80', quantity: '2', unit: 'kg', searchText: '', showSearch: false },
+      { product_id: '', name: '', price: '', quantity: '1', unit: '', searchText: 'ri', showSearch: true },
+    ];
+    expect(walkinBillTotal(items)).toBe(160);
+  });
+
+  test('handles string price and quantity correctly', () => {
+    const items = [{ product_id: '3', name: 'Oil', price: '120.50', quantity: '2', unit: 'L', searchText: '', showSearch: false }];
+    expect(walkinBillTotal(items)).toBe(241);
+  });
+});
+
+// ── UPI billing guard ───────────────────────────────────────────
+const canShowUPIQR = (shop) => !!(shop && shop.upi_id && shop.upi_id.trim());
+
+describe('canShowUPIQR (UPI billing gate)', () => {
+  test('returns false when shop is null', () => {
+    expect(canShowUPIQR(null)).toBe(false);
+  });
+
+  test('returns false when upi_id is absent', () => {
+    expect(canShowUPIQR({ name: 'Shop', upi_id: '' })).toBe(false);
+  });
+
+  test('returns false when upi_id is only whitespace', () => {
+    expect(canShowUPIQR({ name: 'Shop', upi_id: '   ' })).toBe(false);
+  });
+
+  test('returns true when upi_id is set', () => {
+    expect(canShowUPIQR({ name: 'Shop', upi_id: 'shop@upi' })).toBe(true);
+  });
+});
+
 // ── Order status flow ───────────────────────────────────────────
 const ORDER_FLOW = {
   pending: ['accepted', 'rejected'],
