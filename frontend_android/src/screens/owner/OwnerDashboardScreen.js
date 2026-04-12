@@ -1005,9 +1005,20 @@ export default function OwnerDashboardScreen() {
             <TouchableOpacity
               onPress={handleWalkinOrder}
               disabled={walkinLoading}
-              style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.lg, paddingVertical: 14, alignItems: 'center', opacity: walkinLoading ? 0.6 : 1 }}
+              style={{
+                backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+                paddingVertical: 14, alignItems: 'center', opacity: walkinLoading ? 0.6 : 1,
+                flexDirection: 'row', justifyContent: 'center', gap: 8,
+              }}
             >
-              {walkinLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Record Sale</Text>}
+              {walkinLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="receipt-outline" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Record Sale</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             {/* Quick product reference */}
@@ -1078,39 +1089,81 @@ export default function OwnerDashboardScreen() {
 
             {/* Discounts section */}
             <View style={{ marginTop: Spacing.xl }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>Discounts</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md }}>
+                <Ionicons name="pricetag-outline" size={16} color={Colors.primary} />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary }}>Discounts</Text>
+              </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.textSecondary }}>Product Discounts</Text>
-                <TouchableOpacity onPress={() => setShowProductDiscountModal(true)} style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: 10, paddingVertical: 5 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>+ Add</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textSecondary }}>Product Discounts</Text>
+                <TouchableOpacity
+                  onPress={() => setShowProductDiscountModal(true)}
+                  style={{
+                    backgroundColor: Colors.primary, borderRadius: BorderRadius.sm,
+                    paddingHorizontal: 10, paddingVertical: 5,
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <Ionicons name="add" size={12} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Add</Text>
                 </TouchableOpacity>
               </View>
               {productDiscounts.map(d => (
-                <View key={d.id} style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.md, padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ flex: 1, fontSize: 13, color: Colors.textPrimary }}>
-                    Product #{d.product_id} — {d.discount_percent}% off (min qty: {d.min_quantity || 1})
+                <View key={d.id} style={{
+                  backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+                  padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center',
+                  gap: 10, ...Shadow.sm,
+                }}>
+                  <View style={{
+                    backgroundColor: Colors.warningBg, borderRadius: BorderRadius.xs,
+                    paddingHorizontal: 8, paddingVertical: 4,
+                  }}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: Colors.warningDark }}>
+                      {d.discount_percent}% OFF
+                    </Text>
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 12, color: Colors.textSecondary }}>
+                    Product #{d.product_id} · min qty: {d.min_quantity || 1}
                   </Text>
-                  <TouchableOpacity onPress={async () => { await deleteProductDiscount(selectedShop.id, d.id); loadDiscounts(); }}>
-                    <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '600' }}>Remove</Text>
+                  <TouchableOpacity onPress={async () => { await deleteProductDiscount(selectedShop.id, d.id); loadDiscounts(); }} style={{ padding: 4 }}>
+                    <Ionicons name="trash-outline" size={15} color={Colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))}
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: Spacing.md }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.textSecondary }}>Order Discounts</Text>
-                <TouchableOpacity onPress={() => setShowOrderDiscountModal(true)} style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: 10, paddingVertical: 5 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>+ Add</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textSecondary }}>Order Discounts</Text>
+                <TouchableOpacity
+                  onPress={() => setShowOrderDiscountModal(true)}
+                  style={{
+                    backgroundColor: Colors.primary, borderRadius: BorderRadius.sm,
+                    paddingHorizontal: 10, paddingVertical: 5,
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <Ionicons name="add" size={12} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Add</Text>
                 </TouchableOpacity>
               </View>
               {orderDiscounts.map(d => (
-                <View key={d.id} style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.md, padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ flex: 1, fontSize: 13, color: Colors.textPrimary }}>
-                    Orders over {'\u20B9'}{d.min_order_amount} —{' '}
-                    {d.discount_percent ? `${d.discount_percent}%` : `\u20B9${d.discount_amount}`} off
+                <View key={d.id} style={{
+                  backgroundColor: Colors.white, borderRadius: BorderRadius.md,
+                  padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center',
+                  gap: 10, ...Shadow.sm,
+                }}>
+                  <View style={{
+                    backgroundColor: Colors.successBg, borderRadius: BorderRadius.xs,
+                    paddingHorizontal: 8, paddingVertical: 4,
+                  }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: Colors.successDark }}>
+                      {d.discount_percent ? `${d.discount_percent}%` : `₹${d.discount_amount}`} OFF
+                    </Text>
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 12, color: Colors.textSecondary }}>
+                    Orders over ₹{d.min_order_amount}
                   </Text>
-                  <TouchableOpacity onPress={async () => { await deleteOrderDiscount(selectedShop.id, d.id); loadDiscounts(); }}>
-                    <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '600' }}>Remove</Text>
+                  <TouchableOpacity onPress={async () => { await deleteOrderDiscount(selectedShop.id, d.id); loadDiscounts(); }} style={{ padding: 4 }}>
+                    <Ionicons name="trash-outline" size={15} color={Colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -1141,16 +1194,28 @@ export default function OwnerDashboardScreen() {
             <TouchableOpacity
               onPress={loadReports}
               disabled={reportsLoading}
-              style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingVertical: 12, alignItems: 'center', marginBottom: Spacing.lg, opacity: reportsLoading ? 0.6 : 1 }}
+              style={{
+                backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+                paddingVertical: 13, alignItems: 'center', marginBottom: Spacing.lg,
+                opacity: reportsLoading ? 0.6 : 1,
+                flexDirection: 'row', justifyContent: 'center', gap: 7,
+              }}
             >
-              {reportsLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '600' }}>Load Report</Text>}
+              {reportsLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="bar-chart-outline" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Load Report</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             {reports && (
-              <View style={{ gap: 10 }}>
-                <StatCard label="Total Orders" value={reports.total_orders || 0} icon="\uD83D\uDCE6" />
-                <StatCard label="Total Revenue" value={`\u20B9${(reports.total_revenue || 0).toFixed(2)}`} icon="\uD83D\uDCB0" />
-                <StatCard label="Avg Order Value" value={`\u20B9${(reports.avg_order_value || 0).toFixed(2)}`} icon="\uD83D\uDCC8" />
+              <View style={{ gap: 10, flexDirection: 'row', flexWrap: 'wrap' }}>
+                <StatCard label="Total Orders" value={String(reports.total_orders || 0)} icon="📦" />
+                <StatCard label="Total Revenue" value={`₹${(reports.total_revenue || 0).toFixed(0)}`} icon="💰" />
+                <StatCard label="Avg Order Value" value={`₹${(reports.avg_order_value || 0).toFixed(0)}`} icon="📈" />
                 {reports.top_products && reports.top_products.length > 0 && (
                   <View style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.md }}>
                     <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: Spacing.sm }}>Top Products</Text>
@@ -1170,7 +1235,10 @@ export default function OwnerDashboardScreen() {
         {/* ─── Settings Tab ─── */}
         {activeTab === 'Settings' && selectedShop && (
           <View>
-            <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>Shop Settings</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: Spacing.md }}>
+              <Ionicons name="settings-outline" size={18} color={Colors.primary} />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.textPrimary }}>Shop Settings</Text>
+            </View>
             <View style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.xl, padding: Spacing.lg, marginBottom: Spacing.lg }}>
               <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 10 }}>Basic Info</Text>
               <TextInput style={inputStyle} placeholder="Shop Name" placeholderTextColor={Colors.textLight} value={shopSettingsForm.name} onChangeText={v => setShopSettingsForm(f => ({ ...f, name: v }))} />
@@ -1198,9 +1266,20 @@ export default function OwnerDashboardScreen() {
             <TouchableOpacity
               onPress={handleSaveSettings}
               disabled={shopSettingsSaving}
-              style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.lg, paddingVertical: 14, alignItems: 'center', opacity: shopSettingsSaving ? 0.6 : 1 }}
+              style={{
+                backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+                paddingVertical: 14, alignItems: 'center', opacity: shopSettingsSaving ? 0.6 : 1,
+                flexDirection: 'row', justifyContent: 'center', gap: 8, ...Shadow.md,
+              }}
             >
-              {shopSettingsSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Save Settings</Text>}
+              {shopSettingsSaving ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Save Settings</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -1214,7 +1293,12 @@ export default function OwnerDashboardScreen() {
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xxl, borderTopRightRadius: BorderRadius.xxl, padding: Spacing.xxl, maxHeight: '85%' }}>
             <ScrollView>
-              <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>Register Shop</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.textPrimary }}>Register Shop</Text>
+                <TouchableOpacity onPress={() => setShowShopModal(false)}>
+                  <Ionicons name="close" size={22} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
               <TextInput style={inputStyle} placeholder="Shop Name *" placeholderTextColor={Colors.textLight} value={shopForm.name} onChangeText={v => setShopForm(f => ({ ...f, name: v }))} />
               <TextInput style={inputStyle} placeholder="Address" placeholderTextColor={Colors.textLight} value={shopForm.address} onChangeText={v => setShopForm(f => ({ ...f, address: v }))} />
               <TextInput style={inputStyle} placeholder="Location Name" placeholderTextColor={Colors.textLight} value={shopForm.location_name} onChangeText={v => setShopForm(f => ({ ...f, location_name: v }))} />
@@ -1239,9 +1323,14 @@ export default function OwnerDashboardScreen() {
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xxl, borderTopRightRadius: BorderRadius.xxl, padding: Spacing.xxl, maxHeight: '90%' }}>
             <ScrollView>
-              <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>
-                {editingProduct ? 'Edit Product' : 'Add Product'}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.textPrimary }}>
+                  {editingProduct ? 'Edit Product' : 'Add Product'}
+                </Text>
+                <TouchableOpacity onPress={() => { setShowProductModal(false); setAiSuggestions([]); setProdImageUri(null); }}>
+                  <Ionicons name="close" size={22} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
               <TextInput style={inputStyle} placeholder="Product Name *" placeholderTextColor={Colors.textLight} value={prodForm.name} onChangeText={v => setProdForm(f => ({ ...f, name: v }))} />
               {aiAvailable && (
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
@@ -1308,7 +1397,12 @@ export default function OwnerDashboardScreen() {
       <Modal visible={showSupplierModal} animationType="slide" transparent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: Colors.white, borderTopLeftRadius: BorderRadius.xxl, borderTopRightRadius: BorderRadius.xxl, padding: Spacing.xxl }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: Spacing.lg }}>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.textPrimary }}>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</Text>
+              <TouchableOpacity onPress={() => setShowSupplierModal(false)}>
+                <Ionicons name="close" size={22} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
             <TextInput style={inputStyle} placeholder="Supplier Name *" placeholderTextColor={Colors.textLight} value={supplierForm.name} onChangeText={v => setSupplierForm(f => ({ ...f, name: v }))} />
             <TextInput style={inputStyle} placeholder="Contact Person" placeholderTextColor={Colors.textLight} value={supplierForm.contact_name} onChangeText={v => setSupplierForm(f => ({ ...f, contact_name: v }))} />
             <TextInput style={inputStyle} placeholder="Phone" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" value={supplierForm.phone} onChangeText={v => setSupplierForm(f => ({ ...f, phone: v }))} />
