@@ -416,6 +416,28 @@ CHAT_TOOLS = [
 ]
 
 
+def _resolve_category(text: str):
+    """Map a user-facing keyword to the ShopCategory enum member."""
+    if not text:
+        return None
+    KEYWORD_MAP = {
+        "fruit": M.ShopCategory.vegetables, "fruits": M.ShopCategory.vegetables,
+        "vegetable": M.ShopCategory.vegetables, "vegetables": M.ShopCategory.vegetables,
+        "veggie": M.ShopCategory.vegetables, "veggies": M.ShopCategory.vegetables,
+        "dairy": M.ShopCategory.dairy, "milk": M.ShopCategory.dairy,
+        "grocery": M.ShopCategory.grocery, "groceries": M.ShopCategory.grocery,
+        "bakery": M.ShopCategory.bakery, "bread": M.ShopCategory.bakery,
+        "snacks": M.ShopCategory.bakery, "cake": M.ShopCategory.bakery,
+        "beverages": M.ShopCategory.beverages, "drinks": M.ShopCategory.beverages,
+        "juice": M.ShopCategory.beverages, "tea": M.ShopCategory.beverages,
+        "coffee": M.ShopCategory.beverages,
+        "meat": M.ShopCategory.meat, "chicken": M.ShopCategory.meat, "fish": M.ShopCategory.meat,
+        "household": M.ShopCategory.household, "cleaning": M.ShopCategory.household,
+        "personal": M.ShopCategory.personal_care, "personal care": M.ShopCategory.personal_care,
+    }
+    return KEYWORD_MAP.get(text.lower().strip())
+
+
 def execute_tool(name: str, args: dict, db: Session) -> str:
     """Execute a tool call and return the result as a string."""
     try:
@@ -424,40 +446,22 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
             cat = args.get("category")
             from sqlalchemy import cast, String as SAString, or_
 
-            # Map common search terms to category enum keys (SQLite stores keys not values)
-            CATEGORY_KEYWORDS = {
-                "fruit": M.ShopCategory.vegetables, "fruits": M.ShopCategory.vegetables,
-                "vegetable": M.ShopCategory.vegetables, "vegetables": M.ShopCategory.vegetables,
-                "veggie": M.ShopCategory.vegetables, "veggies": M.ShopCategory.vegetables,
-                "dairy": M.ShopCategory.dairy, "milk": M.ShopCategory.dairy,
-                "grocery": M.ShopCategory.grocery, "groceries": M.ShopCategory.grocery,
-                "bakery": M.ShopCategory.bakery, "bread": M.ShopCategory.bakery,
-                "snacks": M.ShopCategory.bakery, "cake": M.ShopCategory.bakery,
-                "beverages": M.ShopCategory.beverages, "drinks": M.ShopCategory.beverages,
-                "juice": M.ShopCategory.beverages, "tea": M.ShopCategory.beverages,
-                "meat": M.ShopCategory.meat, "chicken": M.ShopCategory.meat,
-                "household": M.ShopCategory.household, "personal": M.ShopCategory.personal_care,
-            }
-
             q = db.query(M.Product).join(M.Shop).filter(
                 M.Shop.status == M.ShopStatus.approved,
                 M.Product.status == M.ProductStatus.active,
             )
 
-            # Try name match first, then fall back to category match
             like = f"%{query}%"
-            matched_cat = CATEGORY_KEYWORDS.get(query.lower().strip())
+            matched_cat = _resolve_category(query)
             conditions = [M.Product.name.ilike(like)]
             if matched_cat:
                 conditions.append(M.Product.category == matched_cat)
             q = q.filter(or_(*conditions))
 
             if cat:
-                cat_enum = CATEGORY_KEYWORDS.get(cat.lower().strip())
+                cat_enum = _resolve_category(cat)
                 if cat_enum:
                     q = q.filter(M.Product.category == cat_enum)
-                else:
-                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
 
             products = q.order_by(M.Product.name).limit(12).all()
             if not products:
@@ -588,16 +592,9 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
                 .filter(M.Order.created_at >= cutoff, M.Order.status != M.OrderStatus.rejected)
             )
             if cat:
-                # Reuse keyword mapping
-                CAT_KW = {"fruit": "vegetables", "fruits": "vegetables", "dairy": "dairy", "grocery": "grocery",
-                           "bakery": "bakery", "snacks": "bakery", "beverages": "beverages", "meat": "meat",
-                           "household": "household", "vegetables": "vegetables"}
-                mapped = CAT_KW.get(cat.lower().strip())
-                if mapped:
-                    q = q.filter(M.Product.category == mapped)
-                else:
-                    from sqlalchemy import cast, String as SAString
-                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
+                cat_enum = _resolve_category(cat)
+                if cat_enum:
+                    q = q.filter(M.Product.category == cat_enum)
             popular = (
                 q.group_by(M.OrderItem.name, M.OrderItem.price, M.Product.stock, M.Product.unit, M.Product.shop_id, M.Shop.name)
                 .order_by(func.sum(M.OrderItem.quantity).desc())
@@ -625,15 +622,9 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
                 M.Product.status == M.ProductStatus.active,
             )
             if cat:
-                CAT_KW = {"fruit": "vegetables", "fruits": "vegetables", "dairy": "dairy", "grocery": "grocery",
-                           "bakery": "bakery", "snacks": "bakery", "beverages": "beverages", "meat": "meat",
-                           "household": "household", "vegetables": "vegetables", "personal": "personal_care"}
-                mapped = CAT_KW.get(cat.lower().strip())
-                if mapped:
-                    q = q.filter(M.Product.category == mapped)
-                else:
-                    from sqlalchemy import cast, String as SAString
-                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
+                cat_enum = _resolve_category(cat)
+                if cat_enum:
+                    q = q.filter(M.Product.category == cat_enum)
             products = q.order_by(M.Product.name).limit(20).all()
             if not products:
                 return f"No products found{' in ' + cat if cat else ''}."
