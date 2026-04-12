@@ -83,10 +83,13 @@ export default function OwnerDashboardScreen() {
   const [reportTo, setReportTo] = useState('');
 
   // Billing (walk-in) state
-  const [walkinItems, setWalkinItems] = useState([{ product_id: '', quantity: '1', name: '', price: '' }]);
+  const [walkinItems, setWalkinItems] = useState([{ product_id: '', quantity: '1', name: '', price: '', unit: '', searchText: '', showSearch: false }]);
   const [walkinPayMethod, setWalkinPayMethod] = useState('cash');
   const [walkinLoading, setWalkinLoading] = useState(false);
   const [billingOrders, setBillingOrders] = useState([]);
+
+  // Shop logo upload state
+  const [shopLogoLoading, setShopLogoLoading] = useState(false);
 
   // Settings / shop form state
   const [shopSettingsForm, setShopSettingsForm] = useState({
@@ -251,6 +254,34 @@ export default function OwnerDashboardScreen() {
     } finally { setShopSettingsSaving(false); }
   };
 
+  // ── Shop Logo Upload ─────────────────────────────────────────
+
+  const handleUploadShopLogo = async () => {
+    if (!selectedShop) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access to upload images'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8,
+      allowsEditing: true, aspect: [1, 1],
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setShopLogoLoading(true);
+      try {
+        const asset = result.assets[0];
+        const uploadRes = await uploadFile(asset.uri, 'shop_logo.jpg', 'image/jpeg');
+        const logoUrl = uploadRes.data?.url || uploadRes.data?.path;
+        if (logoUrl) {
+          const res = await updateShop(selectedShop.id, { logo: logoUrl });
+          setSelectedShop(res.data);
+          setShops(prev => prev.map(s => s.id === res.data.id ? res.data : s));
+          Alert.alert('Success', 'Shop logo updated');
+        }
+      } catch {
+        Alert.alert('Error', 'Failed to upload logo');
+      } finally { setShopLogoLoading(false); }
+    }
+  };
+
   // ── Products ──────────────────────────────────────────────────
 
   const handlePickProductImage = async () => {
@@ -363,7 +394,7 @@ export default function OwnerDashboardScreen() {
         payment_method: walkinPayMethod,
         payment_status: 'paid',
       });
-      setWalkinItems([{ product_id: '', quantity: '1', name: '', price: '' }]);
+      setWalkinItems([{ product_id: '', quantity: '1', name: '', price: '', unit: '', searchText: '', showSearch: false }]);
       loadOrders();
       Alert.alert('Success', 'Walk-in order recorded');
     } catch (err) {
@@ -557,6 +588,96 @@ export default function OwnerDashboardScreen() {
               </View>
             ) : (
               <View>
+                {/* ── Shop Profile Card ── */}
+                {selectedShop && (
+                  <View style={{
+                    backgroundColor: Colors.white, borderRadius: BorderRadius.xl,
+                    marginBottom: Spacing.lg, overflow: 'hidden', ...Shadow.sm,
+                  }}>
+                    {/* Banner / logo area */}
+                    <TouchableOpacity onPress={handleUploadShopLogo} disabled={shopLogoLoading} activeOpacity={0.8}>
+                      <View style={{
+                        height: 110, backgroundColor: Colors.primaryBg,
+                        justifyContent: 'center', alignItems: 'center',
+                      }}>
+                        {selectedShop.logo ? (
+                          <Image source={{ uri: fixImageUrl(selectedShop.logo) }} style={{ width: '100%', height: 110 }} resizeMode="cover" />
+                        ) : (
+                          <View style={{ alignItems: 'center', gap: 6 }}>
+                            <Ionicons name="storefront-outline" size={36} color={Colors.primaryLight} />
+                            <Text style={{ fontSize: 12, color: Colors.primaryLight, fontWeight: '600' }}>Tap to add shop photo</Text>
+                          </View>
+                        )}
+                        {/* Camera overlay badge */}
+                        <View style={{
+                          position: 'absolute', bottom: 8, right: 10,
+                          backgroundColor: Colors.primary, borderRadius: 16,
+                          width: 32, height: 32, justifyContent: 'center', alignItems: 'center',
+                          borderWidth: 2, borderColor: Colors.white,
+                        }}>
+                          {shopLogoLoading ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="camera" size={15} color="#fff" />
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Shop info */}
+                    <View style={{ padding: Spacing.lg }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 17, fontWeight: '800', color: Colors.textPrimary }}>{selectedShop.name}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="grid-outline" size={11} color={Colors.textMuted} />
+                              <Text style={{ fontSize: 12, color: Colors.textMuted }}>{selectedShop.category}</Text>
+                            </View>
+                            {(selectedShop.location_name || selectedShop.city) && (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Ionicons name="location-outline" size={11} color={Colors.textMuted} />
+                                <Text style={{ fontSize: 12, color: Colors.textMuted }}>{selectedShop.location_name || selectedShop.city}</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <View style={{
+                          paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full,
+                          backgroundColor: selectedShop.is_open ? Colors.successBg : Colors.backgroundAlt,
+                        }}>
+                          <Text style={{
+                            fontSize: 10, fontWeight: '800',
+                            color: selectedShop.is_open ? Colors.success : Colors.textMuted,
+                          }}>
+                            {selectedShop.is_open ? '● OPEN' : '● CLOSED'}
+                          </Text>
+                        </View>
+                      </View>
+                      {selectedShop.address && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                          <Ionicons name="map-outline" size={11} color={Colors.textMuted} />
+                          <Text style={{ fontSize: 12, color: Colors.textSecondary }}>{selectedShop.address}</Text>
+                        </View>
+                      )}
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                        {selectedShop.delivery_radius && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="bicycle-outline" size={12} color={Colors.textMuted} />
+                            <Text style={{ fontSize: 11, color: Colors.textMuted }}>{selectedShop.delivery_radius} km delivery</Text>
+                          </View>
+                        )}
+                        {selectedShop.upi_id && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="phone-portrait-outline" size={12} color={Colors.success} />
+                            <Text style={{ fontSize: 11, color: Colors.success }}>UPI enabled</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {analytics && (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.lg }}>
                     <StatCard label="Total Orders" value={String(analytics.total_orders || 0)} icon="📦" />
