@@ -2,6 +2,7 @@
 // Shop owner portal — Analytics, Inventory, Orders, Billing
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package, ShoppingBag, TrendingUp, DollarSign, Plus, Search,
@@ -710,6 +711,35 @@ function BillingPanel({ shopId }) {
   const upiTimerRef = useRef(null);
   const upiPollRef = useRef(null);
 
+  // Quick-add product from billing
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddPrice, setQuickAddPrice] = useState('');
+  const [quickAddUnit, setQuickAddUnit] = useState('pcs');
+  const [quickAddStock, setQuickAddStock] = useState('50');
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+
+  const handleQuickAddProduct = async () => {
+    if (!quickAddName || !quickAddPrice) return;
+    setQuickAddSaving(true);
+    try {
+      const p = parseFloat(quickAddPrice);
+      await createProduct(shopId, {
+        name: quickAddName, price: p, mrp: p,
+        unit: quickAddUnit, stock: parseInt(quickAddStock) || 50,
+        category: 'Grocery',
+      });
+      setShowQuickAdd(false);
+      setSearch(quickAddName);
+      setQuickAddPrice(''); setQuickAddUnit('pcs'); setQuickAddStock('50');
+      // Reload products
+      const res = await listProducts(shopId, false);
+      setProducts(res.data || []);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to add product');
+    } finally { setQuickAddSaving(false); }
+  };
+
   const cleanupUpiTimers = () => {
     if (upiTimerRef.current) { clearInterval(upiTimerRef.current); upiTimerRef.current = null; }
     if (upiPollRef.current) { clearInterval(upiPollRef.current); upiPollRef.current = null; }
@@ -979,7 +1009,56 @@ function BillingPanel({ shopId }) {
               </button>
             );
           })}
-          {filtered.length === 0 && <p className="col-span-full text-center text-[#1A1A1A]/30 py-10 italic">No products found</p>}
+          {filtered.length === 0 && search.trim() && (
+            <div className="col-span-full">
+              {!showQuickAdd ? (
+                <div className="text-center py-10">
+                  <Package size={32} className="mx-auto text-[#1A1A1A]/15 mb-3" />
+                  <p className="text-sm text-[#1A1A1A]/40 mb-4">No products found for &ldquo;{search}&rdquo;</p>
+                  <button
+                    onClick={() => { setQuickAddName(search.trim()); setShowQuickAdd(true); }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#5A5A40] text-white rounded-xl text-sm font-bold hover:bg-[#4A4A30] transition-all shadow-md"
+                  >
+                    <Plus size={16} /> Add &ldquo;{search}&rdquo; as New Product
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white border-2 border-[#5A5A40]/30 rounded-2xl p-5 max-w-md mx-auto">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-[#5A5A40] rounded-lg flex items-center justify-center">
+                      <Plus size={14} className="text-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm">Quick Add Product</h4>
+                      <p className="text-[10px] text-[#1A1A1A]/40">Fill in details and add to inventory</p>
+                    </div>
+                    <button onClick={() => setShowQuickAdd(false)} className="ml-auto w-7 h-7 flex items-center justify-center hover:bg-[#F5F5F0] rounded-lg">
+                      <X size={14} className="text-[#1A1A1A]/40" />
+                    </button>
+                  </div>
+                  <div className="space-y-2.5">
+                    <input value={quickAddName} onChange={e => setQuickAddName(e.target.value)} autoFocus
+                      className="w-full px-3.5 py-2.5 bg-[#F5F5F0] rounded-xl text-sm font-medium outline-none focus:ring-2 ring-[#5A5A40]/20" placeholder="Product name" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input value={quickAddPrice} onChange={e => setQuickAddPrice(e.target.value)} type="number" step="0.01"
+                        className="w-full px-3.5 py-2.5 bg-[#F5F5F0] rounded-xl text-sm font-medium outline-none focus:ring-2 ring-[#5A5A40]/20" placeholder="Price ₹" />
+                      <select value={quickAddUnit} onChange={e => setQuickAddUnit(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-[#F5F5F0] rounded-xl text-sm font-medium outline-none focus:ring-2 ring-[#5A5A40]/20">
+                        {['pcs', 'kg', 'g', 'L', 'ml', 'pack', 'dozen', 'bottle'].map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                      <input value={quickAddStock} onChange={e => setQuickAddStock(e.target.value)} type="number"
+                        className="w-full px-3.5 py-2.5 bg-[#F5F5F0] rounded-xl text-sm font-medium outline-none focus:ring-2 ring-[#5A5A40]/20" placeholder="Stock" />
+                    </div>
+                  </div>
+                  <button onClick={handleQuickAddProduct} disabled={quickAddSaving || !quickAddName || !quickAddPrice}
+                    className="w-full mt-4 bg-[#5A5A40] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#4A4A30] disabled:opacity-40 transition-all text-sm">
+                    {quickAddSaving ? <Loader2 size={14} className="animate-spin" /> : <><Plus size={14} /> Add &amp; Continue Billing</>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {filtered.length === 0 && !search.trim() && <p className="col-span-full text-center text-[#1A1A1A]/30 py-10 italic">No products yet</p>}
         </div>
       </div>
 
@@ -1745,6 +1824,7 @@ function OrdersPanel({ shopId }) {
       )}
 
       {invoiceOrder && <InvoiceModal order={invoiceOrder} shopView onClose={() => setInvoiceOrder(null)} />}
+
     </div>
   );
 }

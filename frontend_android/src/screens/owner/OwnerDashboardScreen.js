@@ -318,11 +318,15 @@ export default function OwnerDashboardScreen() {
       } else {
         await createProduct(selectedShop.id, data);
       }
+      const wasNewFromBilling = !editingProduct && activeTab === 'Billing';
       setShowProductModal(false);
       setEditingProduct(null);
       setProdImageUri(null);
       setProdForm({ name: '', price: '', mrp: '', unit: 'kg', category: 'Grocery', stock: '', description: '', low_stock_threshold: '' });
       loadProducts();
+      if (wasNewFromBilling) {
+        Alert.alert('Product Added', `"${data.name}" is now available. Search for it in billing to add to the bill.`);
+      }
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to save product');
     } finally { setProdSaving(false); }
@@ -1178,9 +1182,90 @@ export default function OwnerDashboardScreen() {
                           </ScrollView>
                         </View>
                       )}
-                      {item.showSearch && filteredProds.length === 0 && (
-                        <View style={{ paddingVertical: 12, alignItems: 'center', backgroundColor: Colors.white, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border, marginTop: 4 }}>
-                          <Text style={{ fontSize: 12, color: Colors.textMuted }}>No products found</Text>
+                      {item.showSearch && filteredProds.length === 0 && item.searchText?.trim().length > 0 && (
+                        <View style={{
+                          backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+                          borderWidth: 1.5, borderColor: Colors.primary + '40', marginTop: 4,
+                          padding: Spacing.md,
+                        }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                            <View style={{
+                              width: 28, height: 28, borderRadius: BorderRadius.md,
+                              backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
+                            }}>
+                              <Ionicons name="add" size={14} color="#fff" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }}>Quick Add Product</Text>
+                              <Text style={{ fontSize: 10, color: Colors.textMuted }}>"{item.searchText}" not found — add it now</Text>
+                            </View>
+                          </View>
+                          <TextInput
+                            style={[inputStyle, { marginBottom: 6 }]}
+                            placeholder="Product name"
+                            placeholderTextColor={Colors.textLight}
+                            value={item._quickName ?? item.searchText.trim()}
+                            onChangeText={v => {
+                              const rows = [...walkinItems];
+                              rows[idx] = { ...rows[idx], _quickName: v };
+                              setWalkinItems(rows);
+                            }}
+                          />
+                          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
+                            <TextInput
+                              style={[inputStyle, { flex: 1, marginBottom: 0 }]}
+                              placeholder="Price ₹"
+                              placeholderTextColor={Colors.textLight}
+                              keyboardType="numeric"
+                              value={item._quickPrice ?? ''}
+                              onChangeText={v => {
+                                const rows = [...walkinItems];
+                                rows[idx] = { ...rows[idx], _quickPrice: v };
+                                setWalkinItems(rows);
+                              }}
+                            />
+                            <TextInput
+                              style={[inputStyle, { flex: 1, marginBottom: 0 }]}
+                              placeholder="Unit (kg, pcs…)"
+                              placeholderTextColor={Colors.textLight}
+                              value={item._quickUnit ?? 'pcs'}
+                              onChangeText={v => {
+                                const rows = [...walkinItems];
+                                rows[idx] = { ...rows[idx], _quickUnit: v };
+                                setWalkinItems(rows);
+                              }}
+                            />
+                          </View>
+                          <TouchableOpacity
+                            onPress={async () => {
+                              const name = (item._quickName ?? item.searchText).trim();
+                              const price = parseFloat(item._quickPrice || '0');
+                              if (!name || !price) { Alert.alert('Error', 'Name and price are required'); return; }
+                              try {
+                                await createProduct(selectedShop.id, {
+                                  name, price, mrp: price, unit: (item._quickUnit || 'pcs').trim(),
+                                  stock: 50, category: 'Grocery',
+                                });
+                                await loadProducts();
+                                const rows = [...walkinItems];
+                                rows[idx] = { ...rows[idx], searchText: name, showSearch: true, _quickName: undefined, _quickPrice: undefined, _quickUnit: undefined };
+                                setWalkinItems(rows);
+                                Alert.alert('Product Added', `"${name}" added! Select it from the list below.`);
+                              } catch (err) {
+                                Alert.alert('Error', err.response?.data?.detail || 'Failed to add product');
+                              }
+                            }}
+                            disabled={!(item._quickPrice || '').trim()}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                              backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+                              paddingVertical: 11,
+                              opacity: (item._quickPrice || '').trim() ? 1 : 0.4,
+                            }}
+                          >
+                            <Ionicons name="add-circle" size={16} color="#fff" />
+                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Add & Continue Billing</Text>
+                          </TouchableOpacity>
                         </View>
                       )}
                     </View>
