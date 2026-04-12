@@ -1404,7 +1404,7 @@ function AnalyticsPanel({ analytics, shopName, shopId }) {
     if (!lowStock.length) return;
     setInsightLoading(true);
     try {
-      const res = await getLowStockInsight(shopName || 'your shop', lowStock.map(i => i.name));
+      const res = await getLowStockInsight(shopId, shopName || 'your shop', lowStock.map(i => i.name));
       setStockInsight(res.data.insight || '');
     } catch { /* silent */ }
     finally { setInsightLoading(false); }

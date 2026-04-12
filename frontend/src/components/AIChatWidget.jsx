@@ -155,6 +155,15 @@ function MessageBubble({ msg }) {
       >
         {isUser ? msg.content : <div className="ai-msg">{renderMarkdown(msg.content)}</div>}
       </div>
+      {!isUser && msg.toolsUsed?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1 ml-1">
+          {msg.toolsUsed.map((tool, i) => (
+            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#4A7C59]/10 rounded text-[8px] font-bold text-[#4A7C59] uppercase tracking-wide">
+              ⚡ {tool.replace(/_/g, ' ')}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -202,7 +211,9 @@ export default function AIChatWidget() {
       const history = next.slice(-10, -1).map(m => ({ role: m.role, content: m.content }));
       const res = await aiChat(text, null, callerRole, history);
       const reply = res.data?.reply || 'Sorry, I couldn\'t get a response.';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      const toolsUsed = res.data?.tools_used || [];
+      const sources = res.data?.sources || [];
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, toolsUsed, sources }]);
     } catch {
       setMessages(prev => [
         ...prev,

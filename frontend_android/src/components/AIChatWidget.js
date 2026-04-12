@@ -36,7 +36,9 @@ export default function AIChatWidget() {
       const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
       const res = await aiChat(text, null, currentUser?.role || 'customer', history);
       const reply = res.data?.reply || res.data?.message || 'No response';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }]);
+      const toolsUsed = res.data?.tools_used || [];
+      const sources = res.data?.sources || [];
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now(), toolsUsed, sources }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.', ts: Date.now(), error: true }]);
     } finally { setLoading(false); }
@@ -105,7 +107,7 @@ export default function AIChatWidget() {
                   <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.textPrimary }}>AI Assistant</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success }} />
-                    <Text style={{ fontSize: 11, color: Colors.textMuted }}>Powered by Gemini</Text>
+                    <Text style={{ fontSize: 11, color: Colors.textMuted }}>AI-powered</Text>
                   </View>
                 </View>
               </View>
@@ -205,6 +207,23 @@ export default function AIChatWidget() {
                       {item.content}
                     </Text>
                   </View>
+                  {/* Tool usage badges */}
+                  {item.toolsUsed && item.toolsUsed.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                      {item.toolsUsed.map((tool, ti) => (
+                        <View key={ti} style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 3,
+                          backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.xs,
+                          paddingHorizontal: 6, paddingVertical: 2,
+                        }}>
+                          <Ionicons name="flash" size={8} color={Colors.primary} />
+                          <Text style={{ fontSize: 8, fontWeight: '700', color: Colors.primary }}>
+                            {tool.replace(/_/g, ' ')}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                   {item.ts && (
                     <Text style={{
                       fontSize: 9, color: Colors.textLight, marginTop: 3,

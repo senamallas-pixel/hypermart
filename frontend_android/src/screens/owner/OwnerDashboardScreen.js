@@ -92,6 +92,12 @@ export default function OwnerDashboardScreen() {
   // Shop logo upload state
   const [shopLogoLoading, setShopLogoLoading] = useState(false);
 
+  // AI insights state
+  const [lowStockInsight, setLowStockInsight] = useState('');
+  const [lowStockLoading, setLowStockLoading] = useState(false);
+  const [forecastInsight, setForecastInsight] = useState(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+
   // Settings / shop form state
   const [shopSettingsForm, setShopSettingsForm] = useState({
     name: '', address: '', location_name: '', pincode: '', city: '',
@@ -704,6 +710,56 @@ export default function OwnerDashboardScreen() {
                     <StatCard label="Revenue" value={`₹${analytics.total_revenue?.toFixed(0) || 0}`} icon="💰" />
                     <StatCard label="Products" value={String(analytics.total_products || 0)} icon="🛒" />
                     <StatCard label="Low Stock" value={String(analytics.low_stock_count || 0)} icon="⚠️" />
+                  </View>
+                )}
+
+                {/* AI Low Stock Insight */}
+                {aiAvailable && selectedShop && (analytics?.low_stock_count > 0 || lowStockInsight) && (
+                  <View style={{
+                    backgroundColor: Colors.white, borderRadius: BorderRadius.xl,
+                    padding: Spacing.lg, marginBottom: Spacing.lg,
+                    borderLeftWidth: 3, borderLeftColor: Colors.warning, ...Shadow.sm,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="sparkles" size={16} color={Colors.warning} />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }}>AI Restock Advice</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          setLowStockLoading(true);
+                          try {
+                            const res = await getLowStockInsight(selectedShop.id, selectedShop.name);
+                            setLowStockInsight(res.data?.insight || 'No advice available.');
+                          } catch { setLowStockInsight('Could not fetch insight.'); }
+                          finally { setLowStockLoading(false); }
+                        }}
+                        disabled={lowStockLoading}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                          backgroundColor: Colors.warningBg, borderRadius: BorderRadius.md,
+                          paddingHorizontal: 10, paddingVertical: 5,
+                        }}
+                      >
+                        {lowStockLoading ? (
+                          <ActivityIndicator size="small" color={Colors.warningDark} />
+                        ) : (
+                          <>
+                            <Ionicons name="refresh" size={12} color={Colors.warningDark} />
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.warningDark }}>
+                              {lowStockInsight ? 'Refresh' : 'Get Advice'}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                    {lowStockInsight ? (
+                      <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20 }}>{lowStockInsight}</Text>
+                    ) : (
+                      <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: 'italic' }}>
+                        Tap "Get Advice" for AI-powered restocking recommendations
+                      </Text>
+                    )}
                   </View>
                 )}
                 {shops.length > 1 && (
@@ -1580,6 +1636,76 @@ export default function OwnerDashboardScreen() {
         {/* ─── Reports Tab ─── */}
         {activeTab === 'Reports' && selectedShop && (
           <View>
+            {/* AI Sales Forecast */}
+            {aiAvailable && (
+              <View style={{
+                backgroundColor: Colors.white, borderRadius: BorderRadius.xl,
+                padding: Spacing.lg, marginBottom: Spacing.lg,
+                borderLeftWidth: 3, borderLeftColor: Colors.primary, ...Shadow.sm,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Ionicons name="sparkles" size={16} color={Colors.primary} />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.textPrimary }}>AI Sales Forecast</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      setForecastLoading(true);
+                      try {
+                        const res = await aiSalesForecast(selectedShop.id);
+                        setForecastInsight(res.data);
+                      } catch { setForecastInsight({ insight: 'Could not generate forecast.' }); }
+                      finally { setForecastLoading(false); }
+                    }}
+                    disabled={forecastLoading}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                      backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.md,
+                      paddingHorizontal: 10, paddingVertical: 5,
+                    }}
+                  >
+                    {forecastLoading ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
+                      <>
+                        <Ionicons name="analytics-outline" size={12} color={Colors.primary} />
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary }}>
+                          {forecastInsight ? 'Refresh' : 'Generate'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                {forecastInsight?.insight ? (
+                  <View>
+                    <Text style={{ fontSize: 13, color: Colors.textSecondary, lineHeight: 20, marginBottom: 10 }}>
+                      {forecastInsight.insight}
+                    </Text>
+                    {(forecastInsight.avg_daily_revenue > 0 || forecastInsight.total_orders > 0) && (
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1, backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.md, padding: 10, alignItems: 'center' }}>
+                          <Text style={{ fontSize: 10, color: Colors.textMuted, fontWeight: '600' }}>AVG DAILY</Text>
+                          <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>₹{forecastInsight.avg_daily_revenue?.toFixed(0)}</Text>
+                        </View>
+                        <View style={{ flex: 1, backgroundColor: Colors.successBg, borderRadius: BorderRadius.md, padding: 10, alignItems: 'center' }}>
+                          <Text style={{ fontSize: 10, color: Colors.textMuted, fontWeight: '600' }}>TOTAL REV</Text>
+                          <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.success }}>₹{forecastInsight.total_revenue?.toFixed(0)}</Text>
+                        </View>
+                        <View style={{ flex: 1, backgroundColor: Colors.infoBg, borderRadius: BorderRadius.md, padding: 10, alignItems: 'center' }}>
+                          <Text style={{ fontSize: 10, color: Colors.textMuted, fontWeight: '600' }}>ORDERS</Text>
+                          <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.info }}>{forecastInsight.total_orders}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: 12, color: Colors.textMuted, fontStyle: 'italic' }}>
+                    Tap "Generate" for AI-powered sales forecast based on your real order data
+                  </Text>
+                )}
+              </View>
+            )}
+
             <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: Spacing.md }}>Sales Reports</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
               <TextInput
