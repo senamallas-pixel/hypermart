@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { getMyOrders, cancelOrder } from '../../api/client';
 import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing, Shadow } from '../../constants/theme';
+import InvoiceModal from '../../components/InvoiceModal';
 
 const STATUS_CONFIG = {
   pending:          { bg: '#FEF3C7', text: '#D97706', icon: 'time-outline',          label: 'Pending' },
@@ -36,6 +37,7 @@ export default function OrderHistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -248,21 +250,34 @@ export default function OrderHistoryScreen() {
               </View>
             </View>
 
-            {canCancel && (
-              <View style={{ paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg }}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg }}>
+              {/* Invoice button */}
+              <TouchableOpacity
+                onPress={() => setInvoiceOrder(order)}
+                style={{
+                  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  backgroundColor: Colors.primaryBg, borderRadius: BorderRadius.md,
+                  paddingVertical: 11, borderWidth: 1, borderColor: Colors.primary + '30',
+                }}
+              >
+                <Ionicons name="receipt-outline" size={15} color={Colors.primary} />
+                <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 13 }}>Invoice</Text>
+              </TouchableOpacity>
+
+              {canCancel && (
                 <TouchableOpacity
                   onPress={() => handleCancel(order.id)}
                   style={{
-                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
                     backgroundColor: Colors.dangerBg, borderRadius: BorderRadius.md,
                     paddingVertical: 11, borderWidth: 1, borderColor: Colors.danger + '40',
                   }}
                 >
                   <Ionicons name="close-circle-outline" size={16} color={Colors.danger} />
-                  <Text style={{ color: Colors.danger, fontWeight: '700', fontSize: 13 }}>Cancel Order</Text>
+                  <Text style={{ color: Colors.danger, fontWeight: '700', fontSize: 13 }}>Cancel</Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              )}
+            </View>
           </View>
         )}
       </TouchableOpacity>
@@ -354,6 +369,11 @@ export default function OrderHistoryScreen() {
             </Text>
           </View>
         }
+      />
+      <InvoiceModal
+        order={invoiceOrder}
+        visible={!!invoiceOrder}
+        onClose={() => setInvoiceOrder(null)}
       />
     </SafeAreaView>
   );

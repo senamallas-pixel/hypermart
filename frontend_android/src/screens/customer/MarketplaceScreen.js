@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { listShops } from '../../api/client';
+import { listShops, searchProducts } from '../../api/client';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../hooks/useTranslation';
 import { Colors, BorderRadius, Spacing, Shadow } from '../../constants/theme';
@@ -31,6 +31,25 @@ export default function MarketplaceScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+
+  // Global product search state
+  const [productResults, setProductResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Debounced product search
+  useEffect(() => {
+    if (!search || search.length < 2) { setProductResults([]); return; }
+    setSearchLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await searchProducts(search.trim(), { size: 8 });
+        setProductResults(res.data?.items || []);
+      } catch { setProductResults([]); }
+      finally { setSearchLoading(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const loadShops = useCallback(async () => {
     try {
@@ -196,23 +215,102 @@ export default function MarketplaceScreen({ navigation }) {
         </View>
 
         {/* Search */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center', gap: 8,
-          backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: BorderRadius.lg,
-          paddingHorizontal: 12, paddingVertical: 2,
-        }}>
-          <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.6)" />
-          <TextInput
-            style={{ flex: 1, fontSize: 14, color: '#fff', paddingVertical: 10 }}
-            placeholder="Search shops or products…"
-            placeholderTextColor="rgba(255,255,255,0.4)"
-            value={search}
-            onChangeText={setSearch}
-          />
-          {!!search && (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.5)" />
-            </TouchableOpacity>
+        <View style={{ zIndex: 100 }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: BorderRadius.lg,
+            paddingHorizontal: 12, paddingVertical: 2,
+          }}>
+            <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.6)" />
+            <TextInput
+              style={{ flex: 1, fontSize: 14, color: '#fff', paddingVertical: 10 }}
+              placeholder="Search products, shops…"
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={search}
+              onChangeText={setSearch}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+            />
+            {searchLoading && <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />}
+            {!!search && !searchLoading && (
+              <TouchableOpacity onPress={() => { setSearch(''); setProductResults([]); }}>
+                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.5)" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Product search results dropdown */}
+          {searchFocused && search.length >= 2 && (productResults.length > 0 || searchLoading) && (
+            <View style={{
+              position: 'absolute', top: '100%', left: 0, right: 0,
+              backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+              marginTop: 4, maxHeight: 300, ...Shadow.lg, zIndex: 200,
+              borderWidth: 1, borderColor: Colors.border,
+            }}>
+              <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {searchLoading && productResults.length === 0 && (
+                  <View style={{ padding: Spacing.lg, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 6 }}>Searching…</Text>
+                  </View>
+                )}
+                {productResults.map(p => (
+                  <TouchableOpacity
+                    key={p.id}
+                    onPress={() => {
+                      setSearch('');
+                      setProductResults([]);
+                      setSearchFocused(false);
+                      const shop = shops.find(s => s.id === p.shop_id);
+                      if (shop) navigation.navigate('ShopDetail', { shop });
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 10,
+                      paddingHorizontal: Spacing.md, paddingVertical: 10,
+                      borderBottomWidth: 1, borderBottomColor: Colors.border,
+                    }}
+                  >
+                    <View style={{
+                      width: 40, height: 40, borderRadius: BorderRadius.md,
+                      backgroundColor: Colors.backgroundAlt, justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+                    }}>
+                      {p.image ? (
+                        <Image source={{ uri: fixImageUrl(p.image) }} style={{ width: 40, height: 40 }} resizeMode="cover" />
+                      ) : (
+                        <Ionicons name="cube-outline" size={16} color={Colors.textMuted} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textPrimary }} numberOfLines={1}>{p.name}</Text>
+                      <Text style={{ fontSize: 10, color: Colors.textMuted }} numberOfLines={1}>
+                        {p.shop_name} · {p.category}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.primary }}>₹{p.price}</Text>
+                      {p.mrp > p.price && (
+                        <Text style={{ fontSize: 10, color: Colors.textMuted, textDecorationLine: 'line-through' }}>₹{p.mrp}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* No results */}
+          {searchFocused && search.length >= 2 && !searchLoading && productResults.length === 0 && (
+            <View style={{
+              position: 'absolute', top: '100%', left: 0, right: 0,
+              backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+              marginTop: 4, padding: Spacing.lg, alignItems: 'center',
+              ...Shadow.lg, zIndex: 200, borderWidth: 1, borderColor: Colors.border,
+            }}>
+              <Ionicons name="search-outline" size={22} color={Colors.border} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.textMuted, marginTop: 6 }}>
+                No products found for "{search}"
+              </Text>
+            </View>
           )}
         </View>
 
