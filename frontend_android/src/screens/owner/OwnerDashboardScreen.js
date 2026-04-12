@@ -4,6 +4,7 @@ import {
   Image, ActivityIndicator, Alert, RefreshControl, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {
   getMyShops, createShop, updateShop, listProducts, createProduct, updateProduct,
@@ -18,7 +19,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../hooks/useTranslation';
 import StatCard from '../../components/StatCard';
-import { Colors, BorderRadius, Spacing } from '../../constants/theme';
+import { Colors, BorderRadius, Spacing, Shadow } from '../../constants/theme';
 import { API_URL, CATEGORIES } from '../../constants/config';
 
 const fixImageUrl = (url) => {
@@ -27,7 +28,14 @@ const fixImageUrl = (url) => {
   return `${API_URL}${url}`;
 };
 
-const TABS = ['Overview', 'Inventory', 'Orders', 'Billing', 'Reports', 'Settings'];
+const TABS = [
+  { key: 'Overview',   label: 'Overview',   icon: 'grid-outline' },
+  { key: 'Inventory',  label: 'Products',   icon: 'cube-outline' },
+  { key: 'Orders',     label: 'Orders',     icon: 'receipt-outline' },
+  { key: 'Billing',    label: 'Billing',    icon: 'calculator-outline' },
+  { key: 'Reports',    label: 'Reports',    icon: 'bar-chart-outline' },
+  { key: 'Settings',   label: 'Settings',   icon: 'settings-outline' },
+];
 
 const inputStyle = {
   backgroundColor: Colors.background,
@@ -445,37 +453,62 @@ export default function OwnerDashboardScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
       {/* Header */}
       <View style={{ backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.lg }}>
-        <Text style={{ fontSize: 22, fontWeight: '700', color: '#fff' }}>
-          {t('navigation.owner')}
-        </Text>
-        {selectedShop && (
-          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
-            {selectedShop.name} {'\u2022'} {selectedShop.status}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="briefcase" size={18} color="rgba(255,255,255,0.8)" />
+          <Text style={{ fontSize: 22, fontWeight: '800', color: '#fff' }}>
+            {t('navigation.owner')}
           </Text>
+        </View>
+        {selectedShop && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 }}>
+            <Ionicons name="storefront-outline" size={12} color="rgba(255,255,255,0.5)" />
+            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' }}>
+              {selectedShop.name}
+            </Text>
+            <View style={{
+              paddingHorizontal: 7, paddingVertical: 2, borderRadius: BorderRadius.full,
+              backgroundColor: selectedShop.status === 'approved' ? Colors.success + '40' : Colors.warning + '40',
+            }}>
+              <Text style={{
+                fontSize: 9, fontWeight: '800',
+                color: selectedShop.status === 'approved' ? '#6EE7B7' : '#FCD34D',
+                textTransform: 'uppercase',
+              }}>
+                {selectedShop.status}
+              </Text>
+            </View>
+          </View>
         )}
       </View>
 
       {/* Tabs */}
       <ScrollView
         horizontal showsHorizontalScrollIndicator={false}
-        style={{ backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border }}
-        contentContainerStyle={{ paddingHorizontal: Spacing.md }}
+        style={{ backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.border, maxHeight: 60 }}
+        contentContainerStyle={{ paddingHorizontal: Spacing.sm }}
       >
         {TABS.map(tb => (
           <TouchableOpacity
-            key={tb}
-            onPress={() => setActiveTab(tb)}
+            key={tb.key}
+            onPress={() => setActiveTab(tb.key)}
             style={{
-              paddingVertical: 12, paddingHorizontal: 16,
-              borderBottomWidth: activeTab === tb ? 2 : 0,
+              paddingVertical: 8, paddingHorizontal: 14,
+              alignItems: 'center', justifyContent: 'center', gap: 3,
+              borderBottomWidth: activeTab === tb.key ? 2 : 0,
               borderBottomColor: Colors.primary,
+              minWidth: 72,
             }}
           >
+            <Ionicons
+              name={tb.icon}
+              size={16}
+              color={activeTab === tb.key ? Colors.primary : Colors.textMuted}
+            />
             <Text style={{
-              fontSize: 13, fontWeight: '600',
-              color: activeTab === tb ? Colors.primary : Colors.textMuted,
+              fontSize: 10, fontWeight: '700',
+              color: activeTab === tb.key ? Colors.primary : Colors.textMuted,
             }}>
-              {tb}
+              {tb.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -495,43 +528,82 @@ export default function OwnerDashboardScreen() {
         {activeTab === 'Overview' && (
           <View>
             {shops.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                <Text style={{ fontSize: 48, marginBottom: 12 }}>{'\uD83C\uDFEA'}</Text>
-                <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>No shop registered yet</Text>
+              <View style={{ alignItems: 'center', paddingTop: 60 }}>
+                <View style={{
+                  width: 80, height: 80, borderRadius: 40,
+                  backgroundColor: Colors.primaryBg,
+                  justifyContent: 'center', alignItems: 'center', marginBottom: Spacing.lg,
+                }}>
+                  <Ionicons name="storefront-outline" size={36} color={Colors.primary} />
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 }}>
+                  No shop registered yet
+                </Text>
+                <Text style={{ fontSize: 13, color: Colors.textMuted, marginBottom: Spacing.xl, textAlign: 'center' }}>
+                  Register your shop to start selling
+                </Text>
                 <TouchableOpacity
                   onPress={() => setShowShopModal(true)}
-                  style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.lg, paddingHorizontal: 24, paddingVertical: 12 }}
+                  style={{
+                    backgroundColor: Colors.primary, borderRadius: BorderRadius.lg,
+                    paddingHorizontal: 28, paddingVertical: 13,
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    ...Shadow.md,
+                  }}
                 >
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Register Your Shop</Text>
+                  <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Register Your Shop</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View>
                 {analytics && (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.lg }}>
-                    <StatCard label="Total Orders" value={analytics.total_orders || 0} icon="\uD83D\uDCE6" />
-                    <StatCard label="Revenue" value={`\u20B9${analytics.total_revenue?.toFixed(0) || 0}`} icon="\uD83D\uDCB0" />
-                    <StatCard label="Products" value={analytics.total_products || 0} icon="\uD83D\uDCE6" />
-                    <StatCard label="Low Stock" value={analytics.low_stock_count || 0} icon="\u26A0\uFE0F" />
+                    <StatCard label="Total Orders" value={String(analytics.total_orders || 0)} icon="📦" />
+                    <StatCard label="Revenue" value={`₹${analytics.total_revenue?.toFixed(0) || 0}`} icon="💰" />
+                    <StatCard label="Products" value={String(analytics.total_products || 0)} icon="🛒" />
+                    <StatCard label="Low Stock" value={String(analytics.low_stock_count || 0)} icon="⚠️" />
                   </View>
                 )}
                 {shops.length > 1 && (
                   <View style={{ marginBottom: Spacing.lg }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 8 }}>Your Shops</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5, marginBottom: 8 }}>
+                      YOUR SHOPS
+                    </Text>
                     {shops.map(s => (
                       <TouchableOpacity
                         key={s.id}
                         onPress={() => { setSelectedShop(s); populateSettingsForm(s); }}
                         style={{
-                          flexDirection: 'row', alignItems: 'center', gap: 10,
-                          padding: 12, borderRadius: BorderRadius.md, marginBottom: 6,
-                          backgroundColor: selectedShop?.id === s.id ? 'rgba(90,90,64,0.08)' : Colors.white,
-                          borderWidth: 1,
+                          flexDirection: 'row', alignItems: 'center', gap: 12,
+                          padding: 14, borderRadius: BorderRadius.lg, marginBottom: 6,
+                          backgroundColor: selectedShop?.id === s.id ? Colors.primaryBg : Colors.white,
+                          borderWidth: 1.5,
                           borderColor: selectedShop?.id === s.id ? Colors.primary : Colors.border,
+                          ...Shadow.sm,
                         }}
                       >
-                        <Text style={{ fontSize: 14, fontWeight: '600', flex: 1 }}>{s.name}</Text>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>{s.status}</Text>
+                        <View style={{
+                          width: 36, height: 36, borderRadius: 18,
+                          backgroundColor: selectedShop?.id === s.id ? Colors.primary : Colors.backgroundAlt,
+                          justifyContent: 'center', alignItems: 'center',
+                        }}>
+                          <Ionicons name="storefront-outline" size={16} color={selectedShop?.id === s.id ? '#fff' : Colors.textMuted} />
+                        </View>
+                        <Text style={{ fontSize: 14, fontWeight: '700', flex: 1, color: Colors.textPrimary }}>{s.name}</Text>
+                        <View style={{
+                          paddingHorizontal: 7, paddingVertical: 3,
+                          borderRadius: BorderRadius.full,
+                          backgroundColor: s.status === 'approved' ? Colors.successBg : Colors.warningBg,
+                        }}>
+                          <Text style={{
+                            fontSize: 9, fontWeight: '800', textTransform: 'uppercase',
+                            color: s.status === 'approved' ? Colors.success : Colors.warningDark,
+                          }}>{s.status}</Text>
+                        </View>
+                        {selectedShop?.id === s.id && (
+                          <Ionicons name="checkmark-circle" size={18} color={Colors.primary} />
+                        )}
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -540,11 +612,13 @@ export default function OwnerDashboardScreen() {
                   onPress={() => setShowShopModal(true)}
                   style={{
                     backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
-                    padding: 14, alignItems: 'center', borderWidth: 1, borderColor: Colors.border,
+                    padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.border,
                     borderStyle: 'dashed',
+                    flexDirection: 'row', justifyContent: 'center', gap: 8,
                   }}
                 >
-                  <Text style={{ color: Colors.primary, fontWeight: '600' }}>+ Register Another Shop</Text>
+                  <Ionicons name="add" size={16} color={Colors.primary} />
+                  <Text style={{ color: Colors.primary, fontWeight: '700' }}>Register Another Shop</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -555,7 +629,9 @@ export default function OwnerDashboardScreen() {
         {activeTab === 'Inventory' && selectedShop && (
           <View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md }}>
-              <Text style={{ fontSize: 16, fontWeight: '600' }}>Products ({products.length})</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.textPrimary }}>
+                Products <Text style={{ color: Colors.textMuted, fontWeight: '500' }}>({products.length})</Text>
+              </Text>
               <TouchableOpacity
                 onPress={() => {
                   setEditingProduct(null);
@@ -563,61 +639,95 @@ export default function OwnerDashboardScreen() {
                   setProdForm({ name: '', price: '', mrp: '', unit: 'kg', category: 'Grocery', stock: '', description: '', low_stock_threshold: '' });
                   setShowProductModal(true);
                 }}
-                style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: 16, paddingVertical: 8 }}
+                style={{
+                  backgroundColor: Colors.primary, borderRadius: BorderRadius.md,
+                  paddingHorizontal: 14, paddingVertical: 8,
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                }}
               >
-                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>+ Add Product</Text>
+                <Ionicons name="add" size={14} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Add Product</Text>
               </TouchableOpacity>
             </View>
             {prodLoading ? (
               <ActivityIndicator color={Colors.primary} style={{ marginTop: 20 }} />
+            ) : products.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="cube-outline" size={48} color={Colors.border} />
+                <Text style={{ fontSize: 14, color: Colors.textMuted, marginTop: 12 }}>No products yet</Text>
+              </View>
             ) : (
-              products.map(p => (
-                <View key={p.id} style={{
-                  backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
-                  padding: Spacing.md, marginBottom: Spacing.sm,
-                  flexDirection: 'row', gap: Spacing.md,
-                }}>
-                  <View style={{
-                    width: 56, height: 56, borderRadius: BorderRadius.md,
-                    backgroundColor: Colors.background, justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+              products.map(p => {
+                const isLowStock = p.stock != null && p.low_stock_threshold != null && p.stock <= p.low_stock_threshold;
+                const isOutOfStock = p.stock === 0;
+                return (
+                  <View key={p.id} style={{
+                    backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+                    marginBottom: Spacing.sm, flexDirection: 'row', overflow: 'hidden',
+                    ...Shadow.sm,
                   }}>
-                    {p.image ? (
-                      <Image source={{ uri: fixImageUrl(p.image) }} style={{ width: 56, height: 56 }} resizeMode="cover" />
-                    ) : (
-                      <Text style={{ fontSize: 22 }}>{'\uD83D\uDCE6'}</Text>
+                    {/* Colored left stripe for low stock */}
+                    {(isLowStock || isOutOfStock) && (
+                      <View style={{ width: 3, backgroundColor: isOutOfStock ? Colors.danger : Colors.warning }} />
                     )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600' }}>{p.name}</Text>
-                    <Text style={{ fontSize: 12, color: Colors.textMuted }}>
-                      {'\u20B9'}{p.price} {'\u2022'} Stock: {p.stock ?? '-'}
-                      {p.low_stock_threshold ? ` (alert: ${p.low_stock_threshold})` : ''}
-                    </Text>
-                    {p.stock != null && p.low_stock_threshold != null && p.stock <= p.low_stock_threshold && (
-                      <Text style={{ fontSize: 11, color: Colors.danger }}>Low stock!</Text>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                    <TouchableOpacity onPress={() => {
-                      setEditingProduct(p);
-                      setProdImageUri(null);
-                      setProdForm({
-                        name: p.name, price: String(p.price), mrp: p.mrp ? String(p.mrp) : '',
-                        unit: p.unit || 'kg', category: p.category || 'Grocery',
-                        stock: p.stock != null ? String(p.stock) : '',
-                        description: p.description || '',
-                        low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : '',
-                      });
-                      setShowProductModal(true);
+                    <View style={{
+                      width: 64, height: 64, margin: Spacing.md,
+                      borderRadius: BorderRadius.md, backgroundColor: Colors.backgroundAlt,
+                      justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
                     }}>
-                      <Text style={{ color: Colors.primary, fontSize: 12, fontWeight: '600' }}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteProduct(p)}>
-                      <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '600' }}>Delete</Text>
-                    </TouchableOpacity>
+                      {p.image ? (
+                        <Image source={{ uri: fixImageUrl(p.image) }} style={{ width: 64, height: 64 }} resizeMode="cover" />
+                      ) : (
+                        <Ionicons name="cube-outline" size={24} color={Colors.textMuted} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, paddingVertical: Spacing.md, paddingRight: Spacing.md, justifyContent: 'space-between' }}>
+                      <View>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }} numberOfLines={1}>{p.name}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '800', color: Colors.primary }}>₹{p.price}</Text>
+                          {p.mrp && p.mrp > p.price && (
+                            <Text style={{ fontSize: 11, color: Colors.textMuted, textDecorationLine: 'line-through' }}>₹{p.mrp}</Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons
+                            name={isOutOfStock ? 'close-circle' : isLowStock ? 'alert-circle' : 'checkmark-circle'}
+                            size={12}
+                            color={isOutOfStock ? Colors.danger : isLowStock ? Colors.warning : Colors.success}
+                          />
+                          <Text style={{ fontSize: 11, color: isOutOfStock ? Colors.danger : isLowStock ? Colors.warning : Colors.textMuted }}>
+                            {isOutOfStock ? 'Out of stock' : isLowStock ? `Low: ${p.stock} left` : `Stock: ${p.stock ?? '—'}`}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setEditingProduct(p); setProdImageUri(null);
+                              setProdForm({
+                                name: p.name, price: String(p.price), mrp: p.mrp ? String(p.mrp) : '',
+                                unit: p.unit || 'kg', category: p.category || 'Grocery',
+                                stock: p.stock != null ? String(p.stock) : '',
+                                description: p.description || '',
+                                low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : '',
+                              });
+                              setShowProductModal(true);
+                            }}
+                            style={{ padding: 4 }}
+                          >
+                            <Ionicons name="create-outline" size={17} color={Colors.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => handleDeleteProduct(p)} style={{ padding: 4 }}>
+                            <Ionicons name="trash-outline" size={17} color={Colors.danger} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              ))
+                );
+              })
             )}
           </View>
         )}
@@ -625,23 +735,36 @@ export default function OwnerDashboardScreen() {
         {/* ─── Orders Tab ─── */}
         {activeTab === 'Orders' && selectedShop && (
           <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.md }}>
-              {['all', 'pending', 'accepted', 'ready', 'out_for_delivery', 'delivered', 'rejected'].map(f => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.md }} contentContainerStyle={{ gap: 6 }}>
+              {[
+                { key: 'all', label: 'All', icon: 'list-outline' },
+                { key: 'pending', label: 'Pending', icon: 'time-outline' },
+                { key: 'accepted', label: 'Accepted', icon: 'checkmark-outline' },
+                { key: 'ready', label: 'Ready', icon: 'bag-check-outline' },
+                { key: 'out_for_delivery', label: 'On Way', icon: 'bicycle-outline' },
+                { key: 'delivered', label: 'Done', icon: 'checkmark-done-outline' },
+                { key: 'rejected', label: 'Rejected', icon: 'close-outline' },
+              ].map(f => (
                 <TouchableOpacity
-                  key={f}
-                  onPress={() => setOrderFilter(f)}
+                  key={f.key}
+                  onPress={() => setOrderFilter(f.key)}
                   style={{
-                    paddingHorizontal: 14, paddingVertical: 6, borderRadius: BorderRadius.full,
-                    marginRight: 8, borderWidth: 1,
-                    borderColor: orderFilter === f ? Colors.primary : Colors.border,
-                    backgroundColor: orderFilter === f ? 'rgba(90,90,64,0.08)' : 'transparent',
+                    paddingHorizontal: 12, paddingVertical: 7, borderRadius: BorderRadius.full,
+                    borderWidth: 1.5,
+                    borderColor: orderFilter === f.key ? Colors.primary : Colors.border,
+                    backgroundColor: orderFilter === f.key ? Colors.primaryBg : 'transparent',
+                    flexDirection: 'row', alignItems: 'center', gap: 5,
                   }}
                 >
+                  <Ionicons name={f.icon} size={12} color={orderFilter === f.key ? Colors.primary : Colors.textMuted} />
                   <Text style={{
-                    fontSize: 12, fontWeight: '600', textTransform: 'capitalize',
-                    color: orderFilter === f ? Colors.primary : Colors.textSecondary,
+                    fontSize: 12, fontWeight: '600',
+                    color: orderFilter === f.key ? Colors.primary : Colors.textMuted,
                   }}>
-                    {f === 'all' ? 'All' : f.replace('_', ' ')}
+                    {f.label}
+                    {f.key !== 'all' && orders.filter(o => o.status === f.key).length > 0
+                      ? ` (${orders.filter(o => o.status === f.key).length})`
+                      : ''}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -649,82 +772,160 @@ export default function OwnerDashboardScreen() {
             {ordersLoading ? (
               <ActivityIndicator color={Colors.primary} style={{ marginTop: 20 }} />
             ) : filteredOrders.length === 0 ? (
-              <Text style={{ textAlign: 'center', color: Colors.textMuted, marginTop: 30 }}>No orders</Text>
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="receipt-outline" size={48} color={Colors.border} />
+                <Text style={{ fontSize: 14, color: Colors.textMuted, marginTop: 12 }}>No orders</Text>
+              </View>
             ) : (
               filteredOrders.map(order => (
                 <View key={order.id} style={{
                   backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
-                  padding: Spacing.md, marginBottom: Spacing.sm,
+                  marginBottom: Spacing.sm, overflow: 'hidden', ...Shadow.sm,
                 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700' }}>
-                      #{order.id} {order.order_type === 'walkin' ? '(Walk-in)' : ''}
-                    </Text>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.primary }}>
-                      {'\u20B9'}{order.total?.toFixed(2)}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 12, color: Colors.textSecondary, marginTop: 4 }}>
-                    {order.customer_name || 'Customer'} {'\u2022'} {(order.items || []).length} items
-                  </Text>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
-                    <Text style={{ fontSize: 11, color: Colors.textMuted }}>
-                      {new Date(order.created_at).toLocaleDateString('en-IN')}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: Colors.textMuted }}>
-                      Pay: {order.payment_method || 'cash'} {'\u2022'} {order.payment_status || 'pending'}
-                    </Text>
-                  </View>
-                  {/* Status actions */}
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm }}>
-                    {order.status === 'pending' && (
-                      <>
+                  {/* Status stripe */}
+                  <View style={{
+                    height: 3,
+                    backgroundColor: order.status === 'pending' ? Colors.warning
+                      : order.status === 'delivered' ? Colors.success
+                      : order.status === 'rejected' ? Colors.danger
+                      : Colors.info,
+                  }} />
+                  <View style={{ padding: Spacing.md }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '800', color: Colors.textPrimary }}>
+                            Order #{order.id}
+                          </Text>
+                          {order.order_type === 'walkin' && (
+                            <View style={{ paddingHorizontal: 6, paddingVertical: 2, backgroundColor: Colors.purpleBg, borderRadius: BorderRadius.xs }}>
+                              <Text style={{ fontSize: 9, fontWeight: '700', color: Colors.purple }}>WALK-IN</Text>
+                            </View>
+                          )}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                          <Ionicons name="person-outline" size={11} color={Colors.textMuted} />
+                          <Text style={{ fontSize: 12, color: Colors.textSecondary }}>
+                            {order.customer_name || 'Customer'} · {(order.items || []).length} items
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>
+                        ₹{order.total?.toFixed(2)}
+                      </Text>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="calendar-outline" size={11} color={Colors.textMuted} />
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>
+                          {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons
+                          name={order.payment_method === 'cash' ? 'cash-outline' : order.payment_method === 'upi' ? 'phone-portrait-outline' : 'card-outline'}
+                          size={11} color={Colors.textMuted}
+                        />
+                        <Text style={{ fontSize: 11, color: Colors.textMuted, textTransform: 'capitalize' }}>
+                          {order.payment_method || 'cash'}
+                        </Text>
+                      </View>
+                      <View style={{
+                        paddingHorizontal: 6, paddingVertical: 2, borderRadius: BorderRadius.xs,
+                        backgroundColor: order.payment_status === 'paid' ? Colors.successBg : Colors.warningBg,
+                      }}>
+                        <Text style={{
+                          fontSize: 9, fontWeight: '700',
+                          color: order.payment_status === 'paid' ? Colors.success : Colors.warningDark,
+                          textTransform: 'uppercase',
+                        }}>
+                          {order.payment_status || 'unpaid'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Action buttons */}
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: Spacing.sm }}>
+                      {order.status === 'pending' && (
+                        <>
+                          <TouchableOpacity
+                            onPress={() => handleOrderStatus(order.id, 'accepted')}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 4,
+                              backgroundColor: Colors.successBg, borderRadius: BorderRadius.sm,
+                              paddingHorizontal: 10, paddingVertical: 7,
+                            }}
+                          >
+                            <Ionicons name="checkmark" size={13} color={Colors.success} />
+                            <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '700' }}>Accept</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleOrderStatus(order.id, 'rejected')}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 4,
+                              backgroundColor: Colors.dangerBg, borderRadius: BorderRadius.sm,
+                              paddingHorizontal: 10, paddingVertical: 7,
+                            }}
+                          >
+                            <Ionicons name="close" size={13} color={Colors.danger} />
+                            <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '700' }}>Reject</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      {order.status === 'accepted' && (
                         <TouchableOpacity
-                          onPress={() => handleOrderStatus(order.id, 'accepted')}
-                          style={{ backgroundColor: Colors.successBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
+                          onPress={() => handleOrderStatus(order.id, 'ready')}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                            backgroundColor: Colors.infoBg, borderRadius: BorderRadius.sm,
+                            paddingHorizontal: 10, paddingVertical: 7,
+                          }}
                         >
-                          <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '600' }}>Accept</Text>
+                          <Ionicons name="bag-check-outline" size={13} color={Colors.info} />
+                          <Text style={{ color: Colors.info, fontSize: 12, fontWeight: '700' }}>Mark Ready</Text>
                         </TouchableOpacity>
+                      )}
+                      {order.status === 'ready' && (
                         <TouchableOpacity
-                          onPress={() => handleOrderStatus(order.id, 'rejected')}
-                          style={{ backgroundColor: Colors.dangerBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
+                          onPress={() => handleOrderStatus(order.id, 'out_for_delivery')}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                            backgroundColor: Colors.infoBg, borderRadius: BorderRadius.sm,
+                            paddingHorizontal: 10, paddingVertical: 7,
+                          }}
                         >
-                          <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '600' }}>Reject</Text>
+                          <Ionicons name="bicycle-outline" size={13} color={Colors.info} />
+                          <Text style={{ color: Colors.info, fontSize: 12, fontWeight: '700' }}>Out for Delivery</Text>
                         </TouchableOpacity>
-                      </>
-                    )}
-                    {order.status === 'accepted' && (
-                      <TouchableOpacity
-                        onPress={() => handleOrderStatus(order.id, 'ready')}
-                        style={{ backgroundColor: Colors.infoBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
-                      >
-                        <Text style={{ color: Colors.info, fontSize: 12, fontWeight: '600' }}>Mark Ready</Text>
-                      </TouchableOpacity>
-                    )}
-                    {order.status === 'ready' && (
-                      <TouchableOpacity
-                        onPress={() => handleOrderStatus(order.id, 'out_for_delivery')}
-                        style={{ backgroundColor: Colors.infoBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
-                      >
-                        <Text style={{ color: Colors.info, fontSize: 12, fontWeight: '600' }}>Out for Delivery</Text>
-                      </TouchableOpacity>
-                    )}
-                    {order.status === 'out_for_delivery' && (
-                      <TouchableOpacity
-                        onPress={() => handleOrderStatus(order.id, 'delivered')}
-                        style={{ backgroundColor: Colors.successBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
-                      >
-                        <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '600' }}>Mark Delivered</Text>
-                      </TouchableOpacity>
-                    )}
-                    {order.payment_status !== 'paid' && order.status !== 'rejected' && (
-                      <TouchableOpacity
-                        onPress={() => handleMarkPaymentStatus(order.id, 'paid')}
-                        style={{ backgroundColor: Colors.successBg, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
-                      >
-                        <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '600' }}>Mark Paid</Text>
-                      </TouchableOpacity>
-                    )}
+                      )}
+                      {order.status === 'out_for_delivery' && (
+                        <TouchableOpacity
+                          onPress={() => handleOrderStatus(order.id, 'delivered')}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                            backgroundColor: Colors.successBg, borderRadius: BorderRadius.sm,
+                            paddingHorizontal: 10, paddingVertical: 7,
+                          }}
+                        >
+                          <Ionicons name="checkmark-done" size={13} color={Colors.success} />
+                          <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '700' }}>Mark Delivered</Text>
+                        </TouchableOpacity>
+                      )}
+                      {order.payment_status !== 'paid' && order.status !== 'rejected' && (
+                        <TouchableOpacity
+                          onPress={() => handleMarkPaymentStatus(order.id, 'paid')}
+                          style={{
+                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                            backgroundColor: Colors.successBg, borderRadius: BorderRadius.sm,
+                            paddingHorizontal: 10, paddingVertical: 7,
+                          }}
+                        >
+                          <Ionicons name="cash-outline" size={13} color={Colors.success} />
+                          <Text style={{ color: Colors.success, fontSize: 12, fontWeight: '700' }}>Mark Paid</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </View>
               ))
@@ -765,17 +966,22 @@ export default function OwnerDashboardScreen() {
                   value={item.quantity}
                   onChangeText={v => { const rows = [...walkinItems]; rows[idx].quantity = v; setWalkinItems(rows); }}
                 />
-                <TouchableOpacity onPress={() => setWalkinItems(prev => prev.filter((_, i) => i !== idx))}>
-                  <Text style={{ color: Colors.danger, fontSize: 18, fontWeight: '700' }}>×</Text>
+                <TouchableOpacity onPress={() => setWalkinItems(prev => prev.filter((_, i) => i !== idx))} style={{ padding: 4 }}>
+                  <Ionicons name="trash-outline" size={18} color={Colors.danger} />
                 </TouchableOpacity>
               </View>
             ))}
 
             <TouchableOpacity
               onPress={() => setWalkinItems(prev => [...prev, { product_id: '', quantity: '1', name: '', price: '' }])}
-              style={{ borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed', borderRadius: BorderRadius.md, padding: 10, alignItems: 'center', marginBottom: Spacing.md }}
+              style={{
+                borderWidth: 1.5, borderColor: Colors.primary, borderStyle: 'dashed',
+                borderRadius: BorderRadius.md, padding: 10, alignItems: 'center', marginBottom: Spacing.md,
+                flexDirection: 'row', justifyContent: 'center', gap: 6,
+              }}
             >
-              <Text style={{ color: Colors.primary, fontWeight: '600' }}>+ Add Item</Text>
+              <Ionicons name="add" size={16} color={Colors.primary} />
+              <Text style={{ color: Colors.primary, fontWeight: '700' }}>Add Item</Text>
             </TouchableOpacity>
 
             {/* Payment method */}
@@ -820,26 +1026,51 @@ export default function OwnerDashboardScreen() {
             {/* Suppliers section */}
             <View style={{ marginTop: Spacing.xl }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md }}>
-                <Text style={{ fontSize: 16, fontWeight: '700' }}>Suppliers ({suppliers.length})</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.textPrimary }}>
+                  Suppliers <Text style={{ color: Colors.textMuted, fontWeight: '500' }}>({suppliers.length})</Text>
+                </Text>
                 <TouchableOpacity
                   onPress={() => { setEditingSupplier(null); setSupplierForm({ name: '', contact_name: '', phone: '', email: '' }); setShowSupplierModal(true); }}
-                  style={{ backgroundColor: Colors.primary, borderRadius: BorderRadius.md, paddingHorizontal: 12, paddingVertical: 6 }}
+                  style={{
+                    backgroundColor: Colors.primary, borderRadius: BorderRadius.sm,
+                    paddingHorizontal: 10, paddingVertical: 6,
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                  }}
                 >
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>+ Add</Text>
+                  <Ionicons name="add" size={13} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Add Supplier</Text>
                 </TouchableOpacity>
               </View>
               {suppliers.map(s => (
-                <View key={s.id} style={{ backgroundColor: Colors.white, borderRadius: BorderRadius.lg, padding: Spacing.md, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600' }}>{s.name}</Text>
-                    {s.contact_name && <Text style={{ fontSize: 12, color: Colors.textMuted }}>{s.contact_name}</Text>}
-                    {s.phone && <Text style={{ fontSize: 12, color: Colors.textMuted }}>{s.phone}</Text>}
+                <View key={s.id} style={{
+                  backgroundColor: Colors.white, borderRadius: BorderRadius.lg,
+                  padding: Spacing.md, marginBottom: 8,
+                  flexDirection: 'row', alignItems: 'center', gap: 12, ...Shadow.sm,
+                }}>
+                  <View style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    backgroundColor: Colors.infoBg, justifyContent: 'center', alignItems: 'center',
+                  }}>
+                    <Ionicons name="person-outline" size={16} color={Colors.info} />
                   </View>
-                  <TouchableOpacity onPress={() => { setEditingSupplier(s); setSupplierForm({ name: s.name, contact_name: s.contact_name || '', phone: s.phone || '', email: s.email || '' }); setShowSupplierModal(true); }} style={{ marginRight: 10 }}>
-                    <Text style={{ color: Colors.primary, fontSize: 12, fontWeight: '600' }}>Edit</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textPrimary }}>{s.name}</Text>
+                    {s.contact_name && <Text style={{ fontSize: 11, color: Colors.textMuted }}>{s.contact_name}</Text>}
+                    {s.phone && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="call-outline" size={10} color={Colors.textMuted} />
+                        <Text style={{ fontSize: 11, color: Colors.textMuted }}>{s.phone}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => { setEditingSupplier(s); setSupplierForm({ name: s.name, contact_name: s.contact_name || '', phone: s.phone || '', email: s.email || '' }); setShowSupplierModal(true); }}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="create-outline" size={17} color={Colors.primary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeleteSupplier(s)}>
-                    <Text style={{ color: Colors.danger, fontSize: 12, fontWeight: '600' }}>Delete</Text>
+                  <TouchableOpacity onPress={() => handleDeleteSupplier(s)} style={{ padding: 6 }}>
+                    <Ionicons name="trash-outline" size={17} color={Colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))}
