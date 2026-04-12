@@ -640,9 +640,10 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
 async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
     """Conversational AI with OpenAI function calling for real-time data."""
     formatting_rules = (
-        "\n\nFormatting rules: Keep answers concise (under 150 words). "
-        "Use **bold** for key terms. Use numbered lists or bullet points for multiple items. "
-        "Use short paragraphs. Never use tables or code blocks. Get straight to the answer."
+        "\n\nFormatting rules: Be VERY concise (under 80 words). "
+        "For product lists use compact format: **Name** ₹price (no stock/shop unless asked). "
+        "Use short bullet points, not numbered lists. Never repeat metadata the user didn't ask for. "
+        "Never use tables or code blocks. No filler sentences. Get straight to the answer."
     )
 
     system_prompt = {
