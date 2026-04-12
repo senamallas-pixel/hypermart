@@ -4,20 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HyperMart is a multi-vendor hyperlocal grocery marketplace. React 18 SPA frontend communicates via REST/JSON with a Python FastAPI backend (primary) or a Node.js Express backend (alternative drop-in). SQLite is the database for both backends. Google Gemini 2.0 Flash powers AI features (product suggestions, sales forecasts, chat).
+HyperMart is a multi-vendor hyperlocal grocery marketplace with **Web** (React SPA) and **Android** (Expo/React Native) frontends communicating via REST/JSON with a Python FastAPI backend. OpenAI GPT-4o-mini powers AI features via function calling with 10 real-time database tools.
 
-Three user roles: **Customer** (browse/order), **Owner** (manage shop/inventory), **Admin** (platform governance).
+Three user roles: **Customer** (browse/search/order/pay), **Owner** (manage shop/inventory/billing/AI insights), **Admin** (platform governance).
 
 ## Development Commands
 
-### Frontend (`frontend/`)
+### Frontend — Web (`frontend/`)
 ```bash
 cd frontend && npm install
 npm run dev          # Vite dev server on http://localhost:5173
 npm run build        # Production build to dist/
-npm run preview      # Preview production build
 ```
 Requires `VITE_API_URL=http://localhost:8000` in `frontend/.env`.
+
+### Frontend — Android (`frontend_android/`)
+```bash
+cd frontend_android && npm install
+npx expo start --android   # Expo dev server
+npm test                    # Run 108 unit tests
+```
 
 ### Backend — Python (`backend/`)
 ```bash
@@ -25,15 +31,14 @@ cd backend && pip install -r requirements.txt
 python -m uvicorn main:app --reload   # FastAPI on http://localhost:8000
 python seed.py --reset                # Seed database with demo data
 ```
-Requires `.env` with: `JWT_SECRET`, `DATABASE_PATH`, `GEMINI_API_KEY` (optional for AI features).
+Requires env vars: `JWT_SECRET`, `OPENAI_API_KEY` (optional for AI), `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` (optional for payments).
 
 ### Backend — Node.js (`backend-node/`)
 ```bash
 cd backend-node && npm install
-npm run dev          # Express on http://localhost:8000 (with --watch)
+npm run dev          # Express on http://localhost:8000
 npm run seed:reset   # Seed database
 ```
-Routes mirror the Python backend — frontend works unchanged with either.
 
 ### Demo Credentials (after seeding)
 - Customer: `ravi@example.com` / `Customer@123`
@@ -43,51 +48,63 @@ Routes mirror the Python backend — frontend works unchanged with either.
 ## Architecture
 
 ```
-frontend/  →  React 18 + Vite 6 SPA (Tailwind CSS 4, HashRouter)
-    src/api/client.js      Axios client with JWT Bearer interceptor
-    src/context/AppContext  Auth + cart + i18n + search state (React Context, no Redux)
-    src/pages/              Route-level components (Marketplace, OwnerDashboard, AdminPanel, etc.)
-    src/components/         Shared UI components
-    src/hooks/              useTranslation, useLanguageChange
-    src/lib/i18n.js         Lightweight i18n (loads from public/locales/{en,hi,te}/)
+frontend/           React 18 + Vite 6 SPA (Tailwind CSS 4, HashRouter)
+    src/api/client.js       Axios client with JWT Bearer interceptor
+    src/context/AppContext   Auth + cart + i18n + search + targetShopId
+    src/components/         GlobalSearch, AIChatWidget, InvoiceModal, etc.
+    src/pages/              Marketplace, OwnerDashboard, AdminPanel, etc.
 
-backend/   →  Python 3.12 + FastAPI + SQLAlchemy 2 + SQLite
-    main.py                All routes and business logic (~1770 lines, monolithic)
-    models.py              SQLAlchemy ORM models (User, Shop, Product, Order, etc.)
-    schemas.py             Pydantic v2 request/response schemas
-    ai.py                  Gemini 2.0 Flash integration via raw httpx
-    database.py            SQLite engine, session factory, startup migrations
+frontend_android/   Expo SDK 54 + React Native 0.81.5
+    src/api/client.js       Axios client (mirrors web)
+    src/screens/            customer/, owner/, admin/, auth/
+    src/components/         AIChatWidget, InvoiceModal, StatCard, etc.
+    src/navigation/         CustomerTabs, OwnerTabs, AdminTabs
+    __tests__/              utils.test.js, api.test.js, cartReducer.test.js
 
-backend-node/  →  Express 4 + sql.js (WASM SQLite) — drop-in alternative
+backend/            Python 3.12 + FastAPI + SQLAlchemy 2 + SQLite
+    main.py                 All routes and business logic (~1800 lines)
+    ai.py                   OpenAI GPT with function calling (10 DB tools)
+    models.py               SQLAlchemy ORM models
+    schemas.py              Pydantic v2 request/response schemas
+    database.py             SQLite engine, session factory, startup migrations
+
+backend-node/       Express 4 + sql.js — drop-in alternative
 ```
 
 ### Key Patterns
-- **State persistence**: Cart in `localStorage`, auth token in `sessionStorage`, language preference in `localStorage`.
-- **Auth flow**: Register/login → JWT HS256 (30-day expiry) → stored in sessionStorage → Axios interceptor attaches `Authorization: Bearer` header.
-- **Admin auto-assignment**: Email `senamallas@gmail.com` is force-assigned the `admin` role.
-- **Role-based routing**: Login redirects to `/marketplace` (customer), `/owner` (owner), `/admin` (admin). Routes are guarded by role checks in `App.jsx`.
-- **Database migrations**: Applied at startup in `database.py` via ALTER TABLE statements (no migration framework).
-- **API base**: All backend endpoints live under `http://localhost:8000` with no `/api` prefix.
+- **State persistence**: Cart in `localStorage`, auth token in `sessionStorage` (web) / `expo-secure-store` (Android).
+- **Auth flow**: Register/login → JWT HS256 (30-day) → Axios interceptor attaches `Authorization: Bearer`.
+- **Admin auto-assignment**: `senamallas@gmail.com` force-assigned `admin` role.
+- **AI function calling**: Chat endpoint sends tool definitions to OpenAI, executes DB queries when tools are called, returns data-informed responses with `tools_used[]` and `sources[]`.
+- **Category enum mapping**: SQLite stores enum keys (`vegetables`), not values (`Vegetables & Fruits`). `_resolve_category()` in `ai.py` maps user keywords to enum members.
+- **Razorpay**: Web uses JS SDK; Android uses WebView-based checkout with `postMessage` callback.
+- **Global search**: `GlobalSearch.jsx` (web) calls `searchProducts` + `listShops` APIs; `MarketplaceScreen.js` (Android) calls `searchProducts`.
 
 ### API Route Groups
 - `/auth/*` — register, login, forgot-password, reset-password
-- `/users/*` — profile CRUD, role management
-- `/shops/*` — shop CRUD, nearby search, status
+- `/users/*` — profile CRUD, role management, change-password, delete account
+- `/shops/*` — shop CRUD, nearby search, status, UPI
 - `/shops/{id}/products/*` — product CRUD, bulk-update
+- `/products/search` — global product search across all shops
 - `/orders/*` — create, list, status updates, cancel
+- `/payments/*` — Razorpay create-order, verify
 - `/shops/{id}/suppliers/*`, `/shops/{id}/purchase-orders/*` — supply chain
 - `/shops/{id}/product-discounts/*`, `/shops/{id}/order-discounts/*` — discount rules
 - `/analytics/*`, `/shops/{id}/analytics` — platform and shop analytics
-- `/ai/*` — chat, suggest-products, generate-description, low-stock-insight, sales-forecast
+- `/ai/*` — chat (with tools), suggest-products, generate-description, low-stock-insight, sales-forecast
 - `/subscriptions/*` — owner subscription management
 
-FastAPI auto-generates Swagger docs at `http://localhost:8000/docs`.
+### AI Tools (function calling in `/ai/chat`)
+10 tools: `search_products`, `get_popular_products`, `get_all_products`, `get_shop_products`, `get_shop_info`, `list_shops`, `get_sales_summary`, `get_low_stock_items`, `get_order_status`, `get_platform_stats`. Tools are role-filtered. Up to 3 tool rounds per message.
 
-## Internationalization
+## CI/CD
 
-Three languages: English (`en`), Hindi (`hi`), Telugu (`te`). Translation files are JSON in `frontend/public/locales/{lang}/translation.json` (~186 keys each). The custom i18n system uses dot-notation keys (e.g., `common.appName`) resolved via `useTranslation()` hook.
+- `.github/workflows/android-ci.yml` — tests on push/PR to `frontend_android/`
+- `.github/workflows/android-release.yml` — EAS build on tag `v*`
+- `.github/workflows/deploy-frontend.yml` — Vercel deploy on push to `frontend/`
+- `.github/workflows/deploy-backend.yml` — Render deploy on push to `backend/`
 
 ## Documentation
 
-- [Docs/PRD.md](Docs/PRD.md) — Full product requirements document (v3.1)
-- [Docs/Imp.md](Docs/Imp.md) — Implementation reference with architecture, schema, API reference, and order status pipeline
+- [Docs/PRD.md](Docs/PRD.md) — Full product requirements document (v4.0)
+- [Docs/Imp.md](Docs/Imp.md) — Implementation reference with architecture, schema, API reference
