@@ -281,12 +281,12 @@ CHAT_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_products",
-            "description": "Search for products across all shops by name, category, or keyword. Returns matching products with price, stock, and shop info.",
+            "description": "Search for products across all shops by name, category, or keyword. Matches against product name, category name, and description. Returns matching products with price, stock, and shop info.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Product name or keyword to search"},
-                    "category": {"type": "string", "description": "Optional category filter (Grocery, Dairy, etc.)"},
+                    "query": {"type": "string", "description": "Product name, category, or keyword to search (e.g. 'milk', 'fruits', 'snacks', 'rice')"},
+                    "category": {"type": "string", "description": "Optional exact category filter: Grocery, Dairy, Vegetables & Fruits, Meat, Bakery & Snacks, Beverages, Household, Personal Care"},
                 },
                 "required": ["query"],
             },
@@ -385,6 +385,34 @@ CHAT_TOOLS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_popular_products",
+            "description": "Get the most popular/trending/best-selling products based on actual recent sales data. Use this when the user asks for popular, trending, best-selling, or recommended products.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Look back period in days (default 30)"},
+                    "category": {"type": "string", "description": "Optional category filter"},
+                    "limit": {"type": "integer", "description": "Max results (default 10)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_all_products",
+            "description": "Get all available products across all shops, optionally filtered by category. Use when user wants to browse or asks 'what do you have'. Returns products with prices and stock.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "Optional category: Grocery, Dairy, Vegetables & Fruits, Meat, Bakery & Snacks, Beverages, Household, Personal Care"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -394,17 +422,46 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
         if name == "search_products":
             query = args.get("query", "")
             cat = args.get("category")
+            from sqlalchemy import cast, String as SAString, or_
+
+            # Map common search terms to category enum keys (SQLite stores keys not values)
+            CATEGORY_KEYWORDS = {
+                "fruit": M.ShopCategory.vegetables, "fruits": M.ShopCategory.vegetables,
+                "vegetable": M.ShopCategory.vegetables, "vegetables": M.ShopCategory.vegetables,
+                "veggie": M.ShopCategory.vegetables, "veggies": M.ShopCategory.vegetables,
+                "dairy": M.ShopCategory.dairy, "milk": M.ShopCategory.dairy,
+                "grocery": M.ShopCategory.grocery, "groceries": M.ShopCategory.grocery,
+                "bakery": M.ShopCategory.bakery, "bread": M.ShopCategory.bakery,
+                "snacks": M.ShopCategory.bakery, "cake": M.ShopCategory.bakery,
+                "beverages": M.ShopCategory.beverages, "drinks": M.ShopCategory.beverages,
+                "juice": M.ShopCategory.beverages, "tea": M.ShopCategory.beverages,
+                "meat": M.ShopCategory.meat, "chicken": M.ShopCategory.meat,
+                "household": M.ShopCategory.household, "personal": M.ShopCategory.personal_care,
+            }
+
             q = db.query(M.Product).join(M.Shop).filter(
                 M.Shop.status == M.ShopStatus.approved,
                 M.Product.status == M.ProductStatus.active,
-                M.Product.name.ilike(f"%{query}%"),
             )
+
+            # Try name match first, then fall back to category match
+            like = f"%{query}%"
+            matched_cat = CATEGORY_KEYWORDS.get(query.lower().strip())
+            conditions = [M.Product.name.ilike(like)]
+            if matched_cat:
+                conditions.append(M.Product.category == matched_cat)
+            q = q.filter(or_(*conditions))
+
             if cat:
-                from sqlalchemy import cast, String as SAString
-                q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
-            products = q.order_by(M.Product.name).limit(10).all()
+                cat_enum = CATEGORY_KEYWORDS.get(cat.lower().strip())
+                if cat_enum:
+                    q = q.filter(M.Product.category == cat_enum)
+                else:
+                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
+
+            products = q.order_by(M.Product.name).limit(12).all()
             if not products:
-                return f"No products found matching '{query}'."
+                return f"No products found matching '{query}'. Try 'milk', 'rice', 'vegetables', 'dairy', 'snacks'."
             lines = []
             for p in products:
                 stock_label = f"In stock ({p.stock})" if p.stock and p.stock > 0 else "Out of stock"
@@ -510,6 +567,79 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
                 f"- Orders: {total_orders} | Total revenue: ₹{total_rev:.0f}"
             )
 
+        elif name == "get_popular_products":
+            days = args.get("days", 30)
+            cat = args.get("category")
+            limit = args.get("limit", 10)
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            q = (
+                db.query(
+                    M.OrderItem.name,
+                    M.OrderItem.price,
+                    func.sum(M.OrderItem.quantity).label("total_sold"),
+                    M.Product.stock,
+                    M.Product.unit,
+                    M.Product.shop_id,
+                    M.Shop.name.label("shop_name"),
+                )
+                .join(M.Order, M.OrderItem.order_id == M.Order.id)
+                .outerjoin(M.Product, M.OrderItem.product_id == M.Product.id)
+                .outerjoin(M.Shop, M.Order.shop_id == M.Shop.id)
+                .filter(M.Order.created_at >= cutoff, M.Order.status != M.OrderStatus.rejected)
+            )
+            if cat:
+                # Reuse keyword mapping
+                CAT_KW = {"fruit": "vegetables", "fruits": "vegetables", "dairy": "dairy", "grocery": "grocery",
+                           "bakery": "bakery", "snacks": "bakery", "beverages": "beverages", "meat": "meat",
+                           "household": "household", "vegetables": "vegetables"}
+                mapped = CAT_KW.get(cat.lower().strip())
+                if mapped:
+                    q = q.filter(M.Product.category == mapped)
+                else:
+                    from sqlalchemy import cast, String as SAString
+                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
+            popular = (
+                q.group_by(M.OrderItem.name, M.OrderItem.price, M.Product.stock, M.Product.unit, M.Product.shop_id, M.Shop.name)
+                .order_by(func.sum(M.OrderItem.quantity).desc())
+                .limit(limit).all()
+            )
+            if not popular:
+                # Fallback: show available products if no sales data
+                prods = db.query(M.Product).join(M.Shop).filter(
+                    M.Shop.status == M.ShopStatus.approved, M.Product.status == M.ProductStatus.active
+                ).limit(limit).all()
+                if not prods:
+                    return "No products or sales data available yet."
+                lines = [f"- **{p.name}** — ₹{p.price}/{p.unit} | Stock: {p.stock} | {p.shop.name}" for p in prods]
+                return f"No sales data yet, but here are {len(prods)} available products:\n" + "\n".join(lines)
+            lines = []
+            for p in popular:
+                stock_str = f"Stock: {p.stock}" if p.stock is not None else ""
+                lines.append(f"- **{p.name}** — ₹{p.price}/{p.unit or 'unit'} | {p.total_sold} sold | {p.shop_name} {stock_str}")
+            return f"Top {len(popular)} products (last {days} days by sales):\n" + "\n".join(lines)
+
+        elif name == "get_all_products":
+            cat = args.get("category")
+            q = db.query(M.Product).join(M.Shop).filter(
+                M.Shop.status == M.ShopStatus.approved,
+                M.Product.status == M.ProductStatus.active,
+            )
+            if cat:
+                CAT_KW = {"fruit": "vegetables", "fruits": "vegetables", "dairy": "dairy", "grocery": "grocery",
+                           "bakery": "bakery", "snacks": "bakery", "beverages": "beverages", "meat": "meat",
+                           "household": "household", "vegetables": "vegetables", "personal": "personal_care"}
+                mapped = CAT_KW.get(cat.lower().strip())
+                if mapped:
+                    q = q.filter(M.Product.category == mapped)
+                else:
+                    from sqlalchemy import cast, String as SAString
+                    q = q.filter(cast(M.Product.category, SAString).ilike(f"%{cat}%"))
+            products = q.order_by(M.Product.name).limit(20).all()
+            if not products:
+                return f"No products found{' in ' + cat if cat else ''}."
+            lines = [f"- **{p.name}** — ₹{p.price}/{p.unit} | Stock: {p.stock} | {p.shop.name}" for p in products]
+            return f"{len(products)} products{' in ' + cat if cat else ''}:\n" + "\n".join(lines)
+
         return f"Unknown tool: {name}"
     except Exception as e:
         return f"Tool error: {str(e)}"
@@ -557,11 +687,11 @@ async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
 
     # Filter tools by role
     role_tools = {
-        "customer": ["search_products", "get_shop_info", "list_shops", "get_order_status"],
-        "owner":    ["search_products", "get_shop_products", "get_shop_info", "get_sales_summary", "get_low_stock_items", "get_order_status"],
-        "admin":    ["list_shops", "get_shop_info", "get_platform_stats", "get_order_status", "search_products"],
+        "customer": ["search_products", "get_popular_products", "get_all_products", "get_shop_info", "list_shops", "get_order_status"],
+        "owner":    ["search_products", "get_popular_products", "get_all_products", "get_shop_products", "get_shop_info", "get_sales_summary", "get_low_stock_items", "get_order_status"],
+        "admin":    ["list_shops", "get_shop_info", "get_platform_stats", "get_order_status", "search_products", "get_popular_products"],
     }
-    allowed = role_tools.get(body.role, ["search_products", "list_shops"])
+    allowed = role_tools.get(body.role, ["search_products", "get_popular_products", "list_shops"])
     tools = [t for t in CHAT_TOOLS if t["function"]["name"] in allowed]
 
     tools_used = []
