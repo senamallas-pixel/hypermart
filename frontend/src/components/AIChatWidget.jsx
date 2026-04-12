@@ -168,11 +168,32 @@ function MessageBubble({ msg }) {
   );
 }
 
+const ROLE_PROMPTS = {
+  customer: [
+    { label: '🔥 Popular products', prompt: 'What are the most popular products available right now?' },
+    { label: '🏪 Shops near me', prompt: 'Show me all available shops and what they sell' },
+    { label: '🥛 Dairy recommendations', prompt: 'Recommend some dairy products with prices' },
+    { label: '📦 Track my order', prompt: 'How do I check my order status?' },
+  ],
+  owner: [
+    { label: '📊 Sales this week', prompt: 'Show me my sales summary for the last 7 days' },
+    { label: '⚠️ Low stock alert', prompt: 'Which products are running low in my shop?' },
+    { label: '🏆 Top sellers', prompt: 'What are my best selling products?' },
+    { label: '💡 Pricing tips', prompt: 'Give me pricing advice based on my current inventory' },
+  ],
+  admin: [
+    { label: '📈 Platform stats', prompt: 'Show me the overall platform statistics' },
+    { label: '🏪 Pending shops', prompt: 'How many shops are pending approval?' },
+    { label: '💰 Revenue overview', prompt: 'What is the total platform revenue?' },
+    { label: '👥 User activity', prompt: 'Give me a summary of user and shop activity' },
+  ],
+};
+
 export default function AIChatWidget() {
   const { aiAvailable, currentUser } = useApp();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hi! I\'m your HyperMart assistant. How can I help you today? 🛒' }
+    { role: 'assistant', content: 'Hi! I\'m your HyperMart assistant. I can look up real-time product data, shop info, sales analytics, and more. Try the suggestions below or ask me anything! 🛒' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -195,6 +216,28 @@ export default function AIChatWidget() {
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
+
+  const handleSendDirect = (overrideText) => {
+    const text = (overrideText || '').trim();
+    if (!text || loading) return;
+    const userMsg = { role: 'user', content: text };
+    const next = [...messages, userMsg];
+    setMessages(next);
+    setInput('');
+    setLoading(true);
+    const history = next.slice(-10, -1).map(m => ({ role: m.role, content: m.content }));
+    aiChat(text, null, callerRole, history)
+      .then(res => {
+        const reply = res.data?.reply || 'Sorry, I couldn\'t get a response.';
+        const toolsUsed = res.data?.tools_used || [];
+        const sources = res.data?.sources || [];
+        setMessages(prev => [...prev, { role: 'assistant', content: reply, toolsUsed, sources }]);
+      })
+      .catch(() => {
+        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Connection issue. Please try again.' }]);
+      })
+      .finally(() => setLoading(false));
+  };
 
   const handleSend = async () => {
     const text = input.trim();
@@ -275,6 +318,21 @@ export default function AIChatWidget() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
             {messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
+
+            {/* Role-based quick prompts — shown when only the welcome message exists */}
+            {messages.length <= 1 && !loading && (
+              <div className="flex flex-wrap gap-1.5 mt-2 mb-1">
+                {(ROLE_PROMPTS[callerRole] || ROLE_PROMPTS.customer).map((qp, i) => (
+                  <button key={i}
+                    onClick={() => handleSendDirect(qp.prompt)}
+                    className="px-2.5 py-1.5 bg-white border border-[#D0D0C8] rounded-xl text-[11px] font-medium text-[#1A1A1A]/60 hover:border-[#4A7C59] hover:text-[#4A7C59] hover:bg-[#4A7C59]/5 transition-all text-left"
+                  >
+                    {qp.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loading && (
               <div className="flex justify-start mb-2">
                 <TypingIndicator />

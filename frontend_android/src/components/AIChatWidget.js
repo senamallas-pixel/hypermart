@@ -8,11 +8,26 @@ import { aiChat } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { Colors, BorderRadius, Spacing, Shadow } from '../constants/theme';
 
-const QUICK_PROMPTS = [
-  { label: '🛒 Nearby shops', prompt: 'What shops are available near me?' },
-  { label: '📦 Track order', prompt: 'How do I track my order?' },
-  { label: '💡 Recommendations', prompt: 'What products do you recommend?' },
-];
+const ROLE_PROMPTS = {
+  customer: [
+    { label: '🔥 Popular products', prompt: 'What are the most popular products available right now?' },
+    { label: '🏪 Shops near me', prompt: 'Show me all available shops and what they sell' },
+    { label: '🥛 Dairy picks', prompt: 'Recommend some dairy products with prices' },
+    { label: '📦 Track order', prompt: 'How do I check my order status?' },
+  ],
+  owner: [
+    { label: '📊 Sales this week', prompt: 'Show me my sales summary for the last 7 days' },
+    { label: '⚠️ Low stock', prompt: 'Which products are running low in my shop?' },
+    { label: '🏆 Top sellers', prompt: 'What are my best selling products?' },
+    { label: '💡 Pricing tips', prompt: 'Give me pricing advice based on my current inventory' },
+  ],
+  admin: [
+    { label: '📈 Platform stats', prompt: 'Show me the overall platform statistics' },
+    { label: '🏪 Pending shops', prompt: 'How many shops are pending approval?' },
+    { label: '💰 Revenue', prompt: 'What is the total platform revenue?' },
+    { label: '👥 Users', prompt: 'Give me a summary of user and shop activity' },
+  ],
+};
 
 export default function AIChatWidget() {
   const { currentUser, aiAvailable } = useApp();
@@ -153,7 +168,7 @@ export default function AIChatWidget() {
 
                   {/* Quick prompts */}
                   <View style={{ width: '100%', gap: 8, marginTop: Spacing.xl }}>
-                    {QUICK_PROMPTS.map((qp, i) => (
+                    {(ROLE_PROMPTS[currentUser?.role] || ROLE_PROMPTS.customer).map((qp, i) => (
                       <TouchableOpacity
                         key={i}
                         onPress={() => handleSend(qp.prompt)}
