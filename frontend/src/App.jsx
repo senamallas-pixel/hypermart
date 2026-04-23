@@ -5,6 +5,7 @@ import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, Link } f
 import { motion } from 'motion/react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
@@ -461,15 +462,27 @@ function TopNav() {
               <X size={20} className="text-[#1A1A1A]/60" />
             </button>
           </div>
-          <div className="flex-1 overflow-hidden min-h-[400px]">
-            <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true} attributionControl={true}>
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          <div className="flex-1 overflow-hidden min-h-[400px] flex flex-col gap-3 p-4">
+            <div className="flex-1 overflow-hidden rounded-xl border border-[#1A1A1A]/10">
+              <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true}>
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                />
+                {selectedMapCoords && <Marker position={selectedMapCoords} />}
+                <LocationMapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
+              </MapContainer>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Or type location name:</p>
+              <input
+                type="text"
+                placeholder="Enter location (e.g., Hyderabad, Green Valley, etc.)"
+                value={mapLocationName}
+                onChange={(e) => setMapLocationName(e.target.value)}
+                className="w-full px-4 py-2.5 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors"
               />
-              {selectedMapCoords && <Marker position={selectedMapCoords} />}
-              <LocationMapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
-            </MapContainer>
+            </div>
           </div>
           <div className="px-6 py-4 border-t border-[#1A1A1A]/10 flex items-center justify-between gap-3">
             <div>
