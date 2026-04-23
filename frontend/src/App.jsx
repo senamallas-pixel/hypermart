@@ -462,10 +462,13 @@ function TopNav() {
             </button>
           </div>
           <div className="flex-1 overflow-hidden min-h-[400px]">
-            <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true} attributionControl={true}>
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              />
               {selectedMapCoords && <Marker position={selectedMapCoords} />}
-              <MapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
+              <LocationMapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
             </MapContainer>
           </div>
           <div className="px-6 py-4 border-t border-[#1A1A1A]/10 flex items-center justify-between gap-3">
@@ -497,9 +500,9 @@ function TopNav() {
   );
 }
 
-// Map click handler component
-function MapClickHandler({ setCoords, setName }) {
-  useMapEvents({
+// Location map click handler - must be inside MapContainer
+function LocationMapClickHandler({ setCoords, setName }) {
+  const map = useMapEvents({
     click: async (e) => {
       const { lat, lng } = e.latlng;
       setCoords([lat, lng]);
