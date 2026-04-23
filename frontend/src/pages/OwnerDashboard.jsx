@@ -2100,7 +2100,7 @@ function OrdersPanel({ shopId }) {
 }
 
 // ── Inventory Panel ───────────────────────────────────────────────
-function InventoryPanel({ shopId, allShops }) {
+function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
   const [products, setProducts]     = useState([]);
   const [suppliers, setSuppliers]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -2110,7 +2110,6 @@ function InventoryPanel({ shopId, allShops }) {
   const [editProduct, setEditProduct] = useState(null);
   const [subTab, setSubTab]         = useState('catalog');
   const [catFilter, setCatFilter]   = useState('All');
-  const [selectedShopFilter, setSelectedShopFilter] = useState(null);
 
   const SUB_TABS = [
     { key: 'catalog',         label: 'Catalog',          icon: <Settings size={14} /> },
@@ -2153,7 +2152,6 @@ function InventoryPanel({ shopId, allShops }) {
   // Filtering + sorting
   const filtered = useMemo(() => {
     let list = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
-    if (selectedShopFilter != null) list = list.filter(p => p._shopId === selectedShopFilter);
     if (catFilter !== 'All') list = list.filter(p => p.category === catFilter);
     if (sortBy === 'newest')   list = [...list].sort((a, b) => b.id - a.id);
     if (sortBy === 'oldest')   list = [...list].sort((a, b) => a.id - b.id);
@@ -2162,7 +2160,7 @@ function InventoryPanel({ shopId, allShops }) {
     if (sortBy === 'price_high') list = [...list].sort((a, b) => b.price - a.price);
     if (sortBy === 'stock_low') list = [...list].sort((a, b) => a.stock - b.stock);
     return list;
-  }, [products, search, selectedShopFilter, catFilter, sortBy]);
+  }, [products, search, catFilter, sortBy]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(products.map(p => p.category))].filter(Boolean).sort();
@@ -2269,7 +2267,10 @@ function InventoryPanel({ shopId, allShops }) {
               {Array.isArray(allShops) && allShops.length > 0 && (
                 <div className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-[#1A1A1A]/10 rounded-xl">
                   <Store size={14} className="text-[#5A5A40] shrink-0" />
-                  <select value={selectedShopFilter ?? allShops[0]?.id ?? ''} onChange={e => setSelectedShopFilter(Number(e.target.value))}
+                  <select value={selectedShop?.id ?? allShops[0]?.id ?? ''} onChange={e => {
+                    const shop = allShops.find(s => s.id === Number(e.target.value));
+                    if (shop) onShopChange(shop);
+                  }}
                     className="appearance-none bg-transparent text-sm font-bold pr-4 outline-none cursor-pointer">
                     {allShops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
                   </select>
@@ -3767,7 +3768,7 @@ export default function OwnerDashboard() {
 
       {tab === 'Inventory' && selectedShop && (
         <motion.div key="inventory" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <InventoryPanel shopId={selectedShop.id} allShops={shops} />
+          <InventoryPanel shopId={selectedShop.id} allShops={shops} selectedShop={selectedShop} onShopChange={setSelectedShop} />
         </motion.div>
       )}
 
