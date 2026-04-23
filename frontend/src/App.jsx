@@ -275,6 +275,7 @@ function TopNav() {
   const [allLocations, setAllLocations] = useState(['All']);
   const [userCity, setUserCity] = useState('');
   const [locLoading, setLocLoading] = useState(true);
+  const [detectingLocation, setDetectingLocation] = useState(false);
   const locRef = useRef(null);
 
   useEffect(() => {
@@ -370,26 +371,54 @@ function TopNav() {
                 )}
                 <div className="py-3 px-4 border-t border-[#1A1A1A]/5">
                   <button
+                    disabled={detectingLocation}
                     onClick={async () => {
+                      setDetectingLocation(true);
                       try {
-                        const pos = await new Promise((res, rej) =>
-                          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 })
-                        );
-                        const geo = await fetch(
-                          `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+                        const pos = await new Promise((res, rej) => {
+                          if (!navigator.geolocation) {
+                            rej(new Error('Geolocation not supported'));
+                          }
+                          navigator.geolocation.getCurrentPosition(res, rej, {
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 0
+                          });
+                        });
+
+                        const { latitude, longitude } = pos.coords;
+                        const geoRes = await fetch(
+                          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
                           { headers: { 'Accept-Language': 'en' } }
-                        ).then(r => r.json());
-                        const city = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || 'Current Location';
+                        );
+
+                        if (!geoRes.ok) throw new Error('Geocoding failed');
+
+                        const geo = await geoRes.json();
+                        const city = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+
                         setActiveLocation(city);
                         setShowLocMenu(false);
                       } catch (err) {
-                        alert('Unable to detect location. Please enable location access in your browser.');
+                        console.error('Location error:', err);
+                        alert('❌ Location detection failed.\n\nMake sure:\n• Location permission is enabled\n• You have internet connection\n• Browser supports geolocation');
+                      } finally {
+                        setDetectingLocation(false);
                       }
                     }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#5A5A40] text-white rounded-xl font-bold hover:bg-[#4A4A30] transition-all text-sm"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#5A5A40] text-white rounded-xl font-bold hover:bg-[#4A4A30] disabled:opacity-50 disabled:cursor-wait transition-all text-sm"
                   >
-                    <Navigation size={16} />
-                    Use Current Location
+                    {detectingLocation ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Detecting...
+                      </>
+                    ) : (
+                      <>
+                        <Navigation size={16} />
+                        Use Current Location
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
