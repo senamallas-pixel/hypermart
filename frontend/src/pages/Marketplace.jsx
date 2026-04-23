@@ -1264,6 +1264,27 @@ export default function Marketplace() {
             </div>
             <p className="text-[#1A1A1A]/35 font-serif italic text-sm">{t('messages.findingShops')}</p>
           </div>
+        ) : totalShops === 0 ? (
+          <div className="py-24 flex flex-col items-center justify-center gap-6">
+            <div className="w-16 h-16 bg-[#F5F5F0] rounded-full flex items-center justify-center">
+              <MapPin size={32} className="text-[#1A1A1A]/30" />
+            </div>
+            <div className="text-center max-w-md">
+              <h3 className="font-serif text-2xl font-bold text-[#1A1A1A] mb-2">No Shops Near You</h3>
+              <p className="text-sm text-[#1A1A1A]/60 mb-4">
+                Sorry, there are no shops available in <strong>{activeLocation}</strong> right now.
+              </p>
+              <p className="text-xs text-[#1A1A1A]/40 mb-6">
+                Try selecting a different location or check back later.
+              </p>
+              <button
+                onClick={() => setSearch('')}
+                className="px-6 py-3 bg-[#5A5A40] text-white rounded-xl font-bold text-sm hover:bg-[#4A4A30] transition-all"
+              >
+                Browse All Locations
+              </button>
+            </div>
+          </div>
         ) : (
           <>
             {/* Stats row */}
