@@ -462,8 +462,8 @@ function TopNav() {
               <X size={20} className="text-[#1A1A1A]/60" />
             </button>
           </div>
-          <div className="flex-1 overflow-hidden min-h-[400px] flex flex-col gap-3 p-4">
-            <div className="flex-1 overflow-hidden rounded-xl border border-[#1A1A1A]/10">
+          <div className="flex-1 overflow-hidden flex flex-col gap-3 p-4">
+            <div style={{ height: '350px' }} className="rounded-xl border border-[#1A1A1A]/10 overflow-hidden">
               <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true}>
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
