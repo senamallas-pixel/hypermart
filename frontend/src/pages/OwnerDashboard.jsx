@@ -750,10 +750,11 @@ function MiniLineChart({ data, valueKey, height = 60, width = 200, color = '#5A5
 }
 
 // ── Billing Panel (Walk-in POS) ───────────────────────────────────
-function BillingPanel({ shopId, setTab }) {
+function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
+  const [catFilter, setCatFilter] = useState('All');
   const [bill, setBill]         = useState([]);        // { product, quantity }
   const [customerName, setCustomerName] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('paid');
@@ -1055,6 +1056,24 @@ function BillingPanel({ shopId, setTab }) {
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       {/* Product Grid */}
       <div className="lg:col-span-3 space-y-4">
+        {/* Shop Selector */}
+        {shops && shops.length > 1 && (
+          <div className="relative">
+            <Store size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+            <select
+              value={selectedShop?.id || shopId}
+              onChange={e => {
+                const shop = shops.find(s => s.id === parseInt(e.target.value));
+                if (shop) onShopChange(shop);
+              }}
+              className="w-full pl-11 pr-4 py-3 bg-white border border-[#1A1A1A]/10 rounded-2xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors appearance-none cursor-pointer"
+            >
+              {shops.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30" />
           <input className="w-full pl-11 pr-4 py-3 bg-white border border-[#1A1A1A]/10 rounded-2xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors"
@@ -2057,11 +2076,11 @@ function InventoryPanel({ shopId, allShops }) {
   const [suppliers, setSuppliers]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
-  const [catFilter, setCatFilter]   = useState('All');
   const [sortBy, setSortBy]         = useState('newest');
   const [showModal, setShowModal]   = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [subTab, setSubTab]         = useState('catalog');
+  const [catFilter, setCatFilter]   = useState('All');
 
   const SUB_TABS = [
     { key: 'catalog',         label: 'Catalog',          icon: <Settings size={14} /> },
@@ -2074,7 +2093,7 @@ function InventoryPanel({ shopId, allShops }) {
 
   const reload = useCallback(() => {
     setLoading(true);
-    const shopsToLoad = allShops && allShops.length > 0 ? allShops : [{ id: shopId }];
+    const shopsToLoad = (Array.isArray(allShops) && allShops.length > 0) ? allShops : [{ id: shopId }];
     Promise.all([
       Promise.all(shopsToLoad.map(shop => listProducts(shop.id, false).then(res => ({
         ...res,
@@ -3709,7 +3728,7 @@ export default function OwnerDashboard() {
 
       {tab === 'Billing' && selectedShop && (
         <motion.div key="billing" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <BillingPanel shopId={selectedShop.id} setTab={setTab} />
+          <BillingPanel shopId={selectedShop.id} shops={shops} selectedShop={selectedShop} onShopChange={setSelectedShop} setTab={setTab} />
         </motion.div>
       )}
 
