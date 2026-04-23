@@ -1195,9 +1195,15 @@ export default function Marketplace() {
   const fetchShops = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const params = activeLocation === 'All' ? { size: 100 } : { location: activeLocation, size: 100 };
-      const res = await listShops(params);
-      setShops(res.data.items);
+      // Always load all shops, filter by location client-side
+      const res = await listShops({ size: 100 });
+      let allShops = res.data.items || [];
+
+      // Filter by location client-side if not 'All'
+      if (activeLocation !== 'All') {
+        allShops = allShops.filter(s => s.location_name === activeLocation);
+      }
+      setShops(allShops);
     } catch {
       setError(t('messages.failedToLoadShops'));
     } finally {
