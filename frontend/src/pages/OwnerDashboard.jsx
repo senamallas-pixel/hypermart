@@ -2269,9 +2269,8 @@ function InventoryPanel({ shopId, allShops }) {
               {Array.isArray(allShops) && allShops.length > 0 && (
                 <div className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-[#1A1A1A]/10 rounded-xl">
                   <Store size={14} className="text-[#5A5A40] shrink-0" />
-                  <select value={selectedShopFilter ?? ''} onChange={e => setSelectedShopFilter(e.target.value ? Number(e.target.value) : null)}
+                  <select value={selectedShopFilter ?? allShops[0]?.id ?? ''} onChange={e => setSelectedShopFilter(Number(e.target.value))}
                     className="appearance-none bg-transparent text-sm font-bold pr-4 outline-none cursor-pointer">
-                    <option value="">All Shops</option>
                     {allShops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
                   </select>
                 </div>
