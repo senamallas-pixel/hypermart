@@ -395,10 +395,31 @@ function TopNav() {
                         if (!geoRes.ok) throw new Error('Geocoding failed');
 
                         const geo = await geoRes.json();
-                        const city = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+                        const detectedLocation = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
 
-                        setActiveLocation(city);
-                        setShowLocMenu(false);
+                        // Check if detected location matches any shop locations
+                        const availableLocations = allLocations.filter(l => l !== 'All');
+                        const matchingLocation = availableLocations.find(loc =>
+                          loc.toLowerCase().includes(detectedLocation.toLowerCase()) ||
+                          detectedLocation.toLowerCase().includes(loc.toLowerCase())
+                        );
+
+                        if (matchingLocation) {
+                          setActiveLocation(matchingLocation);
+                          setShowLocMenu(false);
+                        } else if (availableLocations.length > 0) {
+                          // Show available locations to choose from
+                          const selected = prompt(
+                            `📍 No shops found exactly in "${detectedLocation}".\n\nSelect a nearby shop location:\n\n${availableLocations.join('\n')}`,
+                            availableLocations[0]
+                          );
+                          if (selected && availableLocations.includes(selected)) {
+                            setActiveLocation(selected);
+                            setShowLocMenu(false);
+                          }
+                        } else {
+                          alert('❌ No shop locations found in the system.');
+                        }
                       } catch (err) {
                         console.error('Location error:', err);
                         alert('❌ Location detection failed.\n\nMake sure:\n• Location permission is enabled\n• You have internet connection\n• Browser supports geolocation');
