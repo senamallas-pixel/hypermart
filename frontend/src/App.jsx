@@ -351,25 +351,38 @@ function TopNav() {
                 ? <Loader2 size={12} className="text-[#5A5A40] animate-spin shrink-0" />
                 : <MapPin size={12} className="text-[#5A5A40] shrink-0" />}
               <span className="text-[10px] font-bold uppercase tracking-widest max-w-[70px] sm:max-w-[100px] truncate">
-                {locLoading ? 'Locating…' : userCity || 'Location'}
+                {locLoading ? 'Locating…' : activeLocation || userCity || 'Location'}
               </span>
               <ChevronDown size={11} className="text-[#5A5A40] shrink-0" />
             </button>
 
             {showLocMenu && (
-              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[210px] overflow-hidden z-[70] py-2">
-                {userCity ? (
-                  <div className="px-4 py-3 flex items-center gap-2">
-                    <Navigation size={16} className="text-[#5A5A40] shrink-0" />
+              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[220px] overflow-hidden z-[70]">
+                {userCity && (
+                  <div className="px-4 py-3 border-b border-[#1A1A1A]/5 flex items-center gap-2 bg-[#F5F5F0]">
+                    <Navigation size={14} className="text-[#5A5A40] shrink-0" />
                     <div>
                       <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 leading-none mb-0.5">Your Location</p>
-                      <p className="text-sm font-bold">{userCity}</p>
+                      <p className="text-sm font-bold text-[#5A5A40]">{userCity}</p>
                     </div>
                   </div>
+                )}
+                {allLocations.length > 0 ? (
+                  <div className="py-1">
+                    <p className="px-4 pt-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Select Location</p>
+                    {allLocations.map(loc => (
+                      <button key={loc}
+                        onClick={() => { setActiveLocation(loc); setShowLocMenu(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-2
+                          ${activeLocation === loc ? 'bg-[#F5F5F0] text-[#5A5A40] font-bold' : 'hover:bg-[#F5F5F0] text-[#1A1A1A] font-medium'}`}>
+                        <span>{loc}</span>
+                        {activeLocation === loc && <Check size={14} className="text-[#5A5A40] shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
                 ) : (
-                  <div className="px-4 py-3 text-center text-sm text-[#1A1A1A]/60">
-                    <p className="font-medium">Detecting your location...</p>
-                    <p className="text-xs mt-1">Please enable location access</p>
+                  <div className="px-4 py-4 text-center text-sm text-[#1A1A1A]/60">
+                    <p className="font-medium">Loading locations...</p>
                   </div>
                 )}
               </div>
