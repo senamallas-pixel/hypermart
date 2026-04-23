@@ -3,11 +3,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
   Search, Package, CheckCircle2, Eye, EyeOff, Phone, Tag, Percent,
-  Navigation, Check,
+  Navigation, Check, X,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
@@ -21,6 +23,14 @@ import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
 import LanguageSelector   from './components/LanguageSelector';
 import GlobalSearch       from './components/GlobalSearch';
+
+// Fix Leaflet default marker icon (broken in bundlers)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
@@ -272,9 +282,12 @@ function TopNav() {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLocMenu, setShowLocMenu] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
   const [allLocations, setAllLocations] = useState(['All']);
   const [userCity, setUserCity] = useState('');
   const [locLoading, setLocLoading] = useState(true);
+  const [selectedMapCoords, setSelectedMapCoords] = useState(null);
+  const [mapLocationName, setMapLocationName] = useState('');
   const locRef = useRef(null);
 
   useEffect(() => {
@@ -357,7 +370,7 @@ function TopNav() {
             </button>
 
             {showLocMenu && (
-              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[220px] overflow-hidden z-[70]">
+              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[240px] overflow-hidden z-[70]">
                 {userCity && (
                   <div className="px-4 py-3 border-b border-[#1A1A1A]/5 flex items-center gap-2 bg-[#F5F5F0]">
                     <Navigation size={14} className="text-[#5A5A40] shrink-0" />
@@ -367,24 +380,15 @@ function TopNav() {
                     </div>
                   </div>
                 )}
-                {allLocations.length > 0 ? (
-                  <div className="py-1">
-                    <p className="px-4 pt-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Select Location</p>
-                    {allLocations.map(loc => (
-                      <button key={loc}
-                        onClick={() => { setActiveLocation(loc); setShowLocMenu(false); }}
-                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-2
-                          ${activeLocation === loc ? 'bg-[#F5F5F0] text-[#5A5A40] font-bold' : 'hover:bg-[#F5F5F0] text-[#1A1A1A] font-medium'}`}>
-                        <span>{loc}</span>
-                        {activeLocation === loc && <Check size={14} className="text-[#5A5A40] shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="px-4 py-4 text-center text-sm text-[#1A1A1A]/60">
-                    <p className="font-medium">Loading locations...</p>
-                  </div>
-                )}
+                <div className="py-3 px-4 border-t border-[#1A1A1A]/5">
+                  <button
+                    onClick={() => { setShowMapModal(true); setShowLocMenu(false); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#5A5A40] text-white rounded-xl font-bold hover:bg-[#4A4A30] transition-all text-sm"
+                  >
+                    <MapPin size={16} />
+                    Select Location on Map
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -445,7 +449,73 @@ function TopNav() {
         </div>
       </div>
     </header>
+
+    {/* Location Map Picker Modal */}
+    {showMapModal && (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#1A1A1A]/10">
+            <h3 className="font-serif text-xl font-bold">Select Your Location</h3>
+            <button onClick={() => setShowMapModal(false)} className="p-2 hover:bg-[#F5F5F0] rounded-lg transition-colors">
+              <X size={20} className="text-[#1A1A1A]/60" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <MapContainer center={[17.3850, 78.4867]} zoom={13} className="w-full h-full" zoomControl={true}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {selectedMapCoords && <Marker position={selectedMapCoords} />}
+              <MapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
+            </MapContainer>
+          </div>
+          <div className="px-6 py-4 border-t border-[#1A1A1A]/10 flex items-center justify-between gap-3">
+            <div>
+              {mapLocationName && <p className="text-sm font-medium text-[#5A5A40]">{mapLocationName}</p>}
+              {selectedMapCoords && <p className="text-xs text-[#1A1A1A]/60">{selectedMapCoords[0].toFixed(4)}, {selectedMapCoords[1].toFixed(4)}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowMapModal(false)} className="px-5 py-2 rounded-xl border border-[#1A1A1A]/20 font-bold text-sm hover:bg-[#F5F5F0] transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (mapLocationName) {
+                    setActiveLocation(mapLocationName);
+                    setShowMapModal(false);
+                  }
+                }}
+                disabled={!mapLocationName}
+                className="px-5 py-2 rounded-xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] disabled:opacity-50 transition-colors">
+                Confirm Location
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   );
+}
+
+// Map click handler component
+function MapClickHandler({ setCoords, setName }) {
+  useMapEvents({
+    click: async (e) => {
+      const { lat, lng } = e.latlng;
+      setCoords([lat, lng]);
+
+      // Reverse geocode to get location name
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          { headers: { 'Accept-Language': 'en' } }
+        ).then(r => r.json());
+        const name = res.address?.city || res.address?.town || res.address?.suburb || res.address?.county || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        setName(name);
+      } catch {
+        setName(`Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+      }
+    }
+  });
+  return null;
 }
 
 // ── Bottom Nav ─────────────────────────────────────────────────────
