@@ -1,6 +1,7 @@
 ﻿// src/pages/Marketplace.jsx — Customer view: shop listing, products, cart & orders
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
@@ -276,14 +277,17 @@ function ShopProductsView({ shop, onBack }) {
 
   const handlePlaceOrder = async () => {
     if (!currentUser) { setNeedsLogin(true); return; }
+    if (!shop?.id) { alert('Shop not found. Please try again.'); return; }
+    if (shopCartItems.length === 0) { alert('Your cart is empty.'); return; }
     setPlacing(true);
     try {
-      const res = await placeOrder({
+      const payload = {
         shop_id:          shop.id,
         items:            shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })),
         delivery_address: 'Default Address',
         payment_method:   paymentMethod,
-      });
+      };
+      const res = await placeOrder(payload);
 
       if (paymentMethod === 'razorpay') {
         try {
@@ -330,7 +334,7 @@ function ShopProductsView({ shop, onBack }) {
             setTimeout(() => setToast(null), 3000);
           }
           return;
-        } catch {
+        } catch (rzErr) {
           clearCart(); setShowCart(false);
           setToast(t('messages.orderPlaced'));
           setTimeout(() => setToast(null), 3000);
@@ -344,7 +348,9 @@ function ShopProductsView({ shop, onBack }) {
       setToast(t('messages.orderPlaced'));
       setTimeout(() => setToast(null), 3000);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to place order.');
+      const detail = err.response?.data?.detail || err.message || 'Failed to place order.';
+      alert(detail);
+      console.error('Order placement error:', { error: err, response: err.response?.data });
     } finally {
       setPlacing(false);
     }
@@ -538,7 +544,7 @@ function ShopProductsView({ shop, onBack }) {
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            onClick={() => setShowCart(true)}
+            onClick={() => { if (!currentUser) { setNeedsLogin(true); return; } setShowCart(true); }}
             className="fixed bottom-20 sm:bottom-8 right-4 sm:right-8 bg-[#5A5A40] text-white px-5 py-3.5 rounded-2xl shadow-2xl shadow-[#5A5A40]/40 flex items-center gap-3 z-60 hover:bg-[#4A4A30] active:scale-95 transition-all"
           >
             <div className="relative">
@@ -652,7 +658,7 @@ function ShopProductsView({ shop, onBack }) {
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
               className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
               <div className="w-16 h-16 bg-[#5A5A40]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Store size={28} className="text-[#5A5A40]" />
+                <ShoppingCart size={28} className="text-[#5A5A40]" />
               </div>
               <h3 className="font-serif text-xl font-bold mb-2">{t('marketplace.signInToOrder')}</h3>
               <p className="text-sm text-[#1A1A1A]/50 mb-6">{t('messages.createAccountOrSignIn')}</p>
@@ -1160,11 +1166,26 @@ function MarketplaceBanner({ location }) {
 export default function Marketplace() {
   const { t } = useTranslation();
   const { currentUser, search, setSearch, activeLocation, targetShopId, setTargetShopId } = useApp();
+  const location = useLocation();
   const [shops, setShops]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [selectedShop, setSelectedShop] = useState(null);
   const [debounced, setDebounced]       = useState('');
+  const contentRef = useRef(null);
+  const sectionRefs = useRef({});
+
+  const scrollToCategory = useCallback((cat) => {
+    const el = cat ? sectionRefs.current[cat] : contentRef.current;
+    if (!el) return;
+    const STICKY_HEIGHT = 108; // nav 56px + pills bar 48px + 4px gap
+    const top = el.getBoundingClientRect().top + window.pageYOffset - STICKY_HEIGHT;
+    window.scrollTo({ top, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    if (location.state?.homeReset) setSelectedShop(null);
+  }, [location.state]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
@@ -1214,12 +1235,12 @@ export default function Marketplace() {
       <div className="sticky top-14 z-40 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6">
         <div className="max-w-7xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            <button onClick={() => setSearch('')}
+            <button onClick={() => { setSearch(''); scrollToCategory(null); }}
               className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
               {t('common.all')}
             </button>
             {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => setSearch(cat)}
+              <button key={cat} onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
                 className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
                 {cat}
               </button>
@@ -1228,7 +1249,7 @@ export default function Marketplace() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-6 space-y-10">
+      <div ref={contentRef} className="max-w-7xl mx-auto px-4 sm:px-8 pt-6 space-y-10">
         {error && (
           <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-2xl text-sm">
             <span className="text-red-700 font-medium">{error}</span>
@@ -1290,7 +1311,7 @@ export default function Marketplace() {
               if (debounced && CATEGORIES.includes(debounced) && debounced !== cat) return null;
 
               return (
-                <div key={cat}>
+                <div key={cat} ref={el => { sectionRefs.current[cat] = el; }}>
                   {/* Section header */}
                   <div className="flex items-end justify-between mb-4 px-0.5">
                     <div>

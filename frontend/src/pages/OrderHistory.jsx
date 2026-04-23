@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Loader2, Calendar, MapPin, Package, ChevronRight, Search, Filter, Eye, Clock, CheckCircle2, AlertCircle, ShoppingBag, Truck, DollarSign, XCircle, Printer } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, MapPin, Package, ChevronRight, Search, Filter, Eye, Clock, CheckCircle2, AlertCircle, ShoppingBag, Truck, DollarSign, XCircle, Printer, Zap } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getMyOrders, cancelOrder } from '../api/client';
 import InvoiceModal from '../components/InvoiceModal';
@@ -242,6 +242,81 @@ export default function OrderHistory() {
                             </div>
                           </div>
 
+                          {/* Status Timeline - Horizontal Progress */}
+                          <div className="bg-white rounded border border-[#1A1A1A]/5 p-6">
+                            <div className="relative">
+                              {/* Timeline stages */}
+                              <div className="flex items-start justify-between">
+                                {/* Ordered */}
+                                <div className="flex flex-col items-center flex-1">
+                                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#5A5A40] text-white mb-3 relative z-10">
+                                    <CheckCircle2 size={16} />
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] mb-1">Ordered</p>
+                                    <p className="text-xs text-[#5A5A40]/60">
+                                      {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, {new Date(order.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Accepted */}
+                                <div className="flex flex-col items-center flex-1">
+                                  <div className={`flex items-center justify-center w-8 h-8 rounded-full mb-3 relative z-10 ${order.accepted_at ? 'bg-[#5A5A40] text-white' : 'bg-[#F5F5F0] border-2 border-[#1A1A1A]/10 text-[#1A1A1A]/40'}`}>
+                                    <CheckCircle2 size={16} />
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] mb-1">Accepted</p>
+                                    <p className="text-xs text-[#5A5A40]/60">
+                                      {order.accepted_at
+                                        ? `${new Date(order.accepted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(order.accepted_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+                                        : '—'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Out for Delivery */}
+                                <div className="flex flex-col items-center flex-1">
+                                  <div className={`flex items-center justify-center w-8 h-8 rounded-full mb-3 relative z-10 ${order.out_for_delivery_at ? 'bg-[#5A5A40] text-white' : 'bg-[#F5F5F0] border-2 border-[#1A1A1A]/10 text-[#1A1A1A]/40'}`}>
+                                    <Truck size={16} />
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] mb-1">Out for Delivery</p>
+                                    <p className="text-xs text-[#5A5A40]/60">
+                                      {order.out_for_delivery_at
+                                        ? `${new Date(order.out_for_delivery_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(order.out_for_delivery_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+                                        : '—'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Delivered */}
+                                <div className="flex flex-col items-center flex-1">
+                                  <div className={`flex items-center justify-center w-8 h-8 rounded-full mb-3 relative z-10 ${order.delivered_at ? 'bg-[#5A5A40] text-white' : 'bg-[#F5F5F0] border-2 border-[#1A1A1A]/10 text-[#1A1A1A]/40'}`}>
+                                    <CheckCircle2 size={16} />
+                                  </div>
+                                  <div className="text-center">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A] mb-1">Delivered</p>
+                                    <p className="text-xs text-[#5A5A40]/60">
+                                      {order.delivered_at
+                                        ? `${new Date(order.delivered_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${new Date(order.delivered_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+                                        : '—'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Connecting lines */}
+                              <div className="absolute top-4 left-0 right-0 h-1 bg-[#1A1A1A]/10 -z-0" style={{ width: '100%', marginLeft: '4%', marginRight: '4%', maxWidth: '92%' }} />
+                              {/* Progress line */}
+                              <div className="absolute top-4 left-0 h-1 bg-[#5A5A40] -z-0" style={{
+                                width: order.delivered_at ? '100%' : order.out_for_delivery_at ? '66%' : order.accepted_at ? '33%' : '0%',
+                                marginLeft: '4%',
+                                transition: 'width 0.3s ease'
+                              }} />
+                            </div>
+                          </div>
+
                           {/* Delivery Address */}
                           {order.delivery_address && (
                             <div>
@@ -255,12 +330,18 @@ export default function OrderHistory() {
                           )}
 
                           {/* Summary */}
-                          <div className="pt-2 border-t border-[#1A1A1A]/5">
-                            <div className="flex items-center justify-between text-sm mb-2">
+                          <div className="pt-2 border-t border-[#1A1A1A]/5 space-y-2">
+                            <div className="flex items-center justify-between text-sm">
                               <span className="text-[#5A5A40]">Subtotal</span>
-                              <span className="text-[#1A1A1A] font-semibold">₹{(order.total * 0.95).toFixed(2)}</span>
+                              <span className="text-[#1A1A1A] font-semibold">₹{order.subtotal || order.total}</span>
                             </div>
-                            <div className="flex items-center justify-between text-lg font-bold text-[#1A1A1A]">
+                            {order.total_discount > 0 && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-[#5A5A40]">Discount</span>
+                                <span className="text-emerald-600 font-semibold">-₹{order.total_discount}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between text-lg font-bold text-[#1A1A1A] pt-2 border-t border-[#1A1A1A]/5">
                               <span>Total</span>
                               <span className="text-[#5A5A40] text-2xl">₹{order.total}</span>
                             </div>

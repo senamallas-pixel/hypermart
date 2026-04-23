@@ -103,6 +103,9 @@ def startup():
             "ALTER TABLE orders ADD COLUMN razorpay_order_id VARCHAR(255)",
             "ALTER TABLE orders ADD COLUMN razorpay_payment_id VARCHAR(255)",
             "ALTER TABLE shops ADD COLUMN upi_id VARCHAR(255)",
+            "ALTER TABLE orders ADD COLUMN accepted_at DATETIME",
+            "ALTER TABLE orders ADD COLUMN out_for_delivery_at DATETIME",
+            "ALTER TABLE orders ADD COLUMN delivered_at DATETIME",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -717,7 +720,7 @@ def place_order(
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
     final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
-    pm = (payload.payment_method or M.PaymentMethod.cash).value if payload.payment_method else "cash"
+    pm = payload.payment_method.value if payload.payment_method else "cash"
     order = M.Order(
         shop_id=shop.id,
         shop_name=shop.name,
@@ -963,8 +966,15 @@ def update_order_status(
         S.OrderStatusUpdate.validate_transition(order.status, payload.status)
     except ValueError as exc:
         raise HTTPException(422, str(exc))
+    now = datetime.utcnow()
     order.status = payload.status
-    order.updated_at = datetime.utcnow()
+    order.updated_at = now
+    if payload.status == M.OrderStatus.accepted:
+        order.accepted_at = now
+    elif payload.status == M.OrderStatus.out_for_delivery:
+        order.out_for_delivery_at = now
+    elif payload.status == M.OrderStatus.delivered:
+        order.delivered_at = now
     db.commit()
     db.refresh(order)
     return order
@@ -1288,8 +1298,8 @@ def walkin_order(
         total += product.price * item_in.quantity
         product.stock -= item_in.quantity
     final_total = round(total - (payload.total_discount or 0), 2) if payload.total_discount else round(total, 2)
-    pm = (payload.payment_method or M.PaymentMethod.cash).value if payload.payment_method else "cash"
-    ps = (payload.payment_status or M.PaymentStatus.paid).value if payload.payment_status else "paid"
+    pm = payload.payment_method.value if payload.payment_method else "cash"
+    ps = payload.payment_status.value if payload.payment_status else "paid"
     order = M.Order(
         shop_id=shop.id,       shop_name=shop.name,
         customer_id=current_user.id,

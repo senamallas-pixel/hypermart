@@ -198,8 +198,11 @@ class Order(Base):
     razorpay_order_id   = Column(String(255), nullable=True)
     razorpay_payment_id = Column(String(255), nullable=True)
     delivery_address = Column(Text, nullable=False)
-    created_at       = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at       = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    created_at           = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at           = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+    accepted_at          = Column(DateTime, nullable=True)
+    out_for_delivery_at  = Column(DateTime, nullable=True)
+    delivered_at         = Column(DateTime, nullable=True)
 
     shop     = relationship("Shop", back_populates="orders")
     customer = relationship("User", back_populates="orders")

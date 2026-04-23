@@ -1,16 +1,17 @@
 ﻿// src/App.jsx — Root component: auth, nav, cart, shell
 
-import { useState, useEffect, useMemo } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
   Search, Package, CheckCircle2, Eye, EyeOff, Phone, Tag, Percent,
+  Navigation, Check,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
-import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI } from './api/client';
+import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
 import Marketplace        from './pages/Marketplace';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
@@ -36,7 +37,6 @@ const DEMO = [
   { label: 'Admin',      email: 'senamallas@gmail.com', password: 'Admin@123',  role: 'admin'    },
 ];
 
-const LOCATIONS = ['All', 'Green Valley', 'Central Market', 'Food Plaza', 'Milk Lane', 'Old Town'];
 
 function roleHome(role) {
   if (role === 'admin') return '/admin';
@@ -271,18 +271,69 @@ function TopNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showLocMenu, setShowLocMenu] = useState(false);
+  const [allLocations, setAllLocations] = useState(['All']);
+  const [userCity, setUserCity] = useState('');
+  const [locLoading, setLocLoading] = useState(true);
+  const locRef = useRef(null);
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (locRef.current && !locRef.current.contains(e.target)) setShowLocMenu(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      // Always load all shop zones from backend
+      try {
+        const res = await listShops({ size: 100 });
+        const shops = res.data?.items || [];
+        const locs = [...new Set(shops.map(s => s.location_name).filter(Boolean))];
+        if (!cancelled && locs.length) setAllLocations(['All', ...locs]);
+      } catch { /* keep ['All'] */ }
+
+      // Try to reverse-geocode user's real city
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
+        );
+        const geo = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+          { headers: { 'Accept-Language': 'en' } }
+        ).then(r => r.json());
+        const city = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || '';
+        if (!cancelled && city) setUserCity(city);
+      } catch { /* location denied or unavailable */ }
+
+      if (!cancelled) setLocLoading(false);
+    }
+    init();
+    return () => { cancelled = true; };
+  }, []);
 
   const isAuth = location.pathname === '/login';
   if (isAuth) return null;
 
-  const isMarketplace = location.pathname === '/marketplace';
   const handleSignOut = () => { signOut(); navigate('/'); setShowUserMenu(false); };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6 safe-top">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
-        <button onClick={() => navigate(currentUser ? roleHome(currentUser.role) : '/marketplace')}
-          className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform">
+        <button
+          onClick={() => {
+            if (currentUser?.role === 'owner') {
+              navigate('/owner', { state: { resetTab: true } });
+            } else if (currentUser?.role === 'admin') {
+              navigate('/admin', { state: { resetTab: true } });
+            } else {
+              navigate('/marketplace', { state: { homeReset: Date.now() } });
+            }
+          }}
+          className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform z-[60] relative bg-transparent border-0 p-0 cursor-pointer">
           <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-sm">
             <Store size={16} />
           </div>
@@ -292,15 +343,44 @@ function TopNav() {
         <GlobalSearch />
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-all cursor-pointer">
-            <MapPin size={12} className="text-[#5A5A40] shrink-0" />
-            <div className="relative flex items-center">
-              <select value={activeLocation} onChange={e => setActiveLocation(e.target.value)}
-                className="appearance-none bg-transparent pr-4 text-[10px] font-bold uppercase tracking-widest focus:outline-none cursor-pointer max-w-[72px] sm:max-w-[110px] truncate">
-                {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-0 pointer-events-none text-[#5A5A40]" />
-            </div>
+          <div className="relative" ref={locRef}>
+            <button
+              onClick={() => setShowLocMenu(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-all">
+              {locLoading
+                ? <Loader2 size={12} className="text-[#5A5A40] animate-spin shrink-0" />
+                : <MapPin size={12} className="text-[#5A5A40] shrink-0" />}
+              <span className="text-[10px] font-bold uppercase tracking-widest max-w-[70px] sm:max-w-[100px] truncate">
+                {locLoading ? 'Locating…' : activeLocation === 'All' ? (userCity || 'All Areas') : activeLocation}
+              </span>
+              <ChevronDown size={11} className="text-[#5A5A40] shrink-0" />
+            </button>
+
+            {showLocMenu && (
+              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[210px] overflow-hidden z-[70]">
+                {userCity && (
+                  <div className="px-4 py-3 border-b border-[#1A1A1A]/5 flex items-center gap-2">
+                    <Navigation size={13} className="text-[#5A5A40] shrink-0" />
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 leading-none mb-0.5">Your City</p>
+                      <p className="text-sm font-bold">{userCity}</p>
+                    </div>
+                  </div>
+                )}
+                <div className="py-1">
+                  <p className="px-4 pt-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/35">Browse by Area</p>
+                  {allLocations.map(loc => (
+                    <button key={loc}
+                      onClick={() => { setActiveLocation(loc); setShowLocMenu(false); }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-2
+                        ${activeLocation === loc ? 'bg-[#F5F5F0] text-[#5A5A40] font-bold' : 'hover:bg-[#F5F5F0] text-[#1A1A1A] font-medium'}`}>
+                      <span>{loc === 'All' ? 'All Areas' : loc}</span>
+                      {activeLocation === loc && <Check size={14} className="text-[#5A5A40] shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <LanguageSelector />

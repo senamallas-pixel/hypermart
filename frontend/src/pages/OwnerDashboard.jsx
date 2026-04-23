@@ -2,6 +2,7 @@
 // Shop owner portal — Analytics, Inventory, Orders, Billing
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -10,7 +11,7 @@ import {
   Truck, Store, AlertCircle, Loader2, BarChart2, BarChart3, Menu, Minus,
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
   MapPin, Upload, Navigation, Image, Calendar, Power, Save, Download,
-  Star, Lock, MessageCircle, Phone, ClipboardList, AlertTriangle, Settings,
+  Star, Lock, MessageCircle, Phone, ClipboardList, AlertTriangle, Settings, Share2,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -106,6 +107,8 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     unit: product?.unit || 'kg',
     category: product?.category || CATEGORIES[0],
     stock: product?.stock ?? 100,
+    low_stock_threshold: product?.low_stock_threshold ?? 10,
+    expiry_date: product?.expiry_date || '',
     image: fixImageUrl(product?.image) || '',
   });
   const [saving, setSaving] = useState(false);
@@ -161,7 +164,14 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, price: +form.price, mrp: +form.mrp || +form.price, stock: +form.stock };
+      const payload = {
+        ...form,
+        price: +form.price,
+        mrp: +form.mrp || +form.price,
+        stock: +form.stock,
+        low_stock_threshold: +form.low_stock_threshold,
+        expiry_date: form.expiry_date || null,
+      };
       if (product) await updateProduct(shopId, product.id, payload);
       else await createProduct(shopId, payload);
       onSave();
@@ -179,13 +189,34 @@ function ProductModal({ shopId, product, onSave, onClose }) {
     <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-white w-full max-w-5xl rounded-t-3xl sm:rounded-3xl p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-center mb-8">
-          <h3 className="font-serif text-2xl font-bold">{product ? 'Edit Product' : 'Add Product'}</h3>
+          <h3 className="font-serif text-2xl font-bold">{product ? 'Edit Product' : 'Add New Product'}</h3>
           <button onClick={onClose} className="p-2 hover:bg-[#F5F5F0] rounded-full"><X size={24} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* ── LEFT: Quick Select Categories ── */}
+          <div className="lg:border-r border-[#1A1A1A]/5 lg:pr-8">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-4">Quick Select</p>
+            <div className="flex flex-wrap gap-2 mb-6">
+              {CATEGORIES.map(cat => (
+                <button key={cat} type="button"
+                  onClick={() => setForm(f => ({ ...f, category: cat }))}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all ${
+                    form.category === cat
+                      ? 'bg-[#5A5A40] text-white'
+                      : 'bg-[#F5F5F0] text-[#1A1A1A]/60 hover:bg-[#1A1A1A]/10'
+                  }`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── RIGHT: Form Fields ── */}
+          <form onSubmit={handleSubmit} className="lg:col-span-2 space-y-4">
           {/* Name with AI suggestions */}
           <div className="relative">
             <input className={inp} placeholder="Product name *" value={form.name}
@@ -229,10 +260,34 @@ function ProductModal({ shopId, product, onSave, onClose }) {
             <input className={inp} placeholder="Selling price ₹ *" type="number" min="0" step="0.01" value={form.price} onChange={set('price')} required />
             <input className={inp} placeholder="MRP ₹ (optional)" type="number" min="0" step="0.01" value={form.mrp} onChange={set('mrp')} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <input className={inp} placeholder="Unit (kg, pcs…) *" value={form.unit} onChange={set('unit')} required />
-            <input className={inp} placeholder="Stock qty" type="number" min="0" value={form.stock} onChange={set('stock')} />
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1.5 block">Unit</label>
+              <select className={`${sel} cursor-pointer`} value={form.unit} onChange={set('unit')} required>
+                <option>kg</option>
+                <option>g</option>
+                <option>ml</option>
+                <option>l</option>
+                <option>pcs</option>
+                <option>pack</option>
+                <option>dozen</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1.5 block">Stock</label>
+              <input className={inp} type="number" min="0" value={form.stock} onChange={set('stock')} />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1.5 block">Low Stock Alert</label>
+              <input className={inp} type="number" min="0" value={form.low_stock_threshold} onChange={set('low_stock_threshold')} />
+            </div>
           </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-1.5 block">Expiry Date</label>
+            <input className={inp} type="date" value={form.expiry_date} onChange={set('expiry_date')} />
+          </div>
+
           <select className={`${sel} cursor-pointer`} value={form.category} onChange={set('category')}>
             {CATEGORIES.map(c => <option key={c}>{c}</option>)}
           </select>
@@ -261,11 +316,12 @@ function ProductModal({ shopId, product, onSave, onClose }) {
             </div>
           )}
 
-          <button type="submit" disabled={saving}
-            className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 shadow-md hover:shadow-lg">
-            {saving ? <><Loader2 size={18} className="animate-spin" /> Saving...</> : 'Save Product'}
-          </button>
-        </form>
+            <button type="submit" disabled={saving}
+              className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-4 shadow-md hover:shadow-lg">
+              {saving ? <><Loader2 size={18} className="animate-spin" /> Saving...</> : product ? 'Update Product' : 'Add Product'}
+            </button>
+          </form>
+        </div>
       </motion.div>
     </div>
   );
@@ -325,7 +381,12 @@ function ShopRegistrationForm({ onSaved }) {
       const payload = { ...form, lat: form.lat ? +form.lat : null, lng: form.lng ? +form.lng : null };
       await createShop(payload); onSaved();
     }
-    catch (err) { alert(err.response?.data?.detail || 'Failed to register shop.'); }
+    catch (err) {
+      const detail = err.response?.data?.detail;
+      const errorMsg = typeof detail === 'string' ? detail : (detail?.message || 'Failed to register shop. Please check all required fields and try again.');
+      alert(errorMsg);
+      console.error('Shop creation error:', err);
+    }
     finally { setSaving(false); }
   };
 
@@ -689,7 +750,7 @@ function MiniLineChart({ data, valueKey, height = 60, width = 200, color = '#5A5
 }
 
 // ── Billing Panel (Walk-in POS) ───────────────────────────────────
-function BillingPanel({ shopId }) {
+function BillingPanel({ shopId, setTab }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
@@ -713,6 +774,16 @@ function BillingPanel({ shopId }) {
 
   // Quick-add product from billing
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [newBillDone, setNewBillDone] = useState(false);
+
+  const handleNewBill = () => {
+    setBill([]);
+    setCustomerName('');
+    setNewBillDone(true);
+    setTimeout(() => setNewBillDone(false), 2000);
+  };
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddPrice, setQuickAddPrice] = useState('');
   const [quickAddUnit, setQuickAddUnit] = useState('pcs');
@@ -1329,8 +1400,97 @@ function BillingPanel({ shopId }) {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6 mt-4">
+          <h3 className="font-serif text-xl font-bold mb-4">Quick Actions</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => setShowAddModal(true)}
+              className="flex flex-col items-center justify-center gap-2 bg-[#5A5A40] text-white rounded-2xl py-5 font-bold text-xs uppercase tracking-widest hover:bg-[#4A4A30] transition-all active:scale-95">
+              <Plus size={22} />
+              Add Product
+            </button>
+            <button onClick={handleNewBill}
+              className={`flex flex-col items-center justify-center gap-2 rounded-2xl py-5 font-bold text-xs uppercase tracking-widest transition-all active:scale-95 ${newBillDone ? 'bg-green-600 text-white' : 'bg-[#1A1A1A] text-white hover:bg-black'}`}>
+              <ClipboardList size={22} />
+              {newBillDone ? '✓ Cleared!' : 'New Bill'}
+            </button>
+            <button onClick={() => setTab('Settings')}
+              className="flex flex-col items-center justify-center gap-2 bg-[#F5F5F0] text-[#1A1A1A] rounded-2xl py-5 font-bold text-xs uppercase tracking-widest hover:bg-[#EBEBDB] transition-all active:scale-95">
+              <Settings size={22} />
+              Settings
+            </button>
+            <button onClick={() => setShowSupportModal(true)}
+              className="flex flex-col items-center justify-center gap-2 bg-[#F5F5F0] text-[#1A1A1A] rounded-2xl py-5 font-bold text-xs uppercase tracking-widest hover:bg-[#EBEBDB] transition-all active:scale-95">
+              <Phone size={22} />
+              Support
+            </button>
+          </div>
+        </div>
+
         {invoiceOrder && <InvoiceModal order={invoiceOrder} shopView onClose={() => setInvoiceOrder(null)} />}
       </div>
+
+      <AnimatePresence>
+        {showAddModal && (
+          <ProductModal
+            shopId={shopId}
+            product={null}
+            onSave={async () => {
+              setShowAddModal(false);
+              const pRes = await listProducts(shopId);
+              setProducts(pRes.data);
+            }}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+        {showSupportModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowSupportModal(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-serif text-2xl font-bold">Support</h3>
+                <button onClick={() => setShowSupportModal(false)} className="p-2 hover:bg-[#F5F5F0] rounded-full"><X size={20} /></button>
+              </div>
+              <div className="space-y-4">
+                <a href="tel:+911800123456"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBDB] transition-colors no-underline text-[#1A1A1A]">
+                  <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center shrink-0">
+                    <Phone size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Call Support</p>
+                    <p className="text-xs text-[#1A1A1A]/50">1800-123-456 · Mon–Sat 9am–6pm</p>
+                  </div>
+                </a>
+                <a href="https://wa.me/911800123456" target="_blank" rel="noreferrer"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBDB] transition-colors no-underline text-[#1A1A1A]">
+                  <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shrink-0">
+                    <MessageCircle size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">WhatsApp</p>
+                    <p className="text-xs text-[#1A1A1A]/50">Chat with us anytime</p>
+                  </div>
+                </a>
+                <a href="mailto:support@hypermart.in"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBDB] transition-colors no-underline text-[#1A1A1A]">
+                  <div className="w-10 h-10 bg-[#1A1A1A] rounded-xl flex items-center justify-center shrink-0">
+                    <MessageCircle size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Email</p>
+                    <p className="text-xs text-[#1A1A1A]/50">support@hypermart.in</p>
+                  </div>
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1629,6 +1789,27 @@ function OrdersPanel({ shopId }) {
       .finally(() => setLoading(false));
   }, [shopId, dateFilter, typeFilter]);
 
+  const shareToWhatsApp = (order) => {
+    const date = new Date(order.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    const itemLines = order.items.map(i => `  • ${i.name} × ${i.quantity}  ₹${i.line_total ?? i.price * i.quantity}`).join('\n');
+    const isWalkin  = (order.order_type || 'online') === 'walkin';
+    const location  = isWalkin ? 'In-Store (Walk-in)' : (order.delivery_address || 'Online Delivery');
+    const payment   = order.payment_method === 'upi' ? 'UPI' : order.payment_method === 'cash' ? 'Cash' : order.payment_method;
+    const msg = [
+      `🛍️ *HyperMart — Order #${order.id}*`,
+      `📅 ${date}`,
+      ``,
+      `*Items:*`,
+      itemLines,
+      ``,
+      `💰 *Total: ₹${order.total}*`,
+      `💳 Payment: ${payment}`,
+      `📍 ${location}`,
+      `✅ Status: ${order.status.replace('_', ' ').toUpperCase()}`,
+    ].join('\n');
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+  };
+
   useEffect(() => { reload(); }, [reload]);
 
   const advance = async (orderId, nextStatus) => {
@@ -1789,6 +1970,41 @@ function OrdersPanel({ shopId }) {
                   </div>
                 )}
 
+                {/* Status Timeline */}
+                {(() => {
+                  const fmt = (d) => d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+                  const isWalkin = (order.order_type || 'online') === 'walkin';
+                  const deliveredTime = fmt(order.delivered_at) || (order.status === 'delivered' ? fmt(order.updated_at) : null);
+                  const steps = isWalkin ? [
+                    { label: 'Ordered',   time: fmt(order.created_at), done: true },
+                    { label: 'Billed',    time: fmt(order.accepted_at) || fmt(order.created_at), done: true },
+                    { label: 'Delivered', time: deliveredTime, done: order.status === 'delivered' },
+                  ] : [
+                    { label: 'Ordered',          time: fmt(order.created_at),            done: true },
+                    { label: 'Accepted',         time: fmt(order.accepted_at),            done: !!order.accepted_at },
+                    { label: 'Out for Delivery', time: fmt(order.out_for_delivery_at),    done: !!order.out_for_delivery_at },
+                    { label: 'Delivered',        time: deliveredTime,                     done: order.status === 'delivered' },
+                  ];
+                  return (
+                    <div className="mb-4 pt-3 border-t border-[#1A1A1A]/5">
+                      <div className="flex items-start">
+                        {steps.map((step, i) => (
+                          <div key={step.label} className="flex-1 flex flex-col items-center relative">
+                            {i < steps.length - 1 && (
+                              <div className={`absolute top-[9px] left-1/2 w-full h-0.5 ${steps[i + 1].done ? 'bg-[#5A5A40]' : 'bg-[#1A1A1A]/10'}`} />
+                            )}
+                            <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center z-10 shrink-0 ${step.done ? 'bg-[#5A5A40] border-[#5A5A40]' : 'bg-white border-[#1A1A1A]/15'}`}>
+                              {step.done && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 text-center leading-tight ${step.done ? 'text-[#5A5A40]' : 'text-[#1A1A1A]/25'}`}>{step.label}</p>
+                            <p className={`text-[8px] text-center mt-0.5 leading-tight ${step.time ? 'text-[#1A1A1A]/40' : 'text-[#1A1A1A]/15'}`}>{step.time || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Action buttons */}
                 <div className="flex gap-2 pt-3 border-t border-[#1A1A1A]/5">
                   {transition && (
@@ -1816,6 +2032,12 @@ function OrdersPanel({ shopId }) {
                   >
                     <Receipt size={14} /> Invoice
                   </button>
+                  <button
+                    onClick={() => shareToWhatsApp(order)}
+                    className="px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-xs font-bold uppercase tracking-widest text-green-700 hover:bg-green-100 transition-all flex items-center gap-1.5"
+                  >
+                    <Share2 size={14} /> WhatsApp
+                  </button>
                 </div>
               </div>
             );
@@ -1830,7 +2052,7 @@ function OrdersPanel({ shopId }) {
 }
 
 // ── Inventory Panel ───────────────────────────────────────────────
-function InventoryPanel({ shopId }) {
+function InventoryPanel({ shopId, allShops }) {
   const [products, setProducts]     = useState([]);
   const [suppliers, setSuppliers]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -1852,20 +2074,30 @@ function InventoryPanel({ shopId }) {
 
   const reload = useCallback(() => {
     setLoading(true);
+    const shopsToLoad = allShops && allShops.length > 0 ? allShops : [{ id: shopId }];
     Promise.all([
-      listProducts(shopId, false),
+      Promise.all(shopsToLoad.map(shop => listProducts(shop.id, false).then(res => ({
+        ...res,
+        data: (res.data || []).map(p => ({ ...p, _shopId: shop.id }))
+      })))).then(results => ({
+        data: results.flatMap(r => r.data || [])
+      })),
       listSuppliers(shopId).catch(() => ({ data: [] })),
     ]).then(([prodR, supR]) => {
       setProducts(prodR.data);
       setSuppliers(supR.data);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [shopId]);
+  }, [shopId, allShops]);
 
   useEffect(() => { reload(); }, [reload]);
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (productData) => {
     if (!window.confirm('Delete this product?')) return;
-    try { await deleteProduct(shopId, id); reload(); }
+    try {
+      const targetShopId = productData._shopId || shopId;
+      await deleteProduct(targetShopId, productData.id);
+      reload();
+    }
     catch (err) { alert(err.response?.data?.detail || 'Failed to delete.'); }
   };
 
@@ -1883,11 +2115,29 @@ function InventoryPanel({ shopId }) {
   }, [products, search, catFilter, sortBy]);
 
   const categories = useMemo(() => {
-    const cats = [...new Set(products.map(p => p.category))].sort();
+    const cats = [...new Set(products.map(p => p.category))].filter(Boolean).sort();
     return ['All', ...cats];
   }, [products]);
 
   const lowStockCount = products.filter(p => p.stock <= (p.low_stock_threshold || 10)).length;
+
+  const expiringProducts = useMemo(() => {
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    return products.filter(p => {
+      if (!p.expiry_date) return false;
+      const expiryDate = new Date(p.expiry_date);
+      return expiryDate <= thirtyDaysFromNow && expiryDate >= new Date();
+    }).sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date));
+  }, [products]);
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -1912,6 +2162,47 @@ function InventoryPanel({ shopId }) {
       {/* ── Catalog sub-tab ─────────────────────────────────────── */}
       {subTab === 'catalog' && (
         <div>
+          {/* Expiry Alerts Alert Box */}
+          {expiringProducts.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mb-6 bg-amber-50 border-2 border-amber-200 rounded-2xl p-5"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-amber-900">Expiry Alerts</h4>
+                    <p className="text-sm text-amber-700 mt-1">
+                      {expiringProducts.length} product{expiringProducts.length !== 1 ? 's' : ''} {expiringProducts.length === 1 ? 'is' : 'are'} nearing expiry within the next 30 days.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {expiringProducts.map(p => (
+                  <div key={p.id} className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-100">
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-[#1A1A1A]">
+                        {p.name} <span className="text-amber-600 font-bold">({formatDate(p.expiry_date)})</span>
+                      </p>
+                      <p className="text-xs text-[#1A1A1A]/50 mt-0.5">Stock: {p.stock}</p>
+                    </div>
+                    <button
+                      onClick={() => { setSubTab('stock_adj'); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      <Edit3 size={14} />
+                      Adjust Stock
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {/* Header: Title + controls */}
           <div className="flex flex-col gap-4 mb-6">
             <h3 className="font-serif text-2xl font-bold">Product Catalog</h3>
@@ -2017,7 +2308,7 @@ function InventoryPanel({ shopId }) {
                             className="p-2 rounded-lg hover:bg-[#F5F5F0] transition-colors text-[#1A1A1A]/40 hover:text-[#5A5A40]">
                             <Settings size={16} />
                           </button>
-                          <button onClick={() => handleDelete(p.id)}
+                          <button onClick={() => handleDelete(p)}
                             className="p-2 rounded-lg hover:bg-red-50 transition-colors text-[#1A1A1A]/30 hover:text-red-500">
                             <XCircle size={16} />
                           </button>
@@ -3078,10 +3369,14 @@ function ShopSettingsPanel({ shop, onUpdated }) {
 // ── Main Dashboard ────────────────────────────────────────────────
 export default function OwnerDashboard() {
   const { currentUser } = useApp();
+  const location = useLocation();
   const [shops, setShops]       = useState([]);
   const [selectedShop, setSelectedShop] = useState(null);
   const [tab, setTab]           = useState('Overview');
   const [loading, setLoading]   = useState(true);
+  const [showOverviewAddModal, setShowOverviewAddModal] = useState(false);
+  const [showOverviewBillModal, setShowOverviewBillModal] = useState(false);
+  const [showOverviewSupportModal, setShowOverviewSupportModal] = useState(false);
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [registering, setRegistering]   = useState(false);
@@ -3108,6 +3403,13 @@ export default function OwnerDashboard() {
       .catch(console.error)
       .finally(() => setAnalyticsLoading(false));
   }, [selectedShop]);
+
+  useEffect(() => {
+    if (location.state?.resetTab) {
+      setTab('Overview');
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   if (loading) return (
     <div className="h-full flex items-center justify-center">
@@ -3151,7 +3453,6 @@ export default function OwnerDashboard() {
               <MapPin size={14} /> {selectedShop?.address}
             </p>
             <div className="flex gap-2 mt-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest bg-[#F5F5F0] px-2 py-1 rounded text-[#5A5A40]">{selectedShop?.category}</span>
               <span className="text-[10px] font-bold uppercase tracking-widest bg-[#F5F5F0] px-2 py-1 rounded text-[#1A1A1A]/40">{selectedShop?.timings}</span>
             </div>
           </div>
@@ -3219,9 +3520,6 @@ export default function OwnerDashboard() {
                         s.status === 'pending' ? 'bg-amber-100/90 text-amber-700' : 'bg-white/90 text-[#5A5A40]'
                       }`}>
                         {s.status === 'pending' ? 'PENDING' : s.is_open ? 'OPEN' : 'CLOSED'}
-                      </div>
-                      <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-1.5 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest border border-[#1A1A1A]/5">
-                        {s.category}
                       </div>
                     </div>
                     <div className="p-3">
@@ -3306,13 +3604,13 @@ export default function OwnerDashboard() {
                     icon={<Plus size={20} />}
                     label="Add Product"
                     color="bg-[#5A5A40]"
-                    onClick={() => setTab('Inventory')}
+                    onClick={() => setShowOverviewAddModal(true)}
                   />
                   <ActionButton
                     icon={<ClipboardList size={20} />}
                     label="New Bill"
                     color="bg-[#1A1A1A]"
-                    onClick={() => setTab('Billing')}
+                    onClick={() => setShowOverviewBillModal(true)}
                   />
                   <ActionButton
                     icon={<Settings size={20} />}
@@ -3326,7 +3624,7 @@ export default function OwnerDashboard() {
                     label="Support"
                     color="bg-[#F5F5F0]"
                     textColor="text-[#1A1A1A]"
-                    onClick={() => {}}
+                    onClick={() => setShowOverviewSupportModal(true)}
                   />
                 </div>
               </div>
@@ -3411,13 +3709,13 @@ export default function OwnerDashboard() {
 
       {tab === 'Billing' && selectedShop && (
         <motion.div key="billing" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <BillingPanel shopId={selectedShop.id} />
+          <BillingPanel shopId={selectedShop.id} setTab={setTab} />
         </motion.div>
       )}
 
       {tab === 'Inventory' && selectedShop && (
         <motion.div key="inventory" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <InventoryPanel shopId={selectedShop.id} />
+          <InventoryPanel shopId={selectedShop.id} allShops={shops} />
         </motion.div>
       )}
 
@@ -3433,6 +3731,89 @@ export default function OwnerDashboard() {
         </motion.div>
       )}
 
+      </AnimatePresence>
+
+      {/* Overview Quick Action modals */}
+      <AnimatePresence>
+        {showOverviewAddModal && selectedShop && (
+          <ProductModal
+            shopId={selectedShop.id}
+            product={null}
+            onSave={() => { setShowOverviewAddModal(false); loadShops(); }}
+            onClose={() => setShowOverviewAddModal(false)}
+          />
+        )}
+        {showOverviewBillModal && selectedShop && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowOverviewBillModal(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
+              onClick={e => e.stopPropagation()}>
+              <div className="w-16 h-16 bg-[#1A1A1A] rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <ClipboardList size={28} className="text-white" />
+              </div>
+              <h3 className="font-serif text-2xl font-bold mb-2">Start New Bill</h3>
+              <p className="text-sm text-[#1A1A1A]/50 mb-6">Open the billing panel to create a walk-in bill for a customer.</p>
+              <button
+                onClick={() => { setShowOverviewBillModal(false); setTab('Billing'); }}
+                className="w-full bg-[#1A1A1A] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2">
+                <ClipboardList size={18} /> Open Billing
+              </button>
+              <button onClick={() => setShowOverviewBillModal(false)}
+                className="mt-3 w-full py-3 text-sm text-[#1A1A1A]/40 hover:text-[#1A1A1A]/70 transition-colors">
+                Cancel
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+        {showOverviewSupportModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowOverviewSupportModal(false)}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-serif text-2xl font-bold">Support</h3>
+                <button onClick={() => setShowOverviewSupportModal(false)} className="p-2 rounded-full hover:bg-[#F5F5F0]"><X size={18} /></button>
+              </div>
+              <p className="text-sm text-[#1A1A1A]/50 mb-6">Need help? Reach us through any of these channels.</p>
+              <div className="flex flex-col gap-3">
+                <a href="tel:+911800123456"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBEB] transition-all">
+                  <div className="w-10 h-10 bg-[#5A5A40] rounded-xl flex items-center justify-center">
+                    <Phone size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Call Us</p>
+                    <p className="text-xs text-[#1A1A1A]/50">1800-123-456</p>
+                  </div>
+                </a>
+                <a href="https://wa.me/911800123456" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBEB] transition-all">
+                  <div className="w-10 h-10 bg-[#25D366] rounded-xl flex items-center justify-center">
+                    <MessageCircle size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">WhatsApp</p>
+                    <p className="text-xs text-[#1A1A1A]/50">Chat with support</p>
+                  </div>
+                </a>
+                <a href="mailto:support@hypermart.in"
+                  className="flex items-center gap-4 p-4 bg-[#F5F5F0] rounded-2xl hover:bg-[#EBEBEB] transition-all">
+                  <div className="w-10 h-10 bg-[#1A1A1A] rounded-xl flex items-center justify-center">
+                    <AlertCircle size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Email</p>
+                    <p className="text-xs text-[#1A1A1A]/50">support@hypermart.in</p>
+                  </div>
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </motion.div>
   );

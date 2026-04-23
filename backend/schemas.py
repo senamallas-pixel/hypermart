@@ -311,6 +311,9 @@ class OrderOut(OrmBase):
     delivery_address:    str
     created_at:          datetime
     updated_at:          Optional[datetime]
+    accepted_at:         Optional[datetime] = None
+    out_for_delivery_at: Optional[datetime] = None
+    delivered_at:        Optional[datetime] = None
 
 
 # ── Payment ──────────────────────────────────────────────────────────────────
