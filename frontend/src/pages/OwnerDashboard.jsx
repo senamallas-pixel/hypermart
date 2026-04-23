@@ -2122,20 +2122,14 @@ function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
 
   const reload = useCallback(() => {
     setLoading(true);
-    const shopsToLoad = (Array.isArray(allShops) && allShops.length > 0) ? allShops : [{ id: shopId }];
     Promise.all([
-      Promise.all(shopsToLoad.map(shop => listProducts(shop.id, false).then(res => ({
-        ...res,
-        data: (res.data || []).map(p => ({ ...p, _shopId: shop.id }))
-      })))).then(results => ({
-        data: results.flatMap(r => r.data || [])
-      })),
+      listProducts(shopId, false),
       listSuppliers(shopId).catch(() => ({ data: [] })),
     ]).then(([prodR, supR]) => {
-      setProducts(prodR.data);
+      setProducts(prodR.data || []);
       setSuppliers(supR.data);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [shopId, allShops]);
+  }, [shopId]);
 
   useEffect(() => { reload(); }, [reload]);
 
