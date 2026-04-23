@@ -3,9 +3,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
@@ -24,14 +21,6 @@ import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
 import LanguageSelector   from './components/LanguageSelector';
 import GlobalSearch       from './components/GlobalSearch';
-
-// Fix Leaflet default marker icon (broken in bundlers)
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
@@ -283,12 +272,9 @@ function TopNav() {
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showLocMenu, setShowLocMenu] = useState(false);
-  const [showMapModal, setShowMapModal] = useState(false);
   const [allLocations, setAllLocations] = useState(['All']);
   const [userCity, setUserCity] = useState('');
   const [locLoading, setLocLoading] = useState(true);
-  const [selectedMapCoords, setSelectedMapCoords] = useState(null);
-  const [mapLocationName, setMapLocationName] = useState('');
   const locRef = useRef(null);
 
   useEffect(() => {
@@ -384,11 +370,26 @@ function TopNav() {
                 )}
                 <div className="py-3 px-4 border-t border-[#1A1A1A]/5">
                   <button
-                    onClick={() => { setShowMapModal(true); setShowLocMenu(false); }}
+                    onClick={async () => {
+                      try {
+                        const pos = await new Promise((res, rej) =>
+                          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000 })
+                        );
+                        const geo = await fetch(
+                          `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+                          { headers: { 'Accept-Language': 'en' } }
+                        ).then(r => r.json());
+                        const city = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || 'Current Location';
+                        setActiveLocation(city);
+                        setShowLocMenu(false);
+                      } catch (err) {
+                        alert('Unable to detect location. Please enable location access in your browser.');
+                      }
+                    }}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#5A5A40] text-white rounded-xl font-bold hover:bg-[#4A4A30] transition-all text-sm"
                   >
-                    <MapPin size={16} />
-                    Select Location on Map
+                    <Navigation size={16} />
+                    Use Current Location
                   </button>
                 </div>
               </div>
@@ -452,88 +453,8 @@ function TopNav() {
       </div>
     </header>
 
-    {/* Location Map Picker Modal */}
-    {showMapModal && (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] p-4">
-        <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#1A1A1A]/10">
-            <h3 className="font-serif text-xl font-bold">Select Your Location</h3>
-            <button onClick={() => setShowMapModal(false)} className="p-2 hover:bg-[#F5F5F0] rounded-lg transition-colors">
-              <X size={20} className="text-[#1A1A1A]/60" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-hidden flex flex-col gap-3 p-4">
-            <div style={{ height: '350px' }} className="rounded-xl border border-[#1A1A1A]/10 overflow-hidden">
-              <MapContainer center={[17.3850, 78.4867]} zoom={13} style={{ width: '100%', height: '100%' }} zoomControl={true}>
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                />
-                {selectedMapCoords && <Marker position={selectedMapCoords} />}
-                <LocationMapClickHandler setCoords={setSelectedMapCoords} setName={setMapLocationName} />
-              </MapContainer>
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Or type location name:</p>
-              <input
-                type="text"
-                placeholder="Enter location (e.g., Hyderabad, Green Valley, etc.)"
-                value={mapLocationName}
-                onChange={(e) => setMapLocationName(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#F5F5F0] border border-[#1A1A1A]/10 rounded-xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors"
-              />
-            </div>
-          </div>
-          <div className="px-6 py-4 border-t border-[#1A1A1A]/10 flex items-center justify-between gap-3">
-            <div>
-              {mapLocationName && <p className="text-sm font-medium text-[#5A5A40]">{mapLocationName}</p>}
-              {selectedMapCoords && <p className="text-xs text-[#1A1A1A]/60">{selectedMapCoords[0].toFixed(4)}, {selectedMapCoords[1].toFixed(4)}</p>}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowMapModal(false)} className="px-5 py-2 rounded-xl border border-[#1A1A1A]/20 font-bold text-sm hover:bg-[#F5F5F0] transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (mapLocationName) {
-                    setActiveLocation(mapLocationName);
-                    setShowMapModal(false);
-                  }
-                }}
-                disabled={!mapLocationName}
-                className="px-5 py-2 rounded-xl bg-[#5A5A40] text-white font-bold text-sm hover:bg-[#4A4A30] disabled:opacity-50 transition-colors">
-                Confirm Location
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   );
-}
-
-// Location map click handler - must be inside MapContainer
-function LocationMapClickHandler({ setCoords, setName }) {
-  const map = useMapEvents({
-    click: async (e) => {
-      const { lat, lng } = e.latlng;
-      setCoords([lat, lng]);
-
-      // Reverse geocode to get location name
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-          { headers: { 'Accept-Language': 'en' } }
-        ).then(r => r.json());
-        const name = res.address?.city || res.address?.town || res.address?.suburb || res.address?.county || `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-        setName(name);
-      } catch {
-        setName(`Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-      }
-    }
-  });
-  return null;
 }
 
 // ── Bottom Nav ─────────────────────────────────────────────────────
