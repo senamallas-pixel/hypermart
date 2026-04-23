@@ -1299,11 +1299,6 @@ export default function Marketplace() {
               </div>
             )}
 
-            {/* Nearby Shops - GPS based */}
-            {!debounced && (
-              <NearbyShopsSection onSelectShop={(shop) => setSelectedShop(shop)} />
-            )}
-
             {/* Category sections */}
             {CATEGORIES.map(cat => {
               const catShops = shopsByCategory[cat] || [];

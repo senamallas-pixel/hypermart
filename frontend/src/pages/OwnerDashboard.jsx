@@ -778,6 +778,8 @@ function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [newBillDone, setNewBillDone] = useState(false);
+  const [showShopDropdown, setShowShopDropdown] = useState(false);
+  const shopDropdownRef = useRef(null);
 
   const handleNewBill = () => {
     setBill([]);
@@ -880,6 +882,18 @@ function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
     setUpiOrderData(null);
     setUpiPaymentReceived(false);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target)) {
+        setShowShopDropdown(false);
+      }
+    };
+    if (showShopDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showShopDropdown]);
 
   useEffect(() => {
     setLoading(true);
@@ -1058,20 +1072,35 @@ function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
       <div className="lg:col-span-3 space-y-4">
         {/* Shop Selector */}
         {shops && shops.length > 1 && (
-          <div className="relative">
-            <Store size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
-            <select
-              value={selectedShop?.id || shopId}
-              onChange={e => {
-                const shop = shops.find(s => s.id === parseInt(e.target.value));
-                if (shop) onShopChange(shop);
-              }}
-              className="w-full pl-11 pr-4 py-3 bg-white border border-[#1A1A1A]/10 rounded-2xl text-sm font-medium outline-none focus:border-[#5A5A40] transition-colors appearance-none cursor-pointer"
+          <div className="relative" ref={shopDropdownRef}>
+            <button
+              onClick={() => setShowShopDropdown(!showShopDropdown)}
+              className="w-full pl-11 pr-4 py-3 bg-white border border-[#1A1A1A]/10 rounded-2xl text-sm font-medium text-left outline-none hover:border-[#5A5A40] transition-colors flex items-center justify-between"
             >
-              {shops.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+              <span>{selectedShop?.name}</span>
+              <ChevronRight size={14} className={`text-[#1A1A1A]/30 transition-transform ${showShopDropdown ? 'rotate-90' : ''}`} />
+            </button>
+            <Store size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+            {showShopDropdown && (
+              <div className="absolute top-full mt-2 w-full bg-white border border-[#1A1A1A]/10 rounded-2xl shadow-lg z-10">
+                {shops.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      onShopChange(s);
+                      setShowShopDropdown(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-sm font-medium transition-colors first:rounded-t-2xl last:rounded-b-2xl ${
+                      s.id === selectedShop?.id
+                        ? 'bg-[#5A5A40] text-white'
+                        : 'hover:bg-[#F5F5F0]'
+                    }`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <div className="relative">
@@ -2081,6 +2110,7 @@ function InventoryPanel({ shopId, allShops }) {
   const [editProduct, setEditProduct] = useState(null);
   const [subTab, setSubTab]         = useState('catalog');
   const [catFilter, setCatFilter]   = useState('All');
+  const [selectedShopFilter, setSelectedShopFilter] = useState(null);
 
   const SUB_TABS = [
     { key: 'catalog',         label: 'Catalog',          icon: <Settings size={14} /> },
@@ -2123,6 +2153,7 @@ function InventoryPanel({ shopId, allShops }) {
   // Filtering + sorting
   const filtered = useMemo(() => {
     let list = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+    if (selectedShopFilter != null) list = list.filter(p => p._shopId === selectedShopFilter);
     if (catFilter !== 'All') list = list.filter(p => p.category === catFilter);
     if (sortBy === 'newest')   list = [...list].sort((a, b) => b.id - a.id);
     if (sortBy === 'oldest')   list = [...list].sort((a, b) => a.id - b.id);
@@ -2131,7 +2162,7 @@ function InventoryPanel({ shopId, allShops }) {
     if (sortBy === 'price_high') list = [...list].sort((a, b) => b.price - a.price);
     if (sortBy === 'stock_low') list = [...list].sort((a, b) => a.stock - b.stock);
     return list;
-  }, [products, search, catFilter, sortBy]);
+  }, [products, search, selectedShopFilter, catFilter, sortBy]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(products.map(p => p.category))].filter(Boolean).sort();
@@ -2234,14 +2265,17 @@ function InventoryPanel({ shopId, allShops }) {
                   placeholder="Search catalog..." value={search} onChange={e => setSearch(e.target.value)}
                 />
               </div>
-              {/* Category filter */}
-              <div className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-[#1A1A1A]/10 rounded-xl">
-                <Package size={14} className="text-[#5A5A40] shrink-0" />
-                <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-                  className="appearance-none bg-transparent text-sm font-bold pr-4 outline-none cursor-pointer">
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+              {/* Shop filter */}
+              {Array.isArray(allShops) && allShops.length > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-[#1A1A1A]/10 rounded-xl">
+                  <Store size={14} className="text-[#5A5A40] shrink-0" />
+                  <select value={selectedShopFilter ?? ''} onChange={e => setSelectedShopFilter(e.target.value ? Number(e.target.value) : null)}
+                    className="appearance-none bg-transparent text-sm font-bold pr-4 outline-none cursor-pointer">
+                    <option value="">All Shops</option>
+                    {allShops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
+                  </select>
+                </div>
+              )}
               {/* Sort */}
               <div className="flex items-center gap-1.5 px-3 py-2.5 bg-white border border-[#1A1A1A]/10 rounded-xl">
                 <TrendingUp size={14} className="text-[#5A5A40] shrink-0" />
