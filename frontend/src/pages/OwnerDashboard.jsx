@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package, ShoppingBag, TrendingUp, DollarSign, Plus, Search,
-  Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight,
+  Edit3, Trash2, X, CheckCircle2, XCircle, Clock, ChevronRight, ChevronLeft,
   Truck, Store, AlertCircle, Loader2, BarChart2, BarChart3, Menu, Minus,
   Receipt, PieChart, Activity, ArrowUpRight, ArrowDownRight, Users,
   MapPin, Upload, Navigation, Image, Calendar, Power, Save, Download,
@@ -967,7 +967,12 @@ function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
           }
         } else if (discount.type === 'individual') {
           if (discount.discount_value) {
-            itemDiscounts += (itemTotal * discount.discount_value) / 100;
+            if (discount.discount_amount_type === 'percentage') {
+              itemDiscounts += (itemTotal * discount.discount_value) / 100;
+            } else {
+              // flat amount
+              itemDiscounts += discount.discount_value * quantity;
+            }
           }
         }
       }
@@ -1188,6 +1193,32 @@ function BillingPanel({ shopId, shops, selectedShop, onShopChange, setTab }) {
             <Receipt size={20} className="text-[#5A5A40]" />
             <h3 className="font-serif text-xl font-bold">Current Bill</h3>
           </div>
+
+          {/* Product Search in Bill */}
+          <div className="relative mb-4">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+            <input className="w-full pl-11 pr-4 py-2.5 bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-xl text-sm outline-none focus:border-[#5A5A40] transition-colors"
+              placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+
+          {/* Quick Product Add Suggestions */}
+          {search.trim() && filtered.length > 0 && (
+            <div className="mb-4 max-h-40 overflow-y-auto">
+              <div className="space-y-2">
+                {filtered.slice(0, 5).map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { addToBill(p); setSearch(''); }}
+                    disabled={p.stock < 1}
+                    className="w-full text-left bg-white border border-[#1A1A1A]/10 rounded-lg px-3 py-2 hover:border-[#5A5A40] disabled:opacity-40 transition-colors"
+                  >
+                    <p className="font-semibold text-sm">{p.name}</p>
+                    <p className="text-xs text-[#1A1A1A]/40">₹{p.price} • Stock: {p.stock}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Customer Name */}
           <input className="w-full bg-[#F5F5F0] border border-[#1A1A1A]/5 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#5A5A40] transition-colors mb-4"
@@ -2110,6 +2141,8 @@ function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
   const [editProduct, setEditProduct] = useState(null);
   const [subTab, setSubTab]         = useState('catalog');
   const [catFilter, setCatFilter]   = useState('All');
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogItemsPerPage, setCatalogItemsPerPage] = useState(10);
 
   const SUB_TABS = [
     { key: 'catalog',         label: 'Catalog',          icon: <Settings size={14} /> },
@@ -2155,6 +2188,15 @@ function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
     if (sortBy === 'stock_low') list = [...list].sort((a, b) => a.stock - b.stock);
     return list;
   }, [products, search, catFilter, sortBy]);
+
+  useEffect(() => { setCatalogPage(1); }, [search, catFilter, sortBy]);
+
+  const catalogTotalPages = catalogItemsPerPage === -1 ? 1 : Math.ceil(filtered.length / catalogItemsPerPage);
+  const catalogPaginated = useMemo(() => {
+    if (catalogItemsPerPage === -1) return filtered;
+    const start = (catalogPage - 1) * catalogItemsPerPage;
+    return filtered.slice(start, start + catalogItemsPerPage);
+  }, [filtered, catalogPage, catalogItemsPerPage]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(products.map(p => p.category))].filter(Boolean).sort();
@@ -2311,7 +2353,7 @@ function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1A1A1A]/5">
-                  {filtered.map(p => (
+                  {catalogPaginated.map(p => (
                     <tr key={p.id} className="hover:bg-[#F5F5F0]/50 transition-colors">
                       {/* Product */}
                       <td className="px-6 py-4">
@@ -2365,6 +2407,29 @@ function InventoryPanel({ shopId, allShops, selectedShop, onShopChange }) {
                   ))}
                 </tbody>
               </table>
+              {filtered.length > 0 && (
+                <div className="p-6 bg-[#F5F5F0]/30 border-t border-[#1A1A1A]/5 flex flex-wrap items-center justify-between gap-4">
+                  <div className="text-xs font-bold text-[#1A1A1A]/40 uppercase tracking-widest">
+                    Showing {catalogItemsPerPage === -1 ? filtered.length : Math.min(catalogItemsPerPage, filtered.length - (catalogPage - 1) * catalogItemsPerPage)} of {filtered.length} Products
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setCatalogItemsPerPage(catalogItemsPerPage === -1 ? 10 : -1)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${catalogItemsPerPage === -1 ? 'bg-[#5A5A40] text-white' : 'bg-white border border-[#1A1A1A]/10 text-[#1A1A1A]/60 hover:bg-[#F5F5F0]'}`}>
+                      {catalogItemsPerPage === -1 ? 'Show Paginated' : 'Show All'}
+                    </button>
+                    {catalogItemsPerPage !== -1 && (
+                      <div className="flex items-center gap-1 ml-2">
+                        <button disabled={catalogPage === 1} onClick={() => setCatalogPage(p => Math.max(1, p - 1))} className="p-2 bg-white border border-[#1A1A1A]/10 rounded-xl text-[#1A1A1A]/60 hover:bg-[#F5F5F0] disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                          <ChevronLeft size={18} />
+                        </button>
+                        <div className="px-4 py-2 bg-white border border-[#1A1A1A]/10 rounded-xl text-xs font-bold text-[#5A5A40]">Page {catalogPage} of {catalogTotalPages}</div>
+                        <button disabled={catalogPage === catalogTotalPages} onClick={() => setCatalogPage(p => Math.min(catalogTotalPages, p + 1))} className="p-2 bg-white border border-[#1A1A1A]/10 rounded-xl text-[#1A1A1A]/60 hover:bg-[#F5F5F0] disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-20 text-center bg-white border border-[#1A1A1A]/10 rounded-2xl">
