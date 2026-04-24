@@ -1449,6 +1449,10 @@ def shop_reports(
     total_orders = len(orders)
     avg_order_value = round(total_revenue / total_orders, 2) if total_orders else 0
 
+    # Calculate walk-in vs online breakdown
+    walk_in_revenue = sum(o.total for o in orders if o.order_type == "walkin")
+    online_revenue = sum(o.total for o in orders if o.order_type == "online")
+
     daily = defaultdict(float)
     category_rev = defaultdict(float)
     top_items = defaultdict(lambda: {"qty": 0, "revenue": 0.0})
@@ -1468,6 +1472,8 @@ def shop_reports(
         "total_revenue": round(total_revenue, 2),
         "total_orders": total_orders,
         "avg_order_value": avg_order_value,
+        "walk_in_total": round(walk_in_revenue, 2),
+        "online_total": round(online_revenue, 2),
         "daily_sales": [{"day": k, "revenue": round(v, 2)} for k, v in sorted(daily.items())],
         "category_revenue": [{"category": k, "revenue": round(v, 2)} for k, v in category_rev.items()],
         "top_products": sorted(

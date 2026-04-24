@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar, Truck, Store } from 'lucide-react';
 
-export default function DailySalesCalendar({ analytics, onDateSelect, selectedDate: propSelectedDate }) {
+export default function DailySalesCalendar({ analytics, onDateSelect, selectedDate: propSelectedDate, reportData }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
 
@@ -59,12 +59,19 @@ export default function DailySalesCalendar({ analytics, onDateSelect, selectedDa
   // Get total for display - show selected date if chosen, otherwise show month total
   let totalRevenue, totalWalkIn, totalOnline;
 
-  if (activeSelectedDate) {
+  if (activeSelectedDate && reportData) {
+    // Use reportData from parent when available
+    totalRevenue = reportData.total_revenue || 0;
+    totalWalkIn = reportData.walk_in_total || 0;
+    totalOnline = reportData.online_total || 0;
+  } else if (activeSelectedDate) {
+    // Fallback to dailySalesMap if reportData not available
     const selectedData = dailySalesMap[activeSelectedDate];
     totalRevenue = selectedData?.total || 0;
     totalWalkIn = selectedData?.walkIn || 0;
     totalOnline = selectedData?.online || 0;
   } else {
+    // Show month totals when no date selected
     totalRevenue = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.total || 0), 0);
     totalWalkIn = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.walkIn || 0), 0);
     totalOnline = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.online || 0), 0);
