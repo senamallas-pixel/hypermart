@@ -44,7 +44,27 @@
       "Read(//c/c/Users/pedda/Source/Main/hypermart/frontend/src/pages/**)",
       "Read(//c/Users/pedda/AppData/Local/Temp/claude/c--Users-pedda-Source-Main-hypermart/7b3ba20c-82ea-4212-be5d-4caa45de26d8/tasks/**)",
       "Bash(curl -s http://localhost:8000/health)",
-      "Bash(VITE_API_URL=http://localhost:8000 npm run dev)"
+      "Bash(VITE_API_URL=http://localhost:8000 npm run dev)",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:8000/shops/?size=100)",
+      "Bash(python -c \"from database import SessionLocal; from models import Shop; s = SessionLocal\\(\\); shops = s.query\\(Shop\\).all\\(\\); print\\('\\\\n'.join\\([f'{s.name} \\({s.id}\\): location_name={s.location_name}' for s in shops]\\)\\)\")",
+      "Bash(python -c \"from database import SessionLocal; from models import Shop; s = SessionLocal\\(\\); shops = s.query\\(Shop\\).all\\(\\); print\\('\\\\n'.join\\([f'{s.id:2}: {s.name:25} location: {s.location_name}' for s in shops]\\)\\)\")",
+      "Bash(python -c \"from database import SessionLocal; from models import Shop; db = SessionLocal\\(\\); shops = db.query\\(Shop\\).all\\(\\); print\\('\\\\n'.join\\([f'{s.id:2}: {s.name:25} location={s.location_name}' for s in shops]\\)\\)\")",
+      "Bash(sqlite3 hypermart.db \".tables\")",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(sqlite3 hypermart.db \"SELECT id, name, location_name, status FROM shops LIMIT 20;\")",
+      "Bash(sqlite3 hypermart.db \"SELECT id, name, location_name FROM shops;\")",
+      "Bash(python -c \"import sys, json; data = json.load\\(sys.stdin\\); [print\\(f\\\\\"{s['id']:2}: {s['name']:25} location_name={s.get\\('location_name', 'N/A'\\)!r}\\\\\"\\) for s in data.get\\('items', []\\)[:10]]\")",
+      "Bash(python -c \"import sys, json; data = json.load\\(sys.stdin\\); [print\\(f'{s[\\\\\"id\\\\\"]:2}: {s[\\\\\"name\\\\\"]:25} location={s.get\\(\\\\\"location_name\\\\\", \\\\\"N/A\\\\\"\\)!r}'\\) for s in data.get\\('items', []\\)[:10]]\")",
+      "Read(//tmp/**)",
+      "Bash(curl -v http://localhost:8000/shops/?size=100)",
+      "Bash(curl -s http://localhost:8000/shops\\\\?size=100)",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('Total shops:', len\\(d.get\\('items', []\\)\\)\\); [print\\(f'{s[\\\\\"name\\\\\"]:30} {s[\\\\\"location_name\\\\\"]}'\\) for s in d.get\\('items', []\\)[:10]]\")",
+      "Read(//c/c/Users/pedda/Source/Main/hypermart/backend/**)",
+      "Bash(curl -s http://localhost:8000/api/v1/health)",
+      "Bash(curl -s http://localhost:5191)",
+      "Bash(curl -s http://localhost:8000/shops)"
     ]
   }
 }

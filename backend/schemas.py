@@ -568,29 +568,31 @@ class POStatusUpdate(BaseModel):
 # ── Discounts ────────────────────────────────────────────────────────
 
 class ProductDiscountCreate(BaseModel):
-    product_id:     int
-    product_name:   Optional[str]      = None
-    type:           DiscountType
-    buy_qty:        Optional[int]      = None
-    get_qty:        Optional[int]      = None
-    bulk_price:     Optional[float]    = None
-    discount_value: Optional[float]    = None
-    valid_till:     Optional[datetime] = None
+    product_id:           int
+    product_name:         Optional[str]           = None
+    type:                 DiscountType
+    buy_qty:              Optional[int]           = None
+    get_qty:              Optional[int]           = None
+    bulk_price:           Optional[float]         = None
+    discount_value:       Optional[float]         = None
+    discount_amount_type: DiscountAmountType      = DiscountAmountType.percentage
+    valid_till:           Optional[datetime]      = None
 
 
 class ProductDiscountOut(OrmBase):
-    id:             int
-    shop_id:        int
-    product_id:     int
-    product_name:   Optional[str] = None
-    type:           DiscountType
-    buy_qty:        Optional[int]   = None
-    get_qty:        Optional[int]   = None
-    bulk_price:     Optional[float] = None
-    discount_value: Optional[float] = None
-    status:         str
-    valid_till:     Optional[datetime] = None
-    created_at:     datetime
+    id:                   int
+    shop_id:              int
+    product_id:           int
+    product_name:         Optional[str]       = None
+    type:                 DiscountType
+    buy_qty:              Optional[int]       = None
+    get_qty:              Optional[int]       = None
+    bulk_price:           Optional[float]     = None
+    discount_value:       Optional[float]     = None
+    discount_amount_type: DiscountAmountType
+    status:               str
+    valid_till:           Optional[datetime]  = None
+    created_at:           datetime
 
 
 class OrderDiscountCreate(BaseModel):

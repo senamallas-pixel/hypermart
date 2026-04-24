@@ -251,7 +251,33 @@ function ShopProductsView({ shop, onBack }) {
   };
 
   const shopCartItems = cart.shopId === shop.id ? cart.items : [];
-  const shopTotal     = shopCartItems.reduce((s, i) => s + i.price * i.quantity, 0);
+
+  // Calculate discounts for each item
+  const getDiscountedPrice = useCallback((productId) => {
+    const discount = productDiscounts.find(d =>
+      d.product_id === productId &&
+      d.status === 'active' &&
+      (!d.valid_till || new Date(d.valid_till) >= new Date())
+    );
+    if (!discount) return null;
+
+    if (discount.type === 'fixed_amount') {
+      return Math.max(0, discount.amount);
+    } else if (discount.type === 'percentage') {
+      const product = products.find(p => p.id === productId);
+      if (product) {
+        return Math.round(product.price * discount.amount / 100);
+      }
+    }
+    return null;
+  }, [productDiscounts, products]);
+
+  const shopTotal = shopCartItems.reduce((s, i) => {
+    const discount = getDiscountedPrice(i.productId) || 0;
+    const discountedPrice = Math.max(0, i.price - discount);
+    return s + discountedPrice * i.quantity;
+  }, 0);
+
   const cartCount     = shopCartItems.reduce((s, i) => s + i.quantity, 0);
 
   const productCategories = useMemo(() => {
@@ -587,32 +613,66 @@ function ShopProductsView({ shop, onBack }) {
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                {shopCartItems.map(item => (
-                  <div key={item.productId} className="flex gap-3 items-center">
-                    <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0">
-                      {item.image ? <img src={fixImageUrl(item.image)} className="w-full h-full object-cover" alt={item.name} /> : <Package size={20} className="m-auto mt-3.5 text-[#5A5A40]/20" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm truncate">{item.name}</p>
-                      <p className="text-xs text-[#1A1A1A]/40">&#8377;{item.price} / {item.unit}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <p className="font-bold text-sm">&#8377;{item.price * item.quantity}</p>
-                      <div className="flex items-center bg-[#F5F5F0] rounded-xl border border-[#1A1A1A]/6 overflow-hidden">
-                        <button onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="w-7 h-7 flex items-center justify-center font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-colors text-sm">&#8722;</button>
-                        <span className="w-6 text-center text-xs font-bold">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="w-7 h-7 flex items-center justify-center font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-colors text-sm">&#43;</button>
+                {shopCartItems.map(item => {
+                  const discount = getDiscountedPrice(item.productId) || 0;
+                  const discountedPrice = Math.max(0, item.price - discount);
+                  const itemTotal = discountedPrice * item.quantity;
+                  const itemSubtotal = item.price * item.quantity;
+                  return (
+                    <div key={item.productId} className="flex gap-3 items-center">
+                      <div className="w-14 h-14 bg-[#F5F5F0] rounded-xl overflow-hidden flex-shrink-0">
+                        {item.image ? <img src={fixImageUrl(item.image)} className="w-full h-full object-cover" alt={item.name} /> : <Package size={20} className="m-auto mt-3.5 text-[#5A5A40]/20" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm truncate">{item.name}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs text-[#1A1A1A]/40">&#8377;{discountedPrice} / {item.unit}</p>
+                          {discount > 0 && (
+                            <span className="text-[9px] line-through text-[#1A1A1A]/30">&#8377;{item.price}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="text-right">
+                          <p className="font-bold text-sm">&#8377;{itemTotal}</p>
+                          {discount > 0 && (
+                            <p className="text-[9px] text-green-600 font-semibold">-₹{discount * item.quantity}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center bg-[#F5F5F0] rounded-xl border border-[#1A1A1A]/6 overflow-hidden">
+                          <button onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="w-7 h-7 flex items-center justify-center font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-colors text-sm">&#8722;</button>
+                          <span className="w-6 text-center text-xs font-bold">{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="w-7 h-7 flex items-center justify-center font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-colors text-sm">&#43;</button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="px-6 py-5 border-t border-[#1A1A1A]/6 space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest text-xs">{t('marketplace.total')}</span>
-                  <span className="font-serif text-2xl font-bold">&#8377;{shopTotal}</span>
-                </div>
+                {(() => {
+                  const subtotal = shopCartItems.reduce((s, i) => s + i.price * i.quantity, 0);
+                  const totalDiscount = subtotal - shopTotal;
+                  return (
+                    <>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest">Subtotal</span>
+                        <span className="text-[#1A1A1A]/60">&#8377;{subtotal}</span>
+                      </div>
+                      {totalDiscount > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-green-600 font-bold uppercase tracking-widest">Discounts</span>
+                          <span className="text-green-600 font-bold">-&#8377;{totalDiscount}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center border-t border-[#1A1A1A]/6 pt-3">
+                        <span className="text-[#1A1A1A]/40 font-bold uppercase tracking-widest text-xs">{t('marketplace.total')}</span>
+                        <span className="font-serif text-2xl font-bold">&#8377;{shopTotal}</span>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* Payment method selector */}
                 <div>
@@ -1165,7 +1225,7 @@ function MarketplaceBanner({ location }) {
 // ── Main Marketplace ───────────────────────────────────────────────
 export default function Marketplace() {
   const { t } = useTranslation();
-  const { currentUser, search, setSearch, activeLocation, targetShopId, setTargetShopId } = useApp();
+  const { currentUser, search, setSearch, activeLocation, setActiveLocation, targetShopId, setTargetShopId } = useApp();
   const location = useLocation();
   const [shops, setShops]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1284,7 +1344,7 @@ export default function Marketplace() {
                 Try selecting a different location or check back later.
               </p>
               <button
-                onClick={() => setSearch('')}
+                onClick={() => { setSearch(''); setActiveLocation('All'); }}
                 className="px-6 py-3 bg-[#5A5A40] text-white rounded-xl font-bold text-sm hover:bg-[#4A4A30] transition-all"
               >
                 Browse All Locations

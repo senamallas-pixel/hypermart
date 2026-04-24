@@ -395,7 +395,7 @@ function TopNav() {
                         if (!geoRes.ok) throw new Error('Geocoding failed');
 
                         const geo = await geoRes.json();
-                        const detectedLocation = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || `Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+                        const detectedLocation = geo.address?.city || geo.address?.town || geo.address?.suburb || geo.address?.county || geo.address?.country || 'Your Location';
 
                         // Check if detected location matches any shop locations
                         const availableLocations = allLocations.filter(l => l !== 'All');
@@ -404,22 +404,15 @@ function TopNav() {
                           detectedLocation.toLowerCase().includes(loc.toLowerCase())
                         );
 
+                        // Always set the detected location (even if no shops match)
+                        // Marketplace will show "NO SHOPS NEAR YOU" if none match
                         if (matchingLocation) {
                           setActiveLocation(matchingLocation);
-                          setShowLocMenu(false);
-                        } else if (availableLocations.length > 0) {
-                          // Show available locations to choose from
-                          const selected = prompt(
-                            `📍 No shops found exactly in "${detectedLocation}".\n\nSelect a nearby shop location:\n\n${availableLocations.join('\n')}`,
-                            availableLocations[0]
-                          );
-                          if (selected && availableLocations.includes(selected)) {
-                            setActiveLocation(selected);
-                            setShowLocMenu(false);
-                          }
                         } else {
-                          alert('❌ No shop locations found in the system.');
+                          // Set detected location even if no shops match
+                          setActiveLocation(detectedLocation);
                         }
+                        setShowLocMenu(false);
                       } catch (err) {
                         console.error('Location error:', err);
                         alert('❌ Location detection failed.\n\nMake sure:\n• Location permission is enabled\n• You have internet connection\n• Browser supports geolocation');
