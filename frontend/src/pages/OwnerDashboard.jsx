@@ -1721,7 +1721,7 @@ function AnalyticsPanel({ analytics, shopName, shopId }) {
         ) : null}
       </div>
       {/* Daily Sales Calendar With Walk-in and Online Breakdown */}
-      <DailySalesCalendar analytics={analytics} onDateSelect={handleDateSelect} />
+      <DailySalesCalendar analytics={analytics} onDateSelect={handleDateSelect} selectedDate={selectedDate} />
 
       {/* Daily Sales Chart */}
       <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">

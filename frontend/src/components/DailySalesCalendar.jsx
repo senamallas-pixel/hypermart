@@ -2,9 +2,12 @@ import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar, Truck, Store } from 'lucide-react';
 
-export default function DailySalesCalendar({ analytics, onDateSelect }) {
+export default function DailySalesCalendar({ analytics, onDateSelect, selectedDate: propSelectedDate }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
+
+  // Use prop if provided (from parent), otherwise use local state
+  const activeSelectedDate = propSelectedDate || selectedDate;
 
   // Sample data structure: analytics.monthly_daily_sales should have all days of the month
   const dailySalesMap = useMemo(() => {
@@ -53,10 +56,19 @@ export default function DailySalesCalendar({ analytics, onDateSelect }) {
   const firstDay = getFirstDayOfMonth(currentMonth);
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Get total for display
-  const totalRevenue = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.total || 0), 0);
-  const totalWalkIn = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.walkIn || 0), 0);
-  const totalOnline = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.online || 0), 0);
+  // Get total for display - show selected date if chosen, otherwise show month total
+  let totalRevenue, totalWalkIn, totalOnline;
+
+  if (activeSelectedDate) {
+    const selectedData = dailySalesMap[activeSelectedDate];
+    totalRevenue = selectedData?.total || 0;
+    totalWalkIn = selectedData?.walkIn || 0;
+    totalOnline = selectedData?.online || 0;
+  } else {
+    totalRevenue = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.total || 0), 0);
+    totalWalkIn = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.walkIn || 0), 0);
+    totalOnline = Object.values(dailySalesMap).reduce((sum, day) => sum + (day.online || 0), 0);
+  }
 
   // Create calendar grid
   const days = [];
@@ -167,7 +179,7 @@ export default function DailySalesCalendar({ analytics, onDateSelect }) {
             const walkInPercent = dayData?.total > 0 ? (dayData.walkIn / dayData.total) * 100 : 0;
             const onlinePercent = dayData?.total > 0 ? (dayData.online / dayData.total) * 100 : 0;
 
-            const isSelected = isCurrentMonth && selectedDate === dayKey;
+            const isSelected = isCurrentMonth && activeSelectedDate === dayKey;
 
             const handleDateClick = () => {
               if (isCurrentMonth) {
