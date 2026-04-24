@@ -1591,15 +1591,24 @@ function AnalyticsPanel({ analytics, shopName, shopId }) {
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
 
   const handleRangeChange = (days) => {
     setReportRange(days);
+    setSelectedDate(null);
     if (days !== 'custom') {
       const d = new Date();
       d.setDate(d.getDate() - parseInt(days));
       setDateFrom(d.toISOString().split('T')[0]);
       setDateTo(today);
     }
+  };
+
+  const handleDateSelect = (dateStr) => {
+    setSelectedDate(dateStr);
+    setReportRange('custom');
+    setDateFrom(dateStr);
+    setDateTo(dateStr);
   };
 
   const fetchReport = async () => {
@@ -1656,7 +1665,13 @@ function AnalyticsPanel({ analytics, shopName, shopId }) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-[#5A5A40]" />
-            <h4 className="font-serif text-lg font-bold">Reports</h4>
+            <h4 className="font-serif text-lg font-bold">
+              Reports{selectedDate && (
+                <span className="text-sm font-normal text-[#1A1A1A]/60 ml-2">
+                  for {new Date(selectedDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              )}
+            </h4>
           </div>
           <button onClick={handleExportCSV} disabled={exporting || !reportData}
             className="flex items-center gap-1.5 px-3 py-2 bg-[#F5F5F0] rounded-xl text-xs font-bold text-[#5A5A40] hover:bg-[#5A5A40]/10 transition-all disabled:opacity-40 border border-[#5A5A40]/20">
@@ -1706,7 +1721,7 @@ function AnalyticsPanel({ analytics, shopName, shopId }) {
         ) : null}
       </div>
       {/* Daily Sales Calendar With Walk-in and Online Breakdown */}
-      <DailySalesCalendar analytics={analytics} />
+      <DailySalesCalendar analytics={analytics} onDateSelect={handleDateSelect} />
 
       {/* Daily Sales Chart */}
       <div className="bg-white border border-[#1A1A1A]/10 rounded-3xl p-6">
