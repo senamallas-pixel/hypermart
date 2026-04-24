@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar, Truck, Store } from 'lucide-react';
 
-export default function DailySalesCalendar({ analytics }) {
+export default function DailySalesCalendar({ analytics, onDateSelect }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
 
   // Sample data structure: analytics.monthly_daily_sales should have all days of the month
   const dailySalesMap = useMemo(() => {
@@ -166,19 +167,33 @@ export default function DailySalesCalendar({ analytics }) {
             const walkInPercent = dayData?.total > 0 ? (dayData.walkIn / dayData.total) * 100 : 0;
             const onlinePercent = dayData?.total > 0 ? (dayData.online / dayData.total) * 100 : 0;
 
+            const isSelected = isCurrentMonth && selectedDate === dayKey;
+
+            const handleDateClick = () => {
+              if (isCurrentMonth) {
+                setSelectedDate(dayKey);
+                if (onDateSelect) onDateSelect(dayKey);
+              }
+            };
+
             return (
               <motion.div
                 key={`day-${idx}-${cell.day}`}
-                whileHover={hasData ? { scale: 1.02, zIndex: 10 } : {}}
-                className={`bg-white min-h-[70px] sm:min-h-[100px] p-2 sm:p-3 flex flex-col justify-between transition-all relative group ${
-                  isToday
-                    ? 'ring-2 ring-inset ring-[#5A5A40]'
-                    : ''
+                whileHover={isCurrentMonth ? { scale: 1.05, zIndex: 10 } : {}}
+                onClick={handleDateClick}
+                className={`min-h-[70px] sm:min-h-[100px] p-2 sm:p-3 flex flex-col justify-between transition-all relative group cursor-pointer border-2 ${
+                  isSelected
+                    ? 'bg-[#5A5A40] text-white border-[#5A5A40] ring-2 ring-[#5A5A40]'
+                    : isToday
+                    ? 'bg-white border-[#5A5A40] ring-2 ring-inset ring-[#5A5A40]'
+                    : isCurrentMonth
+                    ? 'bg-white border-transparent hover:border-[#5A5A40]/30 hover:bg-[#F5F5F0]'
+                    : 'bg-[#F5F5F0]/50 border-transparent'
                 }`}
               >
                 {/* Day Number */}
                 <div className={`text-sm font-semibold transition-colors ${
-                  isToday ? 'text-[#5A5A40]' : isCurrentMonth ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/30 font-medium'
+                  isSelected ? 'text-white' : isToday ? 'text-[#5A5A40]' : isCurrentMonth ? 'text-[#1A1A1A]' : 'text-[#1A1A1A]/30 font-medium'
                 }`}>
                   {cell.day}
                 </div>
@@ -187,21 +202,23 @@ export default function DailySalesCalendar({ analytics }) {
                   <div className="space-y-2 select-none">
                     {/* Total Amount */}
                     <div>
-                      <p className="text-xs font-bold text-[#1A1A1A]">
+                      <p className={`text-xs font-bold transition-colors ${isSelected ? 'text-white' : 'text-[#1A1A1A]'}`}>
                         ₹{(dayData.total / 1000).toFixed(1)}k
                       </p>
 
                       {/* Progress Bar showing Walk-in vs Online */}
-                      <div className="flex gap-0.5 h-1.5 mt-1 bg-[#E8E8DC] rounded-full overflow-hidden opacity-80 group-hover:opacity-100 transition-opacity">
+                      <div className={`flex gap-0.5 h-1.5 mt-1 rounded-full overflow-hidden opacity-80 group-hover:opacity-100 transition-opacity ${
+                        isSelected ? 'bg-white/30' : 'bg-[#E8E8DC]'
+                      }`}>
                         {walkInPercent > 0 && (
                           <div
-                            className="bg-[#5A5A40] transition-all"
+                            className={`transition-all ${isSelected ? 'bg-white' : 'bg-[#5A5A40]'}`}
                             style={{ width: `${walkInPercent}%` }}
                           />
                         )}
                         {onlinePercent > 0 && (
                           <div
-                            className="bg-blue-500 transition-all"
+                            className={`transition-all ${isSelected ? 'bg-blue-200' : 'bg-blue-500'}`}
                             style={{ width: `${onlinePercent}%` }}
                           />
                         )}
@@ -238,7 +255,7 @@ export default function DailySalesCalendar({ analytics }) {
                   </div>
                 ) : (
                   <div className={`mt-auto text-[10px] uppercase font-bold tracking-widest transition-opacity ${
-                    isCurrentMonth ? 'text-[#1A1A1A]/10 group-hover:text-[#1A1A1A]/30' : 'opacity-0'
+                    isSelected ? 'text-white/70' : isCurrentMonth ? 'text-[#1A1A1A]/10 group-hover:text-[#1A1A1A]/30' : 'opacity-0'
                   }`}>
                     No sales
                   </div>
