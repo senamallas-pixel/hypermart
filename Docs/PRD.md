@@ -1,7 +1,7 @@
 # HyperMart — Full Product Requirements Document
 
-**Version:** 4.0
-**Date:** April 12, 2026
+**Version:** 4.1
+**Date:** May 1, 2026
 **Status:** Implemented (Active Development)
 **Stack:** React 18 (JSX) · Vite 6 · React Native / Expo SDK 54 · Python · FastAPI 0.115 · SQLAlchemy 2 · SQLite · JWT (python-jose) · OpenAI GPT-4o-mini · Tailwind CSS 4 · React-Leaflet · Razorpay
 **Platforms:** Web SPA (localhost:5173) · Android (Expo)
@@ -32,6 +32,7 @@
 18. [Error Handling & Edge Cases](#18-error-handling--edge-cases)
 19. [Known Limitations & Backlog](#19-known-limitations--backlog)
 20. [Acceptance Criteria Checklist](#20-acceptance-criteria-checklist)
+21. [Data Models Reference](#21-data-models-reference)
 
 ---
 
@@ -190,10 +191,13 @@ Available on both web and Android. Searches across ALL shops in real-time.
 
 **Features (both platforms):**
 - Location filter (All, Green Valley, Central Market, Food Plaza, Milk Lane, Old Town)
+- **GPS-based location detection** — "Use Current Location" button uses browser Geolocation API + Nominatim reverse geocoding
+- **Strict location filtering** — Shops not in selected location are hidden; shows "No Shops Near You" message when empty
 - Category filter chips (Grocery, Dairy, Vegetables & Fruits, etc.)
 - Shop cards with logo, rating, delivery radius, category badge
 - Product detail with discount badges, low-stock warnings, out-of-stock dimming
 - Cart with single-shop constraint, quantity controls
+- **Real-time discount calculation** in cart — applies product discounts and shows savings per line item
 
 ### 6.3 Cart & Checkout
 
@@ -206,9 +210,9 @@ Available on both web and Android. Searches across ALL shops in real-time.
 | UPI (QR + App) | ✓ (QR modal) | ✓ (QR + Linking) |
 
 **Discount calculations (both platforms):**
-- Product discounts: percentage off when min quantity met
+- Product discounts: BOGO, buy_x_get_y, bulk_price, individual (percentage OR flat amount)
 - Order discounts: percentage or flat amount when min bill amount met
-- Bill summary shows itemized savings breakdown
+- Bill summary shows itemized savings breakdown (Subtotal → Discounts → Total)
 
 ### 6.4 Order History
 
@@ -219,28 +223,67 @@ Available on both web and Android. Searches across ALL shops in real-time.
 
 ### 6.5 Owner Dashboard
 
-Six-tab interface: Overview · Products · Orders · Billing · Reports · Settings
+Six-tab interface: Overview · Inventory · Orders · Billing · Reports · Settings
 
 **Overview:**
 - Analytics cards (orders, revenue, products, low stock)
 - Shop profile card with logo upload (ImagePicker)
 - AI restock advice card (triggers `POST /ai/low-stock-insight` with real DB data)
 
+**Inventory (sub-tabs: Catalog, Stock, Stock Adjustment, Bulk Discount, Credit, Trash):**
+- **Catalog** — product list with search, sort, category filter, and **pagination** (10/page with Show All toggle)
+- **Stock** & **Stock Adjustment** — bulk inventory editing with low-stock alerts, expiry tracking, and **pagination**
+- **Bulk Discount** — manage product discounts (BOGO, buy_x_get_y, bulk price, individual %/flat)
+- **Credit** — supplier management (CRUD: name, contact, GST, address)
+- **Trash** — purchase order management (draft → sent → received → cancelled)
+
 **Billing (Walk-in POS):**
-- Product search-and-select dropdown (search by name, shows price/stock)
+- **Product search bar** with autocomplete suggestions (top 5 matching products)
 - Quick-add product: if product not found, inline form to create it on the spot
 - Quantity stepper (+/-) per item
-- Bill summary with item totals
+- Bill summary with itemized totals + discount breakdown (item discounts + bill discount)
 - Payment: Cash / UPI (with QR code modal) / Card
 - UPI QR shows shop's UPI ID with bill amount embedded
+- Walk-in vs online order distinction (`order_type` field)
 
 **Reports:**
 - AI Sales Forecast card (triggers `POST /ai/sales-forecast` with real order/revenue data)
-- Date-range report loading with stats cards
+- **Date-range report** (Today / 7 Days / 30 Days / Custom) with stats cards (Revenue, Orders, Avg Order)
+- **Daily Sales Calendar** — interactive calendar with click-to-select dates
+  - Selected date highlights with dark background and white text
+  - **Auto-updates summary stats** on click: Total Revenue, Walk-in Sales, Online Sales for that day
+  - Backend returns `walk_in_total` and `online_total` in `/shops/{id}/reports`
+  - Tooltip on hover shows daily revenue breakdown
+- CSV export for selected date range
 
 ### 6.6 Shop Reviews
 
 Customers can view and submit reviews (rating + comment) for shops. Reviews display with star ratings and avatar initials.
+
+### 6.7 Discount System
+
+**Product Discounts** (`/shops/{id}/product-discounts`) — applied at cart line-item level:
+
+| Type | Description |
+|------|-------------|
+| `bogo` | Buy 1 Get 1 free |
+| `buy_x_get_y` | Buy X get Y free (configurable buy_qty, get_qty) |
+| `bulk_price` | Special price when min quantity reached |
+| `individual` | Per-item discount (percentage OR flat amount via `discount_amount_type`) |
+
+**Order Discounts** (`/shops/{id}/order-discounts`) — applied at bill total level:
+- Triggered when `min_bill_value` is reached
+- `discount_type`: `percentage` or `flat`
+
+### 6.8 Suppliers & Purchase Orders
+
+**Suppliers** (`/shops/{id}/suppliers`) — CRUD management with:
+- Contact person, phone, email, address, GST number
+
+**Purchase Orders** (`/shops/{id}/purchase-orders`) — track restocking from suppliers:
+- States: `draft` → `sent` → `received` → `cancelled`
+- Line items reference existing products and quantities
+- Auto-calculates total amount
 
 ---
 
@@ -278,7 +321,7 @@ Browser / App
 | `get_popular_products` | Top sellers by actual sales volume | Customer, Owner, Admin |
 | `get_all_products` | Browse all products, optional category filter | Customer, Owner |
 | `get_shop_products` | Full inventory for a specific shop | Owner |
-| `get_shop_info` | Shop details: name, rating, location, status | All |
+| `get_shop_info` | Shop details: name, rating, location, status, UPI | All |
 | `list_shops` | Available shops with location/category filter | Customer, Admin |
 | `get_sales_summary` | Revenue, orders, top products for a shop (N days) | Owner |
 | `get_low_stock_items` | Products below stock threshold | Owner |
@@ -324,6 +367,14 @@ Chat widget shows context-aware suggestion chips:
 **Nearby Shops** — `GET /shops/nearby?lat=&lng=&radius=` implemented with bounding-box + Haversine approximation. Web frontend renders shops on interactive Leaflet map.
 
 **Owner Shop Location Pinning** — Interactive Leaflet map in Settings tab. Click to set lat/lng.
+
+**Customer GPS Location Detection (Web):**
+- TopNav location dropdown with "Use Current Location" button
+- Uses browser `navigator.geolocation.getCurrentPosition()` for GPS coordinates
+- Reverse geocoding via Nominatim OpenStreetMap API to resolve area name
+- Sets `activeLocation` in AppContext; falls back to manual selection if GPS denied
+- **Strict location filtering** — only shops with matching `location_name` displayed
+- Shows "No Shops Near You" empty state when no shops match the active location
 
 ---
 
@@ -526,7 +577,7 @@ Unit tests in `frontend_android/__tests__/`:
 
 ## 19. Known Limitations & Backlog
 
-### Current Limitations (v4.0)
+### Current Limitations (v4.1)
 
 | Limitation | Notes |
 |------------|-------|
@@ -578,7 +629,54 @@ Unit tests in `frontend_android/__tests__/`:
 | 25 | Account deletion | ✓ |
 | 26 | Swagger UI accessible at `/docs` | ✓ |
 | 27 | Graceful AI degradation when API key absent | ✓ |
+| 28 | GPS-based customer location detection with strict shop filtering | ✓ |
+| 29 | "No Shops Near You" message when location has no matching shops | ✓ |
+| 30 | Catalog/Stock/Stock Adjustment pagination with Show All toggle | ✓ |
+| 31 | Selectable calendar dates with daily report stats updating on click | ✓ |
+| 32 | Walk-in vs online sales breakdown in reports endpoint | ✓ |
+| 33 | Product discount with flat OR percentage amount type | ✓ |
+| 34 | Suppliers CRUD and Purchase Order workflow | ✓ |
+| 35 | Bulk discount manager (BOGO, buy_x_get_y, bulk price, individual) | ✓ |
 
 ---
 
-*End of PRD — HyperMart v4.0*
+## 21. Data Models Reference
+
+### 21.1 Core Models (13 total)
+
+| Model | Key Fields |
+|-------|-----------|
+| `User` | uid, email, role, password_hash, multi_location_enabled, phone |
+| `Shop` | owner_id, name, category, location_name, status, lat/lng, upi_id, delivery_radius |
+| `Product` | shop_id, name, price, mrp, stock, low_stock_threshold, expiry_date, status |
+| `Order` | shop_id, customer_id, total, subtotal, item_discounts, bill_discount, order_type, status, payment_status, delivery_address, accepted_at, out_for_delivery_at, delivered_at |
+| `OrderItem` | order_id, product_id, name, price, quantity |
+| `Subscription` | user_id, plan_amount, status, starts_at, expires_at |
+| `Review` | shop_id, customer_id, rating, comment |
+| `PasswordResetToken` | user_id, token, expires_at, used |
+| `Supplier` | shop_id, name, contact_person, phone, email, gst_number |
+| `PurchaseOrder` | shop_id, supplier_id, total_amount, status, notes |
+| `PurchaseOrderItem` | purchase_order_id, product_id, name, price, quantity |
+| `ProductDiscount` | shop_id, product_id, type, buy_qty, get_qty, bulk_price, discount_value, discount_amount_type, valid_till |
+| `OrderDiscount` | shop_id, min_bill_value, discount_type, discount_value, valid_till |
+
+### 21.2 Enums (12 total)
+
+| Enum | Values |
+|------|--------|
+| `UserRole` | customer, owner, admin |
+| `ShopStatus` | pending, approved, suspended |
+| `ShopCategory` | Grocery, Dairy, Vegetables & Fruits, Meat, Bakery & Snacks, Beverages, Household, Personal Care |
+| `ShopLocation` | Green Valley, Central Market, Food Plaza, Milk Lane, Old Town |
+| `ProductStatus` | active, out_of_stock |
+| `OrderStatus` | pending, accepted, ready, out_for_delivery, delivered, rejected |
+| `PaymentStatus` | pending, paid |
+| `PaymentMethod` | cash, upi, razorpay, online |
+| `SubscriptionStatus` | pending, active, expired |
+| `PurchaseOrderStatus` | draft, sent, received, cancelled |
+| `DiscountType` | bogo, buy_x_get_y, bulk_price, individual |
+| `DiscountAmountType` | percentage, flat |
+
+---
+
+*End of PRD — HyperMart v4.1*
