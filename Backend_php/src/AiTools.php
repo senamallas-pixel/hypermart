@@ -231,8 +231,8 @@ class Ai
                     $cutoff = gmdate('Y-m-d H:i:s', strtotime("-$days days"));
                     $orders = Database::all("SELECT total FROM orders WHERE shop_id = :s AND created_at >= :c AND status != 'rejected'", ['s' => $shopId, 'c' => $cutoff]);
                     $totalRev = array_sum(array_map(fn ($o) => (float) $o['total'], $orders));
-                    $top = Database::all("SELECT oi.name, SUM(oi.quantity) qty FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.shop_id = :s AND o.created_at >= :c GROUP BY oi.name ORDER BY qty DESC LIMIT 5", ['s' => $shopId, 'c' => $cutoff]);
-                    $topStr = $top ? implode(', ', array_map(fn ($t) => "{$t['name']} ({$t['qty']} sold)", $top)) : 'None';
+                    $top = Database::all("SELECT oi.name, SUM(oi.quantity) qty, SUM(oi.price * oi.quantity) revenue FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.shop_id = :s AND o.created_at >= :c GROUP BY oi.name ORDER BY qty DESC LIMIT 5", ['s' => $shopId, 'c' => $cutoff]);
+                    $topStr = $top ? implode(', ', array_map(fn ($t) => "{$t['name']} — {$t['qty']} sold, ₹" . round((float) $t['revenue']) . ' earned', $top)) : 'None';
                     $cnt = count($orders);
                     $avg = $cnt ? round($totalRev / $cnt) : 0;
                     return "Last $days days for shop #$shopId:\n- Orders: $cnt | Revenue: ₹" . round($totalRev) . "\n- Avg order: ₹$avg\n- Top products: $topStr";

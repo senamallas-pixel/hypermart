@@ -182,7 +182,7 @@ class AiController
         $history = is_array($b['history'] ?? null) ? $b['history'] : [];
 
         $formatting = "\n\nFormatting rules: Be VERY concise (under 80 words). "
-            . 'For product lists use compact format: **Name** ₹price (no stock/shop unless asked). '
+            . 'For product lists use the compact format "**Name** — ₹<amount>" using the REAL number from tool results; never output the literal word "price", and omit the amount if it is unknown. '
             . 'Use short bullet points, not numbered lists. Never repeat metadata the user didn\'t ask for. '
             . 'Never use tables or code blocks. No filler sentences. Get straight to the answer.';
         $prompts = [
