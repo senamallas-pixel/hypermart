@@ -153,3 +153,9 @@ export const bulkUpdateProducts = (shopId, items) => api.patch(`/shops/${shopId}
 // ── Multi-location Toggle ────────────────────────────────────────
 
 export const toggleMultiLocation = (userId, enabled) => api.patch(`/users/${userId}/multi-location`, { multi_location_enabled: enabled ? 1 : 0 });
+
+// ── Notifications ─────────────────────────────────────────────────
+export const listNotifications        = (limit = 30) => api.get('/notifications/me', { params: { limit } });
+export const getUnreadCount           = ()           => api.get('/notifications/me/unread-count');
+export const markNotificationRead     = (id)         => api.patch(`/notifications/${id}/read`);
+export const markAllNotificationsRead = ()           => api.post('/notifications/read-all');

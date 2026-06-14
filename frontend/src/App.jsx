@@ -21,6 +21,7 @@ import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
 import LanguageSelector   from './components/LanguageSelector';
 import GlobalSearch       from './components/GlobalSearch';
+import NotificationBell    from './components/NotificationBell';
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
@@ -440,6 +441,8 @@ function TopNav() {
           </div>
 
           <LanguageSelector />
+
+          {currentUser && <NotificationBell />}
 
           {currentUser ? (
             <div className="relative flex items-center gap-1">
