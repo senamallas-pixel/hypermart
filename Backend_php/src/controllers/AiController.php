@@ -210,6 +210,7 @@ class AiController
         $toolsUsed = [];
         $sources = [];
         $maxRounds = 3;
+        Ai::resetProducts();
 
         try {
             for ($i = 0; $i <= $maxRounds; $i++) {
@@ -235,7 +236,7 @@ class AiController
                     continue;
                 }
                 $reply = trim($msg['content'] ?? '');
-                Response::json(['reply' => $reply, 'tools_used' => $toolsUsed, 'sources' => $sources]);
+                Response::json(['reply' => $reply, 'tools_used' => $toolsUsed, 'sources' => $sources, 'products' => Ai::collectedProducts()]);
             }
             Response::json([
                 'reply' => "I gathered some information but couldn't complete the analysis. Please try again.",

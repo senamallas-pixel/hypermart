@@ -38,6 +38,38 @@ class Ai
 
     public static function available(): bool { return self::key() !== ''; }
 
+    /**
+     * Structured products surfaced by the listing tools during a turn, so the
+     * chat UI can render small image cards (name, price, image, shop) instead of
+     * plain text. Deduped by product id; reset per request.
+     */
+    private static array $collectedProducts = [];
+
+    public static function resetProducts(): void { self::$collectedProducts = []; }
+
+    public static function collectedProducts(): array { return array_values(self::$collectedProducts); }
+
+    private static function pushProduct(array $r): void
+    {
+        $id = (int) ($r['id'] ?? 0);
+        if (!$id || isset(self::$collectedProducts[$id])) return;
+        self::$collectedProducts[$id] = [
+            'id'        => $id,
+            'name'      => (string) ($r['name'] ?? ''),
+            'price'     => (float) ($r['price'] ?? 0),
+            'unit'      => (string) ($r['unit'] ?? 'unit'),
+            'image'     => $r['image'] ?? null,
+            'stock'     => (int) ($r['stock'] ?? 0),
+            'shop_id'   => (int) ($r['shop_id'] ?? 0),
+            'shop_name' => $r['shop_name'] ?? null,
+        ];
+    }
+
+    private static function pushProducts(array $rows): void
+    {
+        foreach ($rows as $r) self::pushProduct($r);
+    }
+
     private static function headers(): array
     {
         $h = [
@@ -181,6 +213,7 @@ class Ai
                     }
                     $rows = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE $where ORDER BY p.name LIMIT 12", $params);
                     if (!$rows) return "No products found matching '$query'. Try 'milk', 'rice', 'vegetables', 'dairy', 'snacks'.";
+                    self::pushProducts($rows);
                     $lines = [];
                     foreach ($rows as $p) {
                         $stock = ((int) $p['stock'] > 0) ? "In stock ({$p['stock']})" : 'Out of stock';
@@ -190,8 +223,9 @@ class Ai
 
                 case 'get_shop_products':
                     $shopId = (int) ($args['shop_id'] ?? 0);
-                    $rows = Database::all("SELECT * FROM products WHERE shop_id = :s AND status = 'active' ORDER BY name LIMIT 30", ['s' => $shopId]);
+                    $rows = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE p.shop_id = :s AND p.status = 'active' ORDER BY p.name LIMIT 30", ['s' => $shopId]);
                     if (!$rows) return "No active products found for shop #$shopId.";
+                    self::pushProducts($rows);
                     $lines = array_map(fn ($p) => "- [PID:{$p['id']}] {$p['name']}: ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']}", $rows);
                     return count($rows) . " products in shop #$shopId:\n" . implode("\n", $lines);
 
@@ -239,8 +273,9 @@ class Ai
 
                 case 'get_low_stock_items':
                     $shopId = (int) ($args['shop_id'] ?? 0);
-                    $low = Database::all("SELECT * FROM products WHERE shop_id = :s AND status = 'active' AND stock <= low_stock_threshold", ['s' => $shopId]);
+                    $low = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE p.shop_id = :s AND p.status = 'active' AND p.stock <= p.low_stock_threshold", ['s' => $shopId]);
                     if (!$low) return "All products in shop #$shopId are well-stocked.";
+                    self::pushProducts($low);
                     $lines = array_map(fn ($p) => "- [PID:{$p['id']}] **{$p['name']}**: {$p['stock']} left (threshold: {$p['low_stock_threshold']})", $low);
                     return count($low) . " low-stock items:\n" . implode("\n", $lines);
 
@@ -277,20 +312,22 @@ class Ai
                         if ($catEnum) { $where .= ' AND p.category = :cat'; $params['cat'] = $catEnum; }
                     }
                     $rows = Database::all(
-                        "SELECT oi.name, oi.price, SUM(oi.quantity) total_sold, p.stock, p.unit, p.shop_id, s.name shop_name
+                        "SELECT p.id, oi.name, oi.price, SUM(oi.quantity) total_sold, p.stock, p.unit, p.image, p.shop_id, s.name shop_name
                          FROM order_items oi JOIN orders o ON oi.order_id = o.id
                          LEFT JOIN products p ON oi.product_id = p.id
                          LEFT JOIN shops s ON o.shop_id = s.id
-                         WHERE $where GROUP BY oi.name, oi.price, p.stock, p.unit, p.shop_id, s.name
+                         WHERE $where GROUP BY p.id, oi.name, oi.price, p.stock, p.unit, p.image, p.shop_id, s.name
                          ORDER BY total_sold DESC LIMIT $limit",
                         $params
                     );
                     if (!$rows) {
                         $prods = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE s.status = 'approved' AND p.status = 'active' LIMIT $limit");
                         if (!$prods) return 'No products or sales data available yet.';
+                        self::pushProducts($prods);
                         $lines = array_map(fn ($p) => "- **{$p['name']}** — ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']} | {$p['shop_name']}", $prods);
                         return 'No sales data yet, but here are ' . count($prods) . " available products:\n" . implode("\n", $lines);
                     }
+                    self::pushProducts($rows);
                     $lines = [];
                     foreach ($rows as $p) {
                         $stockStr = $p['stock'] !== null ? "Stock: {$p['stock']}" : '';
@@ -309,6 +346,7 @@ class Ai
                     $rows = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE $where ORDER BY p.name LIMIT 20", $params);
                     $suffix = $cat ? " in $cat" : '';
                     if (!$rows) return "No products found$suffix.";
+                    self::pushProducts($rows);
                     $lines = array_map(fn ($p) => "- **{$p['name']}** (PID:{$p['id']}) — ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']} | {$p['shop_name']} (ShopID:{$p['shop_id']})", $rows);
                     return count($rows) . " products$suffix:\n" . implode("\n", $lines);
             }

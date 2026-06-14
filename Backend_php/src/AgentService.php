@@ -65,6 +65,7 @@ final class AgentService
         }
 
         $messages = json_decode($run['messages'], true) ?: [];
+        Ai::resetProducts();
         $resp = $this->callLlm($messages);
         $choice = $resp['choices'][0]['message'] ?? [];
 
@@ -482,6 +483,7 @@ final class AgentService
         return [
             'run_id' => $runId, 'status' => $status, 'assistant_message' => $msg,
             'tools_used' => array_values(array_unique($toolsUsed)), 'pending_actions' => $pending,
+            'products' => Ai::collectedProducts(),
             'step' => (int)$run['step'], 'max_steps' => self::MAX_STEPS,
         ];
     }
