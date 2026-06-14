@@ -1,0 +1,62 @@
+# Deploy the React frontend to Hostinger (static files → public_html/)
+#
+# Builds frontend/ (uses frontend/.env.production → VITE_API_URL=https://hypershopindia.com/api)
+# and uploads the dist/ output to the web root via FTP.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   HOSTINGER_FTP_SERVER    e.g. ftp.hypershopindia.com  (or the IP from hPanel → Files → FTP Accounts)
+#   HOSTINGER_FTP_USERNAME  the FTP account username
+#   HOSTINGER_FTP_PASSWORD  the FTP account password
+# Optional repository variable:
+#   HOSTINGER_WEB_DIR       server web root (default: public_html/)
+
+name: Deploy Frontend to Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-hostinger-frontend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-frontend
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build (production)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy dist/ to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./frontend/dist/
+          server-dir: ${{ vars.HOSTINGER_WEB_DIR || 'public_html/' }}
+          # Protect the PHP API and SSL challenge dir that live under the web root
+          # from being deleted by the static-site sync. (The frontend's own
+          # dist/.htaccess is still uploaded.)
+          exclude: |
+            api/**
+            api/
+            .well-known/**

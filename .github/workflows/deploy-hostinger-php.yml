@@ -1,0 +1,52 @@
+# Deploy the PHP backend to Hostinger (Backend_php/ → public_html/api/)
+#
+# Uploads the PHP API via FTP. The server's .env (DB creds, JWT secret, keys) is
+# created once in hPanel and is never overwritten by this workflow.
+#
+# Required repository secrets:
+#   HOSTINGER_FTP_SERVER    e.g. ftp.hypershopindia.com
+#   HOSTINGER_FTP_USERNAME  FTP account username
+#   HOSTINGER_FTP_PASSWORD  FTP account password
+# Optional repository variable:
+#   HOSTINGER_API_DIR       server API dir (default: public_html/api/)
+
+name: Deploy PHP API to Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Backend_php/**"
+      - ".github/workflows/deploy-hostinger-php.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-php
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint PHP (syntax check all files)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y php-cli >/dev/null
+          find Backend_php -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Deploy Backend_php/ to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
+          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./Backend_php/
+          server-dir: ${{ vars.HOSTINGER_API_DIR || 'public_html/api/' }}
+          # Never push local env/readme; never delete the server's live .env.
+          exclude: |
+            **/.env
+            **/.env.*
+            **/README.md
+            **/.git*/**

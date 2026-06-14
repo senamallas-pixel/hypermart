@@ -1,0 +1,67 @@
+# Apply the MySQL schema (and optionally re-seed) on Hostinger over SSH.
+#
+# Manual only (workflow_dispatch) — schema changes shouldn't run on every push.
+# Uses the schema.sql / seed.php already deployed by the PHP workflow.
+# schema.sql uses CREATE TABLE IF NOT EXISTS, so "apply schema" is safe to re-run.
+# "reseed" runs seed.php --reset which DROPS and recreates all tables — destructive.
+#
+# Required repository secrets:
+#   HOSTINGER_SSH_HOST      SSH host (hPanel → Advanced → SSH Access)
+#   HOSTINGER_SSH_USERNAME  SSH username
+#   HOSTINGER_SSH_PASSWORD  SSH password   (or use a key — see ssh-action docs)
+#   DB_NAME / DB_USER / DB_PASS   MySQL database, user, password
+# Optional repository variables:
+#   HOSTINGER_SSH_PORT      SSH port (Hostinger default: 65002)
+#   HOSTINGER_API_DIR_FS    API path relative to SSH home (default: public_html/api)
+
+name: Apply DB Schema on Hostinger
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_schema:
+        description: "Apply schema.sql (idempotent, safe)"
+        type: boolean
+        default: true
+      reseed:
+        description: "DESTRUCTIVE: drop tables + reseed demo data (seed.php --reset)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: hostinger-db
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run schema / seed over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          API_DIR: ${{ vars.HOSTINGER_API_DIR_FS || 'public_html/api' }}
+          APPLY_SCHEMA: ${{ inputs.apply_schema }}
+          RESEED: ${{ inputs.reseed }}
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          username: ${{ secrets.HOSTINGER_SSH_USERNAME }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          port: ${{ vars.HOSTINGER_SSH_PORT || 65002 }}
+          envs: DB_NAME,DB_USER,DB_PASS,API_DIR,APPLY_SCHEMA,RESEED
+          script: |
+            set -e
+            cd "$HOME/$API_DIR"
+            echo "Working dir: $(pwd)"
+            if [ "$APPLY_SCHEMA" = "true" ]; then
+              echo "Applying schema.sql ..."
+              mysql -h localhost -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < schema.sql
+              echo "Schema applied."
+            fi
+            if [ "$RESEED" = "true" ]; then
+              echo "Reseeding (destructive) ..."
+              php seed.php --reset
+            fi
+            echo "Done."
