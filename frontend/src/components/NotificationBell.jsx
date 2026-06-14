@@ -1,6 +1,7 @@
 // Header notification bell: shows unread count, dropdown list, mark-as-read.
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react';
 import {
   listNotifications,
   getUnreadCount,
@@ -20,7 +21,23 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// Where each notification type should take the user when clicked.
+function targetFor(n) {
+  switch (n.type) {
+    case 'order_placed':
+    case 'order_status':    return '/orders';      // customer's order history
+    case 'new_order':
+    case 'order_cancelled':
+    case 'shop_status':
+    case 'review':          return '/owner';       // owner dashboard
+    case 'welcome':         return '/marketplace';
+    case 'login':           return '/settings';    // security / change password
+    default:                return null;
+  }
+}
+
 export default function NotificationBell({ open = false, onToggle = () => {} }) {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const ref = useRef(null);
@@ -59,12 +76,15 @@ export default function NotificationBell({ open = false, onToggle = () => {} }) 
     return () => document.removeEventListener('mousedown', onClick);
   }, [open, onToggle]);
 
-  const onItemClick = async (n) => {
+  const onItemClick = (n) => {
     if (!n.is_read) {
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: 1 } : x)));
       setUnread((u) => Math.max(0, u - 1));
-      try { await markNotificationRead(n.id); } catch { /* ignore */ }
+      markNotificationRead(n.id).catch(() => {});
     }
+    onToggle();                      // close the dropdown
+    const target = targetFor(n);
+    if (target) navigate(target);    // navigate to the relevant page
   };
 
   const markAll = async () => {
@@ -114,6 +134,7 @@ export default function NotificationBell({ open = false, onToggle = () => {} }) 
                     {n.message && <span className="block text-xs text-[#1A1A1A]/55 line-clamp-2">{n.message}</span>}
                     <span className="block text-[10px] text-[#1A1A1A]/35 mt-0.5">{timeAgo(n.created_at)}</span>
                   </span>
+                  {targetFor(n) && <ChevronRight size={15} className="self-center flex-shrink-0 text-[#1A1A1A]/25" />}
                 </button>
               ))
             )}
