@@ -88,6 +88,10 @@ class AuthController
         }
         Database::update('users', $update, 'id = :id', ['id' => $user['id']]);
 
+        // Login notification (in-app + email together)
+        Notifier::notify((int) $user['id'], 'login', 'New sign-in to your HyperMart account',
+            'Your account was just signed in on ' . gmdate('d M Y \a\t H:i') . ' UTC. If this wasn\'t you, change your password.', null);
+
         $token = Auth::createToken((int) $user['id']);
         Response::json([
             'access_token' => $token,
