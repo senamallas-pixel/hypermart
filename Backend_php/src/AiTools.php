@@ -184,7 +184,7 @@ class Ai
                     $lines = [];
                     foreach ($rows as $p) {
                         $stock = ((int) $p['stock'] > 0) ? "In stock ({$p['stock']})" : 'Out of stock';
-                        $lines[] = "- **{$p['name']}** — ₹{$p['price']}/{$p['unit']} | $stock | Shop: {$p['shop_name']} (ID:{$p['shop_id']})";
+                        $lines[] = "- **{$p['name']}** (PID:{$p['id']}) — ₹{$p['price']}/{$p['unit']} | $stock | Shop: {$p['shop_name']} (ID:{$p['shop_id']})";
                     }
                     return 'Found ' . count($rows) . " products:\n" . implode("\n", $lines);
 
@@ -192,7 +192,7 @@ class Ai
                     $shopId = (int) ($args['shop_id'] ?? 0);
                     $rows = Database::all("SELECT * FROM products WHERE shop_id = :s AND status = 'active' ORDER BY name LIMIT 30", ['s' => $shopId]);
                     if (!$rows) return "No active products found for shop #$shopId.";
-                    $lines = array_map(fn ($p) => "- {$p['name']}: ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']}", $rows);
+                    $lines = array_map(fn ($p) => "- [PID:{$p['id']}] {$p['name']}: ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']}", $rows);
                     return count($rows) . " products in shop #$shopId:\n" . implode("\n", $lines);
 
                 case 'get_shop_info':
@@ -241,7 +241,7 @@ class Ai
                     $shopId = (int) ($args['shop_id'] ?? 0);
                     $low = Database::all("SELECT * FROM products WHERE shop_id = :s AND status = 'active' AND stock <= low_stock_threshold", ['s' => $shopId]);
                     if (!$low) return "All products in shop #$shopId are well-stocked.";
-                    $lines = array_map(fn ($p) => "- **{$p['name']}**: {$p['stock']} left (threshold: {$p['low_stock_threshold']})", $low);
+                    $lines = array_map(fn ($p) => "- [PID:{$p['id']}] **{$p['name']}**: {$p['stock']} left (threshold: {$p['low_stock_threshold']})", $low);
                     return count($low) . " low-stock items:\n" . implode("\n", $lines);
 
                 case 'get_order_status':
@@ -309,7 +309,7 @@ class Ai
                     $rows = Database::all("SELECT p.*, s.name shop_name FROM products p JOIN shops s ON p.shop_id = s.id WHERE $where ORDER BY p.name LIMIT 20", $params);
                     $suffix = $cat ? " in $cat" : '';
                     if (!$rows) return "No products found$suffix.";
-                    $lines = array_map(fn ($p) => "- **{$p['name']}** — ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']} | {$p['shop_name']}", $rows);
+                    $lines = array_map(fn ($p) => "- **{$p['name']}** (PID:{$p['id']}) — ₹{$p['price']}/{$p['unit']} | Stock: {$p['stock']} | {$p['shop_name']} (ShopID:{$p['shop_id']})", $rows);
                     return count($rows) . " products$suffix:\n" . implode("\n", $lines);
             }
             return "Unknown tool: $name";
