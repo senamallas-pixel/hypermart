@@ -1,13 +1,13 @@
 ﻿// src/pages/Marketplace.jsx — Customer view: shop listing, products, cart & orders
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
   ArrowLeft, ChevronRight, XCircle, Plus, CheckCircle2, Clock,
   Search, Sparkles, TrendingUp, Navigation, Loader2, Sliders,
-  Route, X, List, Map,
+  Route, X, List, Map, Box, Grid3X3,
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -15,6 +15,11 @@ import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, creat
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 import GlobalSearch from '../components/GlobalSearch';
+import Store3DLoader from '../components/store3d/Store3DLoader';
+
+// 3D store scenes — lazy so three.js only loads when the user switches to 3D.
+const Shops3DView = lazy(() => import('../components/store3d/Shops3DView'));
+const Products3DView = lazy(() => import('../components/store3d/Products3DView'));
 
 // Fix Leaflet default marker icon (bundler issue)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -30,6 +35,22 @@ function fixImageUrl(url) {
   const idx = url.indexOf('https://res.cloudinary.com');
   if (idx > 0) return url.slice(idx);
   return url;
+}
+
+// 2D / 3D pill toggle (mirrors the List/Map toggle styling).
+function ViewToggle({ view3D, onChange }) {
+  return (
+    <div className="flex bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/8 p-0.5 shrink-0">
+      <button onClick={() => onChange(false)}
+        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${!view3D ? 'bg-white shadow-sm text-[#5A5A40]' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/60'}`}>
+        <Grid3X3 size={11} /> 2D
+      </button>
+      <button onClick={() => onChange(true)}
+        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${view3D ? 'bg-white shadow-sm text-[#5A5A40]' : 'text-[#1A1A1A]/40 hover:text-[#1A1A1A]/60'}`}>
+        <Box size={11} /> 3D
+      </button>
+    </div>
+  );
 }
 
 // ── Nearby map helpers ────────────────────────────────────────────────────────
@@ -212,7 +233,7 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty, offerLabel, shopClo
 }
 
 // ── Shop Products View ─────────────────────────────────────────────
-function ShopProductsView({ shop, onBack }) {
+function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} }) {
   const { t } = useTranslation();
   const { currentUser, cart, addToCart, updateQuantity, clearCart } = useApp();
   const [products, setProducts] = useState([]);
@@ -455,19 +476,27 @@ function ShopProductsView({ shop, onBack }) {
       )}
 
       <div className="max-w-7xl mx-auto px-4">
-        {/* Category filter pills */}
-        {productCategories.length > 2 && (
-          <div className="flex gap-2 overflow-x-auto no-scrollbar mb-5 -mx-4 px-4 sm:mx-0 sm:px-0">
-            {productCategories.map(cat => (
-              <button key={cat} onClick={() => setActiveFilter(cat)}
-                className={`px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${activeFilter === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/60 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-                {cat}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Category filter pills + 2D/3D toggle */}
+        <div className="flex items-center gap-2 mb-5">
+          {productCategories.length > 2 ? (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+              {productCategories.map(cat => (
+                <button key={cat} onClick={() => setActiveFilter(cat)}
+                  className={`px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${activeFilter === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/60 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+          ) : <div className="flex-1" />}
+          <ViewToggle view3D={view3D} onChange={onToggle3D} />
+        </div>
 
-        {/* Products grid */}
+        {/* Products — 3D shelves or 2D grid */}
+        {view3D ? (
+          <Suspense fallback={<Store3DLoader />}>
+            <Products3DView products={filteredProducts} onAddToCart={handleAddToCart} />
+          </Suspense>
+        ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3">
           {loading
             ? Array(12).fill(0).map((_, i) => <div key={i} className="aspect-[3/4] bg-white animate-pulse rounded-2xl" />)
@@ -491,6 +520,7 @@ function ShopProductsView({ shop, onBack }) {
               )
           }
         </div>
+        )}
 
         {/* Reviews Section */}
         <div className="mt-8 mb-6">
@@ -1238,6 +1268,7 @@ export default function Marketplace() {
   const [error, setError]     = useState(null);
   const [selectedShop, setSelectedShop] = useState(null);
   const [debounced, setDebounced]       = useState('');
+  const [view3D, setView3D]             = useState(false);
   const contentRef = useRef(null);
   const sectionRefs = useRef({});
 
@@ -1296,7 +1327,7 @@ export default function Marketplace() {
 
   const totalShops = Object.values(shopsByCategory).flat().length;
 
-  if (selectedShop) return <ShopProductsView shop={selectedShop} onBack={() => setSelectedShop(null)} />;
+  if (selectedShop) return <ShopProductsView shop={selectedShop} onBack={() => setSelectedShop(null)} view3D={view3D} onToggle3D={setView3D} />;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
@@ -1306,17 +1337,20 @@ export default function Marketplace() {
       {/* Category pills bar */}
       <div className="sticky top-14 max-sm:top-[6.75rem] z-40 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6">
         <div className="max-w-7xl mx-auto px-4 py-2.5">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar">
-            <button onClick={() => { setSearch(''); scrollToCategory(null); }}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-              {t('common.all')}
-            </button>
-            {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
-                className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-                {cat}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+              <button onClick={() => { setSearch(''); scrollToCategory(null); }}
+                className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                {t('common.all')}
               </button>
-            ))}
+              {CATEGORIES.map(cat => (
+                <button key={cat} onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
+                  className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <ViewToggle view3D={view3D} onChange={setView3D} />
           </div>
         </div>
       </div>
@@ -1357,6 +1391,10 @@ export default function Marketplace() {
               </button>
             </div>
           </div>
+        ) : view3D ? (
+          <Suspense fallback={<Store3DLoader />}>
+            <Shops3DView shops={Object.values(shopsByCategory).flat()} onSelectShop={setSelectedShop} />
+          </Suspense>
         ) : (
           <>
             {/* Category sections */}
