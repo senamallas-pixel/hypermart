@@ -6,7 +6,7 @@ Three workflows deploy HyperMart to Hostinger Premium shared hosting:
 |----------|------|---------|--------------|
 | Frontend | `.github/workflows/deploy-hostinger-frontend.yml` | push to `main` touching `frontend/**` (or manual) | `npm ci && npm run build`, FTP-upload `frontend/dist/` → `public_html/` |
 | PHP API  | `.github/workflows/deploy-hostinger-php.yml` | push to `main` touching `Backend_php/**` (or manual) | `php -l` lint, FTP-upload `Backend_php/` → `public_html/api/` |
-| DB schema | `.github/workflows/deploy-hostinger-db.yml` | manual only | SSH in, run `mysql < schema.sql` (idempotent); optional destructive reseed |
+| DB schema | `.github/workflows/deploy-hostinger-db.yml` | manual only | Connect via **Remote MySQL** and run `schema.sql` (idempotent); optional destructive reseed via `seed.php` |
 
 ## One-time setup
 
@@ -17,10 +17,14 @@ Three workflows deploy HyperMart to Hostinger Premium shared hosting:
 | `HOSTINGER_FTP_SERVER` | frontend, php | hPanel → Files → FTP Accounts (host, e.g. `ftp.hypershopindia.com`) |
 | `HOSTINGER_FTP_USERNAME` | frontend, php | FTP account username |
 | `HOSTINGER_FTP_PASSWORD` | frontend, php | FTP account password |
-| `HOSTINGER_SSH_HOST` | db | hPanel → Advanced → SSH Access |
-| `HOSTINGER_SSH_USERNAME` | db | SSH username |
-| `HOSTINGER_SSH_PASSWORD` | db | SSH password (or switch the action to a key) |
+| `HOSTINGER_DB_HOST` | db | hPanel → Databases → Remote MySQL (e.g. `srv672.hstgr.io` or `82.25.121.121`) |
 | `DB_NAME` / `DB_USER` / `DB_PASS` | db | hPanel → Databases → MySQL Databases |
+| `SEED_BASE_URL` | db (reseed only) | e.g. `https://hypershopindia.com/api` |
+| `SEED_TOKEN` | db (reseed only) | must match `SEED_TOKEN` in the server's `.env` |
+
+> **Remote MySQL prerequisite**: in hPanel → Databases → **Remote MySQL**, tick **"Any Host"**
+> (GitHub runner IPs rotate, so a single-IP allowlist won't work — the connection is still
+> protected by the DB user + password), choose your database, and click **Create**.
 
 ### 2. GitHub → ... → **Variables** (optional — sensible defaults exist)
 
@@ -28,8 +32,6 @@ Three workflows deploy HyperMart to Hostinger Premium shared hosting:
 |----------|---------|-------|
 | `HOSTINGER_WEB_DIR` | `public_html/` | frontend upload target |
 | `HOSTINGER_API_DIR` | `public_html/api/` | PHP upload target (FTP path) |
-| `HOSTINGER_API_DIR_FS` | `public_html/api` | API path relative to SSH home (for the DB workflow) |
-| `HOSTINGER_SSH_PORT` | `65002` | Hostinger's default SSH port |
 
 ### 3. Server-side `.env` (once, by hand)
 Create `public_html/api/.env` from `Backend_php/.env.example` with real DB creds, a strong

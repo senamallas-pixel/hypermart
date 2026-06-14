@@ -1,30 +1,34 @@
-# Apply the MySQL schema (and optionally re-seed) on Hostinger over SSH.
+# Apply the MySQL schema to Hostinger via Remote MySQL (direct TCP connection).
 #
 # Manual only (workflow_dispatch) — schema changes shouldn't run on every push.
-# Uses the schema.sql / seed.php already deployed by the PHP workflow.
-# schema.sql uses CREATE TABLE IF NOT EXISTS, so "apply schema" is safe to re-run.
-# "reseed" runs seed.php --reset which DROPS and recreates all tables — destructive.
+# Connects to Hostinger's MySQL server from the GitHub runner and pipes the
+# repo's Backend_php/schema.sql (CREATE TABLE IF NOT EXISTS — safe to re-run).
+# Optional reseed calls the token-guarded seed.php on the live site (PHP runs
+# on the server, so it talks to MySQL over localhost — no remote access needed).
+#
+# Prereq in hPanel → Databases → Remote MySQL:
+#   tick "Any Host" (GitHub runner IPs rotate) and select your database, then Create.
 #
 # Required repository secrets:
-#   HOSTINGER_SSH_HOST      SSH host (hPanel → Advanced → SSH Access)
-#   HOSTINGER_SSH_USERNAME  SSH username
-#   HOSTINGER_SSH_PASSWORD  SSH password   (or use a key — see ssh-action docs)
-#   DB_NAME / DB_USER / DB_PASS   MySQL database, user, password
-# Optional repository variables:
-#   HOSTINGER_SSH_PORT      SSH port (Hostinger default: 65002)
-#   HOSTINGER_API_DIR_FS    API path relative to SSH home (default: public_html/api)
+#   HOSTINGER_DB_HOST   MySQL server hostname (e.g. srv672.hstgr.io or 82.25.121.121)
+#   DB_NAME             database name  (e.g. u123_hypermart)
+#   DB_USER             database user  (e.g. u123_hyper)
+#   DB_PASS             database password
+# Required only when reseed=true:
+#   SEED_BASE_URL       e.g. https://hypershopindia.com/api
+#   SEED_TOKEN          must match SEED_TOKEN in the server's .env
 
-name: Apply DB Schema on Hostinger
+name: Apply DB Schema on Hostinger (Remote MySQL)
 
 on:
   workflow_dispatch:
     inputs:
       apply_schema:
-        description: "Apply schema.sql (idempotent, safe)"
+        description: "Apply schema.sql over Remote MySQL (idempotent, safe)"
         type: boolean
         default: true
       reseed:
-        description: "DESTRUCTIVE: drop tables + reseed demo data (seed.php --reset)"
+        description: "DESTRUCTIVE: drop tables + reseed demo data via seed.php?reset=1"
         type: boolean
         default: false
 
@@ -36,32 +40,38 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     steps:
-      - name: Run schema / seed over SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - uses: actions/checkout@v4
+
+      - name: Install MySQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y default-mysql-client >/dev/null
+
+      - name: Apply schema over Remote MySQL
+        if: ${{ inputs.apply_schema }}
         env:
+          DB_HOST: ${{ secrets.HOSTINGER_DB_HOST }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASS: ${{ secrets.DB_PASS }}
-          API_DIR: ${{ vars.HOSTINGER_API_DIR_FS || 'public_html/api' }}
-          APPLY_SCHEMA: ${{ inputs.apply_schema }}
-          RESEED: ${{ inputs.reseed }}
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USERNAME }}
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          port: ${{ vars.HOSTINGER_SSH_PORT || 65002 }}
-          envs: DB_NAME,DB_USER,DB_PASS,API_DIR,APPLY_SCHEMA,RESEED
-          script: |
-            set -e
-            cd "$HOME/$API_DIR"
-            echo "Working dir: $(pwd)"
-            if [ "$APPLY_SCHEMA" = "true" ]; then
-              echo "Applying schema.sql ..."
-              mysql -h localhost -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < schema.sql
-              echo "Schema applied."
-            fi
-            if [ "$RESEED" = "true" ]; then
-              echo "Reseeding (destructive) ..."
-              php seed.php --reset
-            fi
-            echo "Done."
+        run: |
+          echo "Applying Backend_php/schema.sql to $DB_HOST/$DB_NAME ..."
+          mysql --host="$DB_HOST" --port=3306 --user="$DB_USER" --password="$DB_PASS" \
+                --protocol=TCP "$DB_NAME" < Backend_php/schema.sql
+          echo "Verifying tables ..."
+          mysql --host="$DB_HOST" --port=3306 --user="$DB_USER" --password="$DB_PASS" \
+                --protocol=TCP "$DB_NAME" -e "SHOW TABLES;"
+
+      - name: Reseed demo data (destructive)
+        if: ${{ inputs.reseed }}
+        env:
+          SEED_BASE_URL: ${{ secrets.SEED_BASE_URL }}
+          SEED_TOKEN: ${{ secrets.SEED_TOKEN }}
+        run: |
+          if [ -z "$SEED_BASE_URL" ] || [ -z "$SEED_TOKEN" ]; then
+            echo "SEED_BASE_URL and SEED_TOKEN secrets are required for reseed." >&2
+            exit 1
+          fi
+          echo "Calling seed.php?reset=1 ..."
+          code=$(curl -s -o /tmp/seed.out -w "%{http_code}" \
+            "$SEED_BASE_URL/seed.php?token=$SEED_TOKEN&reset=1")
+          echo "HTTP $code"; cat /tmp/seed.out
+          [ "$code" = "200" ] || { echo "Seed failed"; exit 1; }
