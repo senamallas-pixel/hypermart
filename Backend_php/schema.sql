@@ -243,4 +243,47 @@ CREATE TABLE IF NOT EXISTS notifications (
     CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- ── autonomous agent: runs, audit trail, pending (gated) actions ──────────────
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id          CHAR(16)     NOT NULL PRIMARY KEY,
+    user_id     INT          NOT NULL,
+    role        VARCHAR(16)  NOT NULL,
+    status      VARCHAR(24)  NOT NULL DEFAULT 'continue',
+    step        INT          NOT NULL DEFAULT 0,
+    messages    LONGTEXT     NOT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_runs_user (user_id),
+    CONSTRAINT fk_runs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_actions (
+    id              BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT          NOT NULL,
+    tool            VARCHAR(64)  NOT NULL,
+    args            LONGTEXT     NOT NULL,
+    result          LONGTEXT     NOT NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_actions_idem (idempotency_key),
+    KEY idx_actions_user (user_id, created_at),
+    CONSTRAINT fk_actions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_pending_actions (
+    id              BIGINT       NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    run_id          CHAR(16)     NOT NULL,
+    user_id         INT          NOT NULL,
+    tool            VARCHAR(64)  NOT NULL,
+    args            LONGTEXT     NOT NULL,
+    risk            VARCHAR(16)  NOT NULL DEFAULT 'high',
+    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',
+    result          LONGTEXT     NULL,
+    idempotency_key VARCHAR(128) NOT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_pending_run (run_id),
+    CONSTRAINT fk_pending_run FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
