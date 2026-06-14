@@ -13,7 +13,7 @@ require __DIR__ . '/config.php';
 
 // ── Core framework ──
 foreach ([
-    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation',
+    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation', 'Mailer',
 ] as $cls) {
     require __DIR__ . "/src/$cls.php";
 }

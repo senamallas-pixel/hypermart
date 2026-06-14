@@ -69,6 +69,7 @@ class OrderController
             throw $e;
         }
         $order = Database::one('SELECT * FROM orders WHERE id = :id', ['id' => $orderId]);
+        self::notifyOrderPlaced($order, $user);
         Response::json(Present::order($order), 201);
     }
 
@@ -186,6 +187,7 @@ class OrderController
         elseif ($next === 'delivered')     $update['delivered_at'] = $now;
         Database::update('orders', $update, 'id = :id', ['id' => $order['id']]);
         $order = Database::one('SELECT * FROM orders WHERE id = :id', ['id' => $order['id']]);
+        self::notifyStatusChange($order, $next);
         Response::json(Present::order($order));
     }
 
@@ -298,5 +300,79 @@ class OrderController
             Database::q('UPDATE products SET stock = stock - :q WHERE id = :id',
                 ['q' => $it['quantity'], 'id' => $it['product_id']]);
         }
+    }
+
+    // ── Email notifications (via Hostinger SMTP; no-op if SMTP unconfigured) ──
+
+    /** Customer order confirmation + new-order alert to the shop owner. */
+    private static function notifyOrderPlaced(array $order, array $customer): void
+    {
+        if (!Mailer::configured()) return;
+        $itemsHtml = self::itemsHtml((int) $order['id']);
+        $total = number_format((float) $order['total'], 2);
+        // Customer confirmation
+        if (!empty($customer['email'])) {
+            $html = self::wrap('Order Confirmed 🛒',
+                "Hi " . htmlspecialchars($customer['display_name'] ?? 'there') . ", your order <b>#{$order['id']}</b> at "
+                . "<b>" . htmlspecialchars($order['shop_name']) . "</b> has been placed."
+                . $itemsHtml . "<p style='font-size:16px'><b>Total: ₹$total</b></p>"
+                . "<p>Status: <b>" . htmlspecialchars($order['status']) . "</b> · Payment: " . htmlspecialchars($order['payment_status']) . "</p>");
+            Mailer::send($customer['email'], "Order #{$order['id']} confirmed — HyperMart", $html);
+        }
+        // Owner alert
+        $owner = Database::one(
+            'SELECT u.email, u.display_name FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = :s',
+            ['s' => $order['shop_id']]
+        );
+        if ($owner && !empty($owner['email'])) {
+            $html = self::wrap('New Order 📦',
+                "You have a new order <b>#{$order['id']}</b> at <b>" . htmlspecialchars($order['shop_name']) . "</b>."
+                . $itemsHtml . "<p style='font-size:16px'><b>Total: ₹$total</b></p>"
+                . "<p>Deliver to: " . htmlspecialchars($order['delivery_address']) . "</p>"
+                . "<p>Manage it in your HyperMart owner dashboard.</p>");
+            Mailer::send($owner['email'], "New order #{$order['id']} — " . $order['shop_name'], $html);
+        }
+    }
+
+    /** Notify the customer when their order status changes. */
+    private static function notifyStatusChange(array $order, string $status): void
+    {
+        if (!Mailer::configured()) return;
+        $cust = Database::one('SELECT email, display_name FROM users WHERE id = :id', ['id' => $order['customer_id']]);
+        if (!$cust || empty($cust['email'])) return;
+        $labels = [
+            'accepted' => 'accepted and is being prepared',
+            'ready' => 'ready',
+            'out_for_delivery' => 'out for delivery',
+            'delivered' => 'delivered — enjoy!',
+            'rejected' => 'cancelled',
+        ];
+        $msg = $labels[$status] ?? "updated to $status";
+        $html = self::wrap('Order Update',
+            "Hi " . htmlspecialchars($cust['display_name'] ?? 'there') . ", your order <b>#{$order['id']}</b> at "
+            . "<b>" . htmlspecialchars($order['shop_name']) . "</b> is now <b>$msg</b>.");
+        Mailer::send($cust['email'], "Order #{$order['id']} is " . $status . " — HyperMart", $html);
+    }
+
+    private static function itemsHtml(int $orderId): string
+    {
+        $items = Database::all('SELECT name, price, quantity FROM order_items WHERE order_id = :o', ['o' => $orderId]);
+        $rows = '';
+        foreach ($items as $it) {
+            $line = number_format((float) $it['price'] * (int) $it['quantity'], 2);
+            $rows .= "<tr><td style='padding:4px 8px;border-bottom:1px solid #eee'>" . htmlspecialchars($it['name'])
+                . "</td><td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:center'>x{$it['quantity']}</td>"
+                . "<td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:right'>₹$line</td></tr>";
+        }
+        return "<table style='width:100%;border-collapse:collapse;margin:12px 0'>$rows</table>";
+    }
+
+    private static function wrap(string $heading, string $bodyHtml): string
+    {
+        return "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
+            . "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperMart</h2>"
+            . "<h3 style='margin:0 0 8px'>$heading</h3>"
+            . "<div style='font-size:14px;line-height:1.6'>$bodyHtml</div>"
+            . "<p style='color:#999;font-size:12px;margin-top:24px'>HyperMart · hypershopindia.com</p></div>";
     }
 }
