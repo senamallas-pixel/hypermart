@@ -145,9 +145,9 @@ function formatInline(text) {
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
+    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} mb-2.5`}>
       <div
-        className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] break-words shadow-sm leading-relaxed
+        className={`max-w-[88%] px-3.5 py-2.5 rounded-2xl text-[13px] break-words shadow-sm leading-relaxed
           ${isUser
             ? 'bg-[#4A7C59] text-white rounded-br-sm'
             : 'bg-white text-[#1A1A1A] rounded-bl-sm border border-[#E8E8E0]'
@@ -156,10 +156,10 @@ function MessageBubble({ msg }) {
         {isUser ? msg.content : <div className="ai-msg">{renderMarkdown(msg.content)}</div>}
       </div>
       {!isUser && msg.toolsUsed?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1 ml-1">
+        <div className="flex flex-wrap gap-1 mt-1.5 max-w-[88%]">
           {msg.toolsUsed.map((tool, i) => (
-            <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#4A7C59]/10 rounded text-[8px] font-bold text-[#4A7C59] uppercase tracking-wide">
-              ⚡ {tool.replace(/_/g, ' ')}
+            <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#4A7C59]/8 rounded-full text-[9px] font-semibold text-[#4A7C59]/80 tracking-wide">
+              <span className="text-[8px]">⚡</span>{tool.replace(/_/g, ' ')}
             </span>
           ))}
         </div>
