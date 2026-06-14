@@ -541,11 +541,12 @@ def execute_tool(name: str, args: dict, db: Session) -> str:
             ).all()
             total_rev = sum(o.total for o in orders)
             top = (
-                db.query(M.OrderItem.name, func.sum(M.OrderItem.quantity).label("qty"))
+                db.query(M.OrderItem.name, func.sum(M.OrderItem.quantity).label("qty"),
+                         func.sum(M.OrderItem.price * M.OrderItem.quantity).label("revenue"))
                 .join(M.Order).filter(M.Order.shop_id == shop_id, M.Order.created_at >= cutoff)
                 .group_by(M.OrderItem.name).order_by(func.sum(M.OrderItem.quantity).desc()).limit(5).all()
             )
-            top_str = ", ".join(f"{t.name} ({t.qty} sold)" for t in top) or "None"
+            top_str = ", ".join(f"{t.name} — {t.qty} sold, ₹{t.revenue:.0f} earned" for t in top) or "None"
             return (
                 f"Last {days} days for shop #{shop_id}:\n"
                 f"- Orders: {len(orders)} | Revenue: ₹{total_rev:.0f}\n"
@@ -662,7 +663,7 @@ async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
     """Conversational AI with OpenAI function calling for real-time data."""
     formatting_rules = (
         "\n\nFormatting rules: Be VERY concise (under 80 words). "
-        "For product lists use compact format: **Name** ₹price (no stock/shop unless asked). "
+        'For product lists use the compact format "**Name** — ₹<amount>" using the REAL number from tool results; never output the literal word "price", and omit the amount if unknown. '
         "Use short bullet points, not numbered lists. Never repeat metadata the user didn't ask for. "
         "Never use tables or code blocks. No filler sentences. Get straight to the answer."
     )
