@@ -88,9 +88,15 @@ class AuthController
         }
         Database::update('users', $update, 'id = :id', ['id' => $user['id']]);
 
-        // Login notification (in-app + email together)
-        Notifier::notify((int) $user['id'], 'login', 'New sign-in to your HyperMart account',
-            'Your account was just signed in on ' . gmdate('d M Y \a\t H:i') . ' UTC. If this wasn\'t you, change your password.', null);
+        // Login notification (in-app + email together) — with device + location
+        $ip = self::clientIp();
+        $device = self::parseDevice($_SERVER['HTTP_USER_AGENT'] ?? '');
+        $location = self::geoLocate($ip);
+        $msg = 'Signed in on ' . gmdate('d M Y \a\t H:i') . " UTC.\nDevice: $device";
+        if ($location) $msg .= "\nLocation: $location";
+        if ($ip)       $msg .= "\nIP: $ip";
+        $msg .= "\nIf this wasn't you, change your password.";
+        Notifier::notify((int) $user['id'], 'login', 'New sign-in to your HyperMart account', $msg, null);
 
         $token = Auth::createToken((int) $user['id']);
         Response::json([
@@ -149,5 +155,61 @@ class AuthController
     private static function tokenUrlSafe(int $bytes): string
     {
         return rtrim(strtr(base64_encode(random_bytes($bytes)), '+/', '-_'), '=');
+    }
+
+    /** Best-effort real client IP (handles Cloudflare / proxy headers). */
+    public static function clientIp(): string
+    {
+        foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'] as $k) {
+            if (!empty($_SERVER[$k])) {
+                $ip = trim(explode(',', $_SERVER[$k])[0]);
+                if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                    return $ip;
+                }
+            }
+        }
+        return '';
+    }
+
+    /** Parse a User-Agent string into "Browser on OS". */
+    public static function parseDevice(string $ua): string
+    {
+        if ($ua === '') return 'Unknown device';
+        $os = 'Unknown OS';
+        if (stripos($ua, 'Windows') !== false)      $os = 'Windows';
+        elseif (stripos($ua, 'iPhone') !== false || stripos($ua, 'iPad') !== false) $os = 'iOS';
+        elseif (stripos($ua, 'Mac OS') !== false)   $os = 'macOS';
+        elseif (stripos($ua, 'Android') !== false)  $os = 'Android';
+        elseif (stripos($ua, 'Linux') !== false)    $os = 'Linux';
+
+        $browser = 'Unknown browser';
+        if (stripos($ua, 'Edg') !== false)                                      $browser = 'Edge';
+        elseif (stripos($ua, 'OPR') !== false || stripos($ua, 'Opera') !== false) $browser = 'Opera';
+        elseif (stripos($ua, 'Chrome') !== false)                               $browser = 'Chrome';
+        elseif (stripos($ua, 'Firefox') !== false)                              $browser = 'Firefox';
+        elseif (stripos($ua, 'Safari') !== false)                               $browser = 'Safari';
+
+        return "$browser on $os";
+    }
+
+    /** Geolocate a public IP via ip-api.com (free). Empty for private/local IPs or on failure. */
+    public static function geoLocate(string $ip): string
+    {
+        if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            return '';
+        }
+        try {
+            $ch = curl_init("http://ip-api.com/json/$ip?fields=status,country,regionName,city");
+            curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 4]);
+            $resp = curl_exec($ch);
+            curl_close($ch);
+            $j = json_decode($resp ?: '', true);
+            if (($j['status'] ?? '') === 'success') {
+                return trim(implode(', ', array_filter([$j['city'] ?? '', $j['regionName'] ?? '', $j['country'] ?? ''])));
+            }
+        } catch (Throwable $e) {
+            error_log('[geoLocate] ' . $e->getMessage());
+        }
+        return '';
     }
 }
