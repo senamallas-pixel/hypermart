@@ -1,12 +1,15 @@
 # HyperMart web frontend (static React build) — Hostinger/Apache.
 
+# Serve the SPA's index.html before any WordPress index.php at this docroot.
+DirectoryIndex index.html index.php
+
 # Force HTTPS
 RewriteEngine On
 RewriteCond %{HTTPS} off
 RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # SPA fallback (harmless with HashRouter; protects any direct deep link).
-# Do NOT rewrite the /api backend or real files.
+# Do NOT rewrite the /api backend or real files/dirs.
 RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
