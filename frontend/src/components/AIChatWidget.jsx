@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { aiChat } from '../api/client';
+import { aiChat, aiAgentStart, aiAgentStep, aiAgentConfirm } from '../api/client';
 
 // Typing indicator — three animated dots
 function TypingIndicator() {
@@ -168,39 +168,59 @@ function MessageBubble({ msg }) {
   );
 }
 
+// Quick action chips. Read-only ones answer instantly; the ⚡ ones are real
+// actions the agent performs (and gates high-risk ones behind confirmation).
 const ROLE_PROMPTS = {
   customer: [
     { label: '🔥 Popular products', prompt: 'What are the most popular products available right now?' },
     { label: '🏪 Shops near me', prompt: 'Show me all available shops and what they sell' },
-    { label: '🥛 Dairy recommendations', prompt: 'Recommend some dairy products with prices' },
-    { label: '📦 Track my order', prompt: 'How do I check my order status?' },
+    { label: '📦 Track my order', prompt: 'What is the status of my most recent order?' },
+    { label: '🥛 Recommend dairy', prompt: 'Recommend some dairy products with prices' },
   ],
   owner: [
     { label: '📊 Sales this week', prompt: 'Show me my sales summary for the last 7 days' },
-    { label: '⚠️ Low stock alert', prompt: 'Which products are running low in my shop?' },
-    { label: '🏆 Top sellers', prompt: 'What are my best selling products?' },
-    { label: '💡 Pricing tips', prompt: 'Give me pricing advice based on my current inventory' },
+    { label: '⚠️ Low stock', prompt: 'Which products are running low in my shop?' },
+    { label: '⚡ Restock low items', prompt: 'Restock all my low-stock products to 50 units each.', action: true },
+    { label: '⚡ Run a 10% sale', prompt: 'Apply a 10% discount to my best-selling product.', action: true },
   ],
   admin: [
     { label: '📈 Platform stats', prompt: 'Show me the overall platform statistics' },
-    { label: '🏪 Pending shops', prompt: 'How many shops are pending approval?' },
+    { label: '🏪 List shops', prompt: 'List all shops and their current status' },
     { label: '💰 Revenue overview', prompt: 'What is the total platform revenue?' },
-    { label: '👥 User activity', prompt: 'Give me a summary of user and shop activity' },
+    { label: '👥 Activity summary', prompt: 'Give me a summary of user and shop activity' },
   ],
 };
 
+// Human-friendly summary of a pending high-risk action.
+function describeAction(tool, args) {
+  const a = args || {};
+  switch (tool) {
+    case 'place_order': {
+      const n = Array.isArray(a.items) ? a.items.reduce((s, it) => s + (Number(it.quantity) || 0), 0) : 0;
+      return `Place a Cash-on-Delivery order (${n} item${n === 1 ? '' : 's'}) from shop #${a.shop_id}.`;
+    }
+    case 'delete_product':  return `Permanently delete product #${a.product_id}.`;
+    case 'suspend_shop':    return `Suspend shop #${a.shop_id}${a.reason ? ` — ${a.reason}` : ''}.`;
+    case 'set_user_role':   return `Change user #${a.user_id}'s role to "${a.role}".`;
+    default:                return `Run ${tool.replace(/_/g, ' ')}.`;
+  }
+}
+
 export default function AIChatWidget() {
-  const { aiAvailable, currentUser } = useApp();
+  const { currentUser } = useApp();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hi! I\'m your HyperShopIndia assistant. I can look up real-time product data, shop info, sales analytics, and more. Try the suggestions below or ask me anything! 🛒' }
+    { role: 'assistant', content: 'Hi! I\'m your HyperShopIndia assistant. I can look up live data **and take actions** for you — restock items, run discounts, place orders, manage orders. Try a quick action below or just tell me what to do. 🛒' }
   ]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);          // a request/loop is in flight
+  const [progress, setProgress] = useState(null);          // live "working…" tool line
+  const [pending, setPending] = useState(null);            // { runId, actions: [{pending_id, tool, args, resolved}] }
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Determine caller role
+  // Logged-in users get the autonomous agent (it can act); guests get read-only chat.
+  const isAgent = !!currentUser;
   const callerRole = currentUser?.role === 'admin'
     ? 'admin'
     : currentUser?.role === 'owner'
@@ -210,58 +230,90 @@ export default function AIChatWidget() {
   // Scroll to newest message
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, open, loading]);
+  }, [messages, open, loading, progress, pending]);
 
   // Focus input when panel opens
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
 
-  const handleSendDirect = (overrideText) => {
-    const text = (overrideText || '').trim();
-    if (!text || loading) return;
-    const userMsg = { role: 'user', content: text };
-    const next = [...messages, userMsg];
-    setMessages(next);
-    setInput('');
-    setLoading(true);
-    const history = next.slice(-10, -1).map(m => ({ role: m.role, content: m.content }));
-    aiChat(text, null, callerRole, history)
-      .then(res => {
-        const reply = res.data?.reply || 'Sorry, I couldn\'t get a response.';
-        const toolsUsed = res.data?.tools_used || [];
-        const sources = res.data?.sources || [];
-        setMessages(prev => [...prev, { role: 'assistant', content: reply, toolsUsed, sources }]);
-      })
-      .catch(() => {
-        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Connection issue. Please try again.' }]);
-      })
-      .finally(() => setLoading(false));
+  const pushAssistant = (content, toolsUsed = []) =>
+    setMessages(prev => [...prev, { role: 'assistant', content, toolsUsed }]);
+
+  // Drive the client-orchestrated agent loop until it finishes or needs confirmation.
+  const runAgentLoop = async (firstResp) => {
+    let resp = firstResp;
+    const usedAll = [];
+    let safety = 0;
+    while (resp && safety++ < 16) {
+      (resp.tools_used || []).forEach(t => usedAll.push(t));
+      if (resp.status === 'awaiting_confirmation') {
+        setProgress(null);
+        setPending({
+          runId: resp.run_id,
+          actions: (resp.pending_actions || []).map(a => ({ ...a, resolved: null })),
+        });
+        return;
+      }
+      if (resp.status === 'done') {
+        setProgress(null);
+        pushAssistant(resp.assistant_message || 'Done.', Array.from(new Set(usedAll)));
+        return;
+      }
+      // status === 'continue' → show progress and step again
+      const uniq = Array.from(new Set(usedAll));
+      setProgress(uniq.length ? `Working… (${uniq.map(t => t.replace(/_/g, ' ')).join(', ')})` : 'Working…');
+      resp = (await aiAgentStep(resp.run_id)).data;
+    }
+    setProgress(null);
+    if (safety >= 16) pushAssistant('I stopped after several steps to stay safe. Please refine your request.');
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    const userMsg = { role: 'user', content: text };
-    const next = [...messages, userMsg];
-    setMessages(next);
+  const send = async (text) => {
+    const t = (text || '').trim();
+    if (!t || loading) return;
+    setMessages(prev => [...prev, { role: 'user', content: t }]);
     setInput('');
     setLoading(true);
-
+    setProgress(isAgent ? 'Thinking…' : null);
     try {
-      // Pass last 9 messages as history (excluding the brand-new one)
-      const history = next.slice(-10, -1).map(m => ({ role: m.role, content: m.content }));
-      const res = await aiChat(text, null, callerRole, history);
-      const reply = res.data?.reply || 'Sorry, I couldn\'t get a response.';
-      const toolsUsed = res.data?.tools_used || [];
-      const sources = res.data?.sources || [];
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, toolsUsed, sources }]);
+      if (isAgent) {
+        const res = await aiAgentStart(t);
+        await runAgentLoop(res.data);
+      } else {
+        const history = messages.slice(-9).map(m => ({ role: m.role, content: m.content }));
+        const res = await aiChat(t, null, callerRole, history);
+        pushAssistant(res.data?.reply || 'Sorry, I couldn\'t get a response.', res.data?.tools_used || []);
+      }
+    } catch (e) {
+      setProgress(null);
+      const msg = e?.response?.status === 401
+        ? '⚠️ Please log in again to use the assistant.'
+        : '⚠️ Connection issue. Please try again.';
+      pushAssistant(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Approve / deny one gated action; when all are resolved, resume the loop.
+  const resolveAction = async (pendingId, approve) => {
+    if (!pending || loading) return;
+    setLoading(true);
+    try {
+      await aiAgentConfirm(pending.runId, pendingId, approve);
+      const updated = pending.actions.map(a => a.pending_id === pendingId ? { ...a, resolved: approve ? 'approved' : 'denied' } : a);
+      const allDone = updated.every(a => a.resolved !== null);
+      setPending(allDone ? null : { ...pending, actions: updated });
+      if (allDone) {
+        setProgress('Working…');
+        const res = await aiAgentStep(pending.runId);
+        await runAgentLoop(res.data);
+      }
     } catch {
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: '⚠️ Connection issue. Please try again.' }
-      ]);
+      setProgress(null);
+      pushAssistant('⚠️ Could not confirm that action. Please try again.');
+      setPending(null);
     } finally {
       setLoading(false);
     }
@@ -270,7 +322,7 @@ export default function AIChatWidget() {
   const handleKey = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      send(input);
     }
   };
 
@@ -319,13 +371,16 @@ export default function AIChatWidget() {
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
             {messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
 
-            {/* Role-based quick prompts — shown when only the welcome message exists */}
-            {messages.length <= 1 && !loading && (
+            {/* Role-based quick actions — shown when only the welcome message exists */}
+            {messages.length <= 1 && !loading && !pending && (
               <div className="flex flex-wrap gap-1.5 mt-2 mb-1">
                 {(ROLE_PROMPTS[callerRole] || ROLE_PROMPTS.customer).map((qp, i) => (
                   <button key={i}
-                    onClick={() => handleSendDirect(qp.prompt)}
-                    className="px-2.5 py-1.5 bg-white border border-[#D0D0C8] rounded-xl text-[11px] font-medium text-[#1A1A1A]/60 hover:border-[#4A7C59] hover:text-[#4A7C59] hover:bg-[#4A7C59]/5 transition-all text-left"
+                    onClick={() => send(qp.prompt)}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all text-left border
+                      ${qp.action
+                        ? 'bg-[#4A7C59]/10 border-[#4A7C59]/30 text-[#4A7C59] hover:bg-[#4A7C59]/15'
+                        : 'bg-white border-[#D0D0C8] text-[#1A1A1A]/60 hover:border-[#4A7C59] hover:text-[#4A7C59] hover:bg-[#4A7C59]/5'}`}
                   >
                     {qp.label}
                   </button>
@@ -333,10 +388,54 @@ export default function AIChatWidget() {
               </div>
             )}
 
-            {loading && (
-              <div className="flex justify-start mb-2">
-                <TypingIndicator />
+            {/* Confirmation card for gated high-risk actions */}
+            {pending && pending.actions.length > 0 && (
+              <div className="mb-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2.5 shadow-sm">
+                <p className="text-[12px] font-bold text-amber-800 flex items-center gap-1 mb-1.5">
+                  ⚠️ Confirm {pending.actions.length > 1 ? 'these actions' : 'this action'}
+                </p>
+                <div className="space-y-2">
+                  {pending.actions.map((a) => (
+                    <div key={a.pending_id} className="text-[12px] text-amber-900">
+                      <p className="leading-snug">{describeAction(a.tool, a.args)}</p>
+                      {a.resolved ? (
+                        <p className={`mt-0.5 text-[11px] font-semibold ${a.resolved === 'approved' ? 'text-[#4A7C59]' : 'text-red-500'}`}>
+                          {a.resolved === 'approved' ? '✓ Approved' : '✕ Declined'}
+                        </p>
+                      ) : (
+                        <div className="flex gap-1.5 mt-1.5">
+                          <button
+                            onClick={() => resolveAction(a.pending_id, true)}
+                            disabled={loading}
+                            className="px-3 py-1 rounded-lg bg-[#4A7C59] text-white text-[11px] font-semibold hover:bg-[#3d6b4a] disabled:opacity-50 active:scale-95 transition-all"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => resolveAction(a.pending_id, false)}
+                            disabled={loading}
+                            className="px-3 py-1 rounded-lg bg-white border border-red-300 text-red-500 text-[11px] font-semibold hover:bg-red-50 disabled:opacity-50 active:scale-95 transition-all"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Live progress / typing indicator */}
+            {loading && (
+              progress ? (
+                <div className="flex items-center gap-2 mb-2 text-[12px] text-[#4A7C59] font-medium">
+                  <span className="w-2 h-2 rounded-full bg-[#4A7C59] animate-pulse" />
+                  {progress}
+                </div>
+              ) : (
+                <div className="flex justify-start mb-2"><TypingIndicator /></div>
+              )
             )}
             <div ref={bottomRef} />
           </div>
@@ -349,7 +448,7 @@ export default function AIChatWidget() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Ask anything…"
+              placeholder={isAgent ? 'Tell me what to do…' : 'Ask anything…'}
               disabled={loading}
               className="flex-1 resize-none rounded-xl border border-[#D0D0C8] px-3 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-[#4A7C59]/40 bg-[#F5F5F0]
@@ -357,7 +456,7 @@ export default function AIChatWidget() {
               style={{ lineHeight: '1.4' }}
             />
             <button
-              onClick={handleSend}
+              onClick={() => send(input)}
               disabled={!input.trim() || loading}
               className="w-10 h-10 rounded-xl bg-[#4A7C59] text-white flex items-center justify-center
                          disabled:opacity-40 hover:bg-[#3d6b4a] active:scale-95 transition-all shrink-0"

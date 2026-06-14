@@ -114,6 +114,11 @@ export const getLowStockInsight = (shop_id, shop_name, low_stock_items = []) => 
 export const aiSalesForecast    = (shop_id)                    => api.post('/ai/sales-forecast',      { shop_id });
 export const aiChat             = (message, shop_id, role, history) => api.post('/ai/chat', { message, shop_id, role, history });
 
+// ── Autonomous AI agent (client-orchestrated loop) ──
+export const aiAgentStart   = (message)                    => api.post('/ai/agent/start',   { message });
+export const aiAgentStep    = (run_id)                     => api.post('/ai/agent/step',    { run_id });
+export const aiAgentConfirm = (run_id, pending_id, approve)=> api.post('/ai/agent/confirm', { run_id, pending_id, approve });
+
 // ── Suppliers ────────────────────────────────────────────────────
 
 export const listSuppliers   = (shopId)           => api.get(`/shops/${shopId}/suppliers`);

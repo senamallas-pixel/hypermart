@@ -22,6 +22,7 @@ foreach (glob(__DIR__ . '/src/controllers/*.php') as $file) {
     require $file;
 }
 require __DIR__ . '/src/AiTools.php';
+require __DIR__ . '/src/AgentService.php';
 
 // ── CORS (permissive — frontend is same-origin in production) ──
 header('Access-Control-Allow-Origin: *');
@@ -58,6 +59,7 @@ PurchaseOrderController::register($router);
 DiscountController::register($router);
 UploadController::register($router);
 AiController::register($router);
+AiAgentController::register($router);
 NotificationController::register($router);
 
 try {
