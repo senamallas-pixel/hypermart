@@ -1,0 +1,20 @@
+const { chromium } = require('@playwright/test');
+(async () => {
+  const b = await chromium.launch();
+  const p = await b.newPage();
+  const logs = [];
+  p.on('console', m => logs.push('CONSOLE ' + m.type() + ': ' + m.text()));
+  p.on('pageerror', e => logs.push('PAGEERROR: ' + e.message));
+  await p.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+  await p.waitForTimeout(1500);
+  const url = p.url();
+  const title = await p.title();
+  const text = (await p.evaluate(() => document.body.innerText)).slice(0, 600);
+  const inputs = await p.evaluate(() => Array.from(document.querySelectorAll('input')).map(i => i.placeholder || i.type));
+  console.log('URL:', url);
+  console.log('TITLE:', title);
+  console.log('INPUTS:', JSON.stringify(inputs));
+  console.log('BODYTEXT:', JSON.stringify(text));
+  console.log('LOGS:\n' + logs.join('\n'));
+  await b.close();
+})();
