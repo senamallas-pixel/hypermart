@@ -26,12 +26,12 @@ export default function ShopBooth({ shop, position, onClick }) {
       onPointerOut={() => { setHover(false); document.body.style.cursor = 'auto'; }}
     >
       {/* booth body */}
-      <mesh position={[0, 1, 0]}>
+      <mesh position={[0, 1, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.6, 2, 1.4]} />
         <meshStandardMaterial color={open ? '#4A7C59' : '#9CA3AF'} />
       </mesh>
       {/* awning */}
-      <mesh position={[0, 2.05, 0.2]}>
+      <mesh position={[0, 2.05, 0.2]} castShadow>
         <boxGeometry args={[2.8, 0.2, 1.7]} />
         <meshStandardMaterial color={open ? '#3d6b4a' : '#7d828a'} />
       </mesh>

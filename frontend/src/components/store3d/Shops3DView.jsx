@@ -5,7 +5,7 @@ import ShopBooth from './ShopBooth';
 import Overlay, { MoreNote } from './Overlay';
 
 const MAX = 40;
-const SPACING = 4.6;
+const SPACING = 6.2;
 
 export default function Shops3DView({ shops = [], onSelectShop }) {
   const list = shops.slice(0, MAX);
