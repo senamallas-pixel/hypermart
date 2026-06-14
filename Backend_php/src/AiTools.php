@@ -1,36 +1,73 @@
 <?php
 /**
- * AI helpers — OpenAI chat-completions calls (cURL), the 10 DB-backed
+ * AI helpers — OpenAI-compatible chat-completions calls (cURL), the 10 DB-backed
  * function-calling tools, role filtering, and category keyword resolution.
- * Mirrors backend/ai.py.
+ * Mirrors backend/ai.py. Works with OpenAI or OpenRouter (set OPENROUTER_API_KEY).
  */
 class Ai
 {
-    private const URL = 'https://api.openai.com/v1/chat/completions';
+    /** OpenRouter key takes precedence over OpenAI; either enables AI. */
+    public static function key(): string
+    {
+        return env('OPENROUTER_API_KEY', '') ?: env('OPENAI_API_KEY', '');
+    }
 
-    public static function key(): string   { return env('OPENAI_API_KEY', ''); }
-    public static function model(): string { return env('OPENAI_MODEL', 'gpt-4o-mini'); }
+    private static function usingOpenRouter(): bool
+    {
+        return env('OPENROUTER_API_KEY', '') !== '';
+    }
+
+    /** Chat-completions endpoint. Override with AI_BASE_URL if needed. */
+    public static function url(): string
+    {
+        $base = env('AI_BASE_URL', '');
+        if ($base !== '') {
+            return rtrim($base, '/') . '/chat/completions';
+        }
+        return self::usingOpenRouter()
+            ? 'https://openrouter.ai/api/v1/chat/completions'
+            : 'https://api.openai.com/v1/chat/completions';
+    }
+
+    public static function model(): string
+    {
+        // OpenRouter needs vendor-prefixed model ids (e.g. openai/gpt-4o-mini).
+        $default = self::usingOpenRouter() ? 'openai/gpt-4o-mini' : 'gpt-4o-mini';
+        return env('OPENAI_MODEL', $default);
+    }
+
     public static function available(): bool { return self::key() !== ''; }
 
-    /** Raw POST to OpenAI; returns decoded JSON array (throws on transport error). */
+    private static function headers(): array
+    {
+        $h = [
+            'Authorization: Bearer ' . self::key(),
+            'Content-Type: application/json',
+        ];
+        if (self::usingOpenRouter()) {
+            // OpenRouter attribution headers (optional but recommended).
+            $h[] = 'HTTP-Referer: ' . env('APP_URL', 'https://hypershopindia.com');
+            $h[] = 'X-Title: HyperMart';
+        }
+        return $h;
+    }
+
+    /** Raw POST to the chat-completions API; returns decoded JSON (throws on error). */
     public static function post(array $payload): array
     {
-        $ch = curl_init(self::URL);
+        $ch = curl_init(self::url());
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
-            CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . self::key(),
-                'Content-Type: application/json',
-            ],
+            CURLOPT_HTTPHEADER     => self::headers(),
             CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => 45,
         ]);
         $resp = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($resp === false || $code >= 400) {
-            throw new RuntimeException('OpenAI request failed (HTTP ' . $code . ')');
+            throw new RuntimeException('AI request failed (HTTP ' . $code . ')');
         }
         return json_decode($resp, true) ?: [];
     }
