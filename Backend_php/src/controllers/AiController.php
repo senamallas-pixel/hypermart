@@ -181,10 +181,10 @@ class AiController
         $shopId = $b['shop_id'] ?? null;
         $history = is_array($b['history'] ?? null) ? $b['history'] : [];
 
-        $formatting = "\n\nFormatting rules: Be VERY concise (under 80 words). "
-            . 'For product lists use the compact format "**Name** — ₹<amount>" using the REAL number from tool results; never output the literal word "price", and omit the amount if it is unknown. '
-            . 'Use short bullet points, not numbered lists. Never repeat metadata the user didn\'t ask for. '
-            . 'Never use tables or code blocks. No filler sentences. Get straight to the answer.';
+        $formatting = "\n\nFormatting rules: Be VERY concise (under 60 words). "
+            . 'When you return products from a tool, the app shows them as image cards automatically — so DO NOT list each product as text. Instead give one short intro line (e.g. "Here are some popular picks:") and let the cards show names/prices. '
+            . 'Never output product IDs (PID/ShopID) to the user. Never output the literal word "price". '
+            . 'Use short sentences, not numbered lists. Never use tables or code blocks. No filler. Get straight to the answer.';
         $prompts = [
             'customer' => 'You are HyperShopIndia Assistant, a friendly shopping helper for a hyperlocal grocery marketplace in India. Help customers find products, compare shops, track orders, and get shopping advice. Use ₹ for prices. Be warm and helpful. USE THE TOOLS to look up real-time product availability, prices, and shop info — never guess prices or stock levels.',
             'owner'    => 'You are HyperShopIndia Business Assistant for shop owners. Help with inventory, pricing, sales analysis, and growth tips. USE THE TOOLS to fetch real sales data, stock levels, and order info — give advice based on actual numbers, not guesses.',

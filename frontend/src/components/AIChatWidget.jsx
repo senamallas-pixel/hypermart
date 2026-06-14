@@ -1,6 +1,44 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Package } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { aiChat, aiAgentStart, aiAgentStep, aiAgentConfirm } from '../api/client';
+
+// Strip any prefix before a Cloudinary URL (mirrors the rest of the app).
+function fixImageUrl(url) {
+  if (!url) return null;
+  const idx = url.indexOf('https://res.cloudinary.com');
+  if (idx > 0) return url.slice(idx);
+  return url;
+}
+
+// Compact product cards with small thumbnails shown under a chat reply.
+function ProductCards({ products, onOpenShop }) {
+  if (!products?.length) return null;
+  return (
+    <div className="mt-1.5 grid grid-cols-2 gap-1.5 max-w-[92%]">
+      {products.slice(0, 8).map((p) => (
+        <button
+          key={p.id}
+          onClick={() => onOpenShop?.(p)}
+          title={p.shop_name ? `${p.name} · ${p.shop_name}` : p.name}
+          className="flex items-center gap-2 bg-white border border-[#E8E8E0] rounded-xl p-1.5 text-left hover:border-[#4A7C59] transition-colors"
+        >
+          <span className="w-9 h-9 rounded-lg bg-[#F5F5F0] overflow-hidden shrink-0 flex items-center justify-center">
+            {p.image
+              ? <img src={fixImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+              : <Package size={16} className="text-[#5A5A40]/30" />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-semibold text-[#1A1A1A] truncate leading-tight">{p.name}</span>
+            <span className="block text-[11px] font-bold text-[#4A7C59] leading-tight">₹{p.price}{p.unit ? <span className="font-normal text-[#1A1A1A]/40">/{p.unit}</span> : null}</span>
+            {p.shop_name && <span className="block text-[9px] text-[#1A1A1A]/40 truncate leading-tight">{p.shop_name}</span>}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // Typing indicator — three animated dots
 function TypingIndicator() {
@@ -142,7 +180,7 @@ function formatInline(text) {
 }
 
 // Single chat message bubble
-function MessageBubble({ msg }) {
+function MessageBubble({ msg, onOpenShop }) {
   const isUser = msg.role === 'user';
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} mb-2.5`}>
@@ -155,6 +193,7 @@ function MessageBubble({ msg }) {
       >
         {isUser ? msg.content : <div className="ai-msg">{renderMarkdown(msg.content)}</div>}
       </div>
+      {!isUser && <ProductCards products={msg.products} onOpenShop={onOpenShop} />}
       {!isUser && msg.toolsUsed?.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5 max-w-[88%]">
           {msg.toolsUsed.map((tool, i) => (
@@ -207,7 +246,8 @@ function describeAction(tool, args) {
 }
 
 export default function AIChatWidget() {
-  const { currentUser } = useApp();
+  const { currentUser, setTargetShopId } = useApp();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hi! I\'m your HyperShopIndia assistant. I can look up live data **and take actions** for you — restock items, run discounts, place orders, manage orders. Try a quick action below or just tell me what to do. 🛒' }
@@ -237,16 +277,25 @@ export default function AIChatWidget() {
     if (open) setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
 
-  const pushAssistant = (content, toolsUsed = []) =>
-    setMessages(prev => [...prev, { role: 'assistant', content, toolsUsed }]);
+  const pushAssistant = (content, toolsUsed = [], products = []) =>
+    setMessages(prev => [...prev, { role: 'assistant', content, toolsUsed, products }]);
+
+  // Dedup products by id, preserving first-seen order.
+  const mergeProducts = (acc, more) => {
+    const seen = new Set(acc.map(p => p.id));
+    (more || []).forEach(p => { if (p && !seen.has(p.id)) { seen.add(p.id); acc.push(p); } });
+    return acc;
+  };
 
   // Drive the client-orchestrated agent loop until it finishes or needs confirmation.
   const runAgentLoop = async (firstResp) => {
     let resp = firstResp;
     const usedAll = [];
+    const productsAll = [];
     let safety = 0;
     while (resp && safety++ < 16) {
       (resp.tools_used || []).forEach(t => usedAll.push(t));
+      mergeProducts(productsAll, resp.products);
       if (resp.status === 'awaiting_confirmation') {
         setProgress(null);
         setPending({
@@ -257,7 +306,7 @@ export default function AIChatWidget() {
       }
       if (resp.status === 'done') {
         setProgress(null);
-        pushAssistant(resp.assistant_message || 'Done.', Array.from(new Set(usedAll)));
+        pushAssistant(resp.assistant_message || 'Done.', Array.from(new Set(usedAll)), productsAll);
         return;
       }
       // status === 'continue' → show progress and step again
@@ -283,7 +332,7 @@ export default function AIChatWidget() {
       } else {
         const history = messages.slice(-9).map(m => ({ role: m.role, content: m.content }));
         const res = await aiChat(t, null, callerRole, history);
-        pushAssistant(res.data?.reply || 'Sorry, I couldn\'t get a response.', res.data?.tools_used || []);
+        pushAssistant(res.data?.reply || 'Sorry, I couldn\'t get a response.', res.data?.tools_used || [], res.data?.products || []);
       }
     } catch (e) {
       setProgress(null);
@@ -317,6 +366,14 @@ export default function AIChatWidget() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Tapping a product card jumps to its shop in the marketplace.
+  const onOpenShop = (p) => {
+    if (!p?.shop_id) return;
+    setTargetShopId?.(p.shop_id);
+    setOpen(false);
+    navigate('/marketplace');
   };
 
   const handleKey = e => {
@@ -369,7 +426,7 @@ export default function AIChatWidget() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
-            {messages.map((m, i) => <MessageBubble key={i} msg={m} />)}
+            {messages.map((m, i) => <MessageBubble key={i} msg={m} onOpenShop={onOpenShop} />)}
 
             {/* Role-based quick actions — shown when only the welcome message exists */}
             {messages.length <= 1 && !loading && !pending && (
