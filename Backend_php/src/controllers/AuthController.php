@@ -60,6 +60,8 @@ class AuthController
         }
 
         $user = Database::one('SELECT * FROM users WHERE id = :id', ['id' => $userId]);
+        Notifier::notify($userId, 'welcome', 'Welcome to HyperMart!',
+            'Your account has been created. Browse shops near you and start ordering.', null);
         $token = Auth::createToken($userId);
         Response::json([
             'access_token' => $token,

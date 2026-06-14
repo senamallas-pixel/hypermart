@@ -161,6 +161,9 @@ class ShopController
         $status = Validation::inEnum(Validation::require(Request::body(), 'status'), Enums::SHOP_STATUS, 'status');
         Database::update('shops', ['status' => $status], 'id = :id', ['id' => $shop['id']]);
         $shop = Database::one('SELECT * FROM shops WHERE id = :id', ['id' => $shop['id']]);
+        $label = $status === 'approved' ? 'approved and is now live' : ($status === 'suspended' ? 'suspended' : $status);
+        Notifier::notify((int) $shop['owner_id'], 'shop_status', "Shop '{$shop['name']}' $status",
+            "Your shop '{$shop['name']}' has been $label.", null);
         Response::json(Present::shop($shop));
     }
 
@@ -209,6 +212,9 @@ class ShopController
         Database::update('shops', ['rating' => round($avg, 1), 'review_count' => $cnt], 'id = :id', ['id' => $shop['id']]);
 
         $review = Database::one('SELECT * FROM reviews WHERE id = :id', ['id' => $id]);
+        $comment = !empty($b['comment']) ? ': "' . $b['comment'] . '"' : '';
+        Notifier::notify((int) $shop['owner_id'], 'review', "New {$rating}★ review for {$shop['name']}",
+            "{$user['display_name']} reviewed your shop {$rating}★$comment", null);
         Response::json(Present::review($review, $user['display_name']), 201);
     }
 

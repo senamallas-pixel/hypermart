@@ -228,4 +228,19 @@ CREATE TABLE IF NOT EXISTS order_discounts (
     CONSTRAINT fk_od_shop FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- ── notifications ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS notifications (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    user_id    INT          NOT NULL,
+    type       VARCHAR(40)  NOT NULL,
+    title      VARCHAR(255) NOT NULL,
+    message    TEXT         NULL,
+    order_id   INT          NULL,
+    is_read    TINYINT      NOT NULL DEFAULT 0,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_notif_user (user_id, is_read),
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -13,7 +13,7 @@ require __DIR__ . '/config.php';
 
 // ── Core framework ──
 foreach ([
-    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation', 'Mailer',
+    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation', 'Mailer', 'Notifier',
 ] as $cls) {
     require __DIR__ . "/src/$cls.php";
 }
@@ -58,6 +58,7 @@ PurchaseOrderController::register($router);
 DiscountController::register($router);
 UploadController::register($router);
 AiController::register($router);
+NotificationController::register($router);
 
 try {
     $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', $path);

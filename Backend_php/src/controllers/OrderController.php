@@ -215,6 +215,11 @@ class OrderController
             throw $e;
         }
         $order = Database::one('SELECT * FROM orders WHERE id = :id', ['id' => $order['id']]);
+        $ownerRow = Database::one('SELECT u.id FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = :s', ['s' => $order['shop_id']]);
+        if ($ownerRow) {
+            Notifier::notify((int) $ownerRow['id'], 'order_cancelled', "Order #{$order['id']} cancelled",
+                "A customer cancelled order #{$order['id']} at {$order['shop_name']}.", (int) $order['id']);
+        }
         Response::json(Present::order($order));
     }
 
@@ -302,14 +307,27 @@ class OrderController
         }
     }
 
-    // ── Email notifications (via Hostinger SMTP; no-op if SMTP unconfigured) ──
+    // ── Notifications: in-app log (always) + email (if SMTP configured) ──
 
     /** Customer order confirmation + new-order alert to the shop owner. */
     private static function notifyOrderPlaced(array $order, array $customer): void
     {
-        if (!Mailer::configured()) return;
-        $itemsHtml = self::itemsHtml((int) $order['id']);
+        $oid = (int) $order['id'];
         $total = number_format((float) $order['total'], 2);
+        $ownerRow = Database::one(
+            'SELECT u.id, u.email, u.display_name FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = :s',
+            ['s' => $order['shop_id']]
+        );
+        // In-app notifications (always)
+        Notifier::log((int) $order['customer_id'], 'order_placed', "Order #$oid placed",
+            "Your order at {$order['shop_name']} was placed. Total ₹$total.", $oid);
+        if ($ownerRow) {
+            Notifier::log((int) $ownerRow['id'], 'new_order', "New order #$oid",
+                "New order at {$order['shop_name']} — ₹$total. Deliver to: {$order['delivery_address']}", $oid);
+        }
+        // Rich emails (only if SMTP configured)
+        if (!Mailer::configured()) return;
+        $itemsHtml = self::itemsHtml($oid);
         // Customer confirmation
         if (!empty($customer['email'])) {
             $html = self::wrap('Order Confirmed 🛒',
@@ -337,9 +355,7 @@ class OrderController
     /** Notify the customer when their order status changes. */
     private static function notifyStatusChange(array $order, string $status): void
     {
-        if (!Mailer::configured()) return;
-        $cust = Database::one('SELECT email, display_name FROM users WHERE id = :id', ['id' => $order['customer_id']]);
-        if (!$cust || empty($cust['email'])) return;
+        $oid = (int) $order['id'];
         $labels = [
             'accepted' => 'accepted and is being prepared',
             'ready' => 'ready',
@@ -348,6 +364,13 @@ class OrderController
             'rejected' => 'cancelled',
         ];
         $msg = $labels[$status] ?? "updated to $status";
+        // In-app (always)
+        Notifier::log((int) $order['customer_id'], 'order_status', "Order #$oid $status",
+            "Your order at {$order['shop_name']} is now $msg.", $oid);
+        // Email (if configured)
+        if (!Mailer::configured()) return;
+        $cust = Database::one('SELECT email, display_name FROM users WHERE id = :id', ['id' => $order['customer_id']]);
+        if (!$cust || empty($cust['email'])) return;
         $html = self::wrap('Order Update',
             "Hi " . htmlspecialchars($cust['display_name'] ?? 'there') . ", your order <b>#{$order['id']}</b> at "
             . "<b>" . htmlspecialchars($order['shop_name']) . "</b> is now <b>$msg</b>.");
