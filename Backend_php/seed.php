@@ -1,6 +1,6 @@
 <?php
 /**
- * HyperMart — demo seed (PHP port of backend/seed.py).
+ * HyperShopIndia — demo seed (PHP port of backend/seed.py).
  *
  *   CLI:   php seed.php            (seed; safe to re-run)
  *          php seed.php --reset    (drop + recreate schema, then seed)

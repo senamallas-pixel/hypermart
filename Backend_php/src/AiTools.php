@@ -47,7 +47,7 @@ class Ai
         if (self::usingOpenRouter()) {
             // OpenRouter attribution headers (optional but recommended).
             $h[] = 'HTTP-Referer: ' . env('APP_URL', 'https://hypershopindia.com');
-            $h[] = 'X-Title: HyperMart';
+            $h[] = 'X-Title: HyperShopIndia';
         }
         return $h;
     }

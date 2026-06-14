@@ -1,6 +1,6 @@
 <?php
 /**
- * HyperMart PHP API — Configuration / environment loader.
+ * HyperShopIndia PHP API — Configuration / environment loader.
  * Loads api/.env (if present) without overriding real environment variables,
  * then exposes env() for the rest of the app.
  */

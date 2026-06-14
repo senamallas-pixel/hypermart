@@ -335,7 +335,7 @@ class OrderController
                 . "<b>" . htmlspecialchars($order['shop_name']) . "</b> has been placed."
                 . $itemsHtml . "<p style='font-size:16px'><b>Total: ₹$total</b></p>"
                 . "<p>Status: <b>" . htmlspecialchars($order['status']) . "</b> · Payment: " . htmlspecialchars($order['payment_status']) . "</p>");
-            Mailer::send($customer['email'], "Order #{$order['id']} confirmed — HyperMart", $html);
+            Mailer::send($customer['email'], "Order #{$order['id']} confirmed — HyperShopIndia", $html);
         }
         // Owner alert
         $owner = Database::one(
@@ -347,7 +347,7 @@ class OrderController
                 "You have a new order <b>#{$order['id']}</b> at <b>" . htmlspecialchars($order['shop_name']) . "</b>."
                 . $itemsHtml . "<p style='font-size:16px'><b>Total: ₹$total</b></p>"
                 . "<p>Deliver to: " . htmlspecialchars($order['delivery_address']) . "</p>"
-                . "<p>Manage it in your HyperMart owner dashboard.</p>");
+                . "<p>Manage it in your HyperShopIndia owner dashboard.</p>");
             Mailer::send($owner['email'], "New order #{$order['id']} — " . $order['shop_name'], $html);
         }
     }
@@ -374,7 +374,7 @@ class OrderController
         $html = self::wrap('Order Update',
             "Hi " . htmlspecialchars($cust['display_name'] ?? 'there') . ", your order <b>#{$order['id']}</b> at "
             . "<b>" . htmlspecialchars($order['shop_name']) . "</b> is now <b>$msg</b>.");
-        Mailer::send($cust['email'], "Order #{$order['id']} is " . $status . " — HyperMart", $html);
+        Mailer::send($cust['email'], "Order #{$order['id']} is " . $status . " — HyperShopIndia", $html);
     }
 
     private static function itemsHtml(int $orderId): string
@@ -393,9 +393,9 @@ class OrderController
     private static function wrap(string $heading, string $bodyHtml): string
     {
         return "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
-            . "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperMart</h2>"
+            . "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperShopIndia</h2>"
             . "<h3 style='margin:0 0 8px'>$heading</h3>"
             . "<div style='font-size:14px;line-height:1.6'>$bodyHtml</div>"
-            . "<p style='color:#999;font-size:12px;margin-top:24px'>HyperMart · hypershopindia.com</p></div>";
+            . "<p style='color:#999;font-size:12px;margin-top:24px'>HyperShopIndia · hypershopindia.com</p></div>";
     }
 }

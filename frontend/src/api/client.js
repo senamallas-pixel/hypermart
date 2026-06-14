@@ -1,5 +1,5 @@
 ﻿// src/api/client.js
-// HyperMart — Axios REST client (JWT Bearer auth)
+// HyperShopIndia — Axios REST client (JWT Bearer auth)
 
 import axios from "axios";
 

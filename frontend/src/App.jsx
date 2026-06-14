@@ -131,7 +131,7 @@ function SignIn() {
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
               <Store size={28} className="text-white" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-white mb-0.5">HyperMart</h1>
+            <h1 className="font-serif text-3xl font-bold text-white mb-0.5">HyperShopIndia</h1>
             <p className="text-white/55 text-sm">Your neighbourhood marketplace</p>
           </div>
 
@@ -342,7 +342,7 @@ function TopNav() {
           <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-sm">
             <Store size={16} />
           </div>
-          <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">HyperMart</span>
+          <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">HyperShopIndia</span>
         </button>
 
         {/* Desktop only — on mobile the search lives in the hero */}
@@ -703,7 +703,7 @@ function CartPage() {
             key: rz.key_id,
             amount: rz.amount,
             currency: rz.currency,
-            name: 'HyperMart',
+            name: 'HyperShopIndia',
             description: `Order #${res.data.id}`,
             order_id: rz.razorpay_order_id,
             handler: async (response) => {

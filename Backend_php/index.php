@@ -1,6 +1,6 @@
 <?php
 /**
- * HyperMart PHP API — front controller.
+ * HyperShopIndia PHP API — front controller.
  * All requests under /api/* are rewritten here by .htaccess. This bootstraps
  * the framework, applies CORS, strips the base path, and dispatches routes.
  */
@@ -66,6 +66,6 @@ try {
     Response::error($e->status, $e->detail);
 } catch (Throwable $e) {
     // Log server-side; return a generic 500 to the client.
-    error_log('[HyperMart] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    error_log('[HyperShopIndia] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     Response::error(500, 'Internal server error');
 }

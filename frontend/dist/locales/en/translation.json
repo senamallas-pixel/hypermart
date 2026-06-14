@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "HyperMart",
+    "appName": "HyperShopIndia",
     "home": "Home",
     "profile": "Profile",
     "settings": "Settings",
@@ -165,7 +165,7 @@
     "passwordTooShort": "Password must be at least 8 characters"
   },
   "messages": {
-    "welcome": "Welcome to HyperMart",
+    "welcome": "Welcome to HyperShopIndia",
     "loading": "Loading...",
     "tryAgain": "Try Again",
     "goBack": "Go Back",

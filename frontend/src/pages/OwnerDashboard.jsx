@@ -1890,7 +1890,7 @@ function OrdersPanel({ shopId }) {
     const location  = isWalkin ? 'In-Store (Walk-in)' : (order.delivery_address || 'Online Delivery');
     const payment   = order.payment_method === 'upi' ? 'UPI' : order.payment_method === 'cash' ? 'Cash' : order.payment_method;
     const msg = [
-      `🛍️ *HyperMart — Order #${order.id}*`,
+      `🛍️ *HyperShopIndia — Order #${order.id}*`,
       `📅 ${date}`,
       ``,
       `*Items:*`,

@@ -45,10 +45,10 @@ class Notifier
     {
         $greeting = $name ? ('Hi ' . htmlspecialchars($name) . ',') : 'Hello,';
         return "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
-            . "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperMart</h2>"
+            . "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperShopIndia</h2>"
             . "<h3 style='margin:0 0 8px'>" . htmlspecialchars($title) . "</h3>"
             . "<p style='font-size:14px;line-height:1.6'>$greeting</p>"
             . "<div style='font-size:14px;line-height:1.6'>" . nl2br(htmlspecialchars($message)) . "</div>"
-            . "<p style='color:#999;font-size:12px;margin-top:24px'>HyperMart · hypershopindia.com</p></div>";
+            . "<p style='color:#999;font-size:12px;margin-top:24px'>HyperShopIndia · hypershopindia.com</p></div>";
     }
 }

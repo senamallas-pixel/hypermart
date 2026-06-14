@@ -324,7 +324,7 @@ function ShopProductsView({ shop, onBack }) {
             key:         rz.key_id,
             amount:      rz.amount,
             currency:    rz.currency,
-            name:        'HyperMart',
+            name:        'HyperShopIndia',
             description: `Order #${res.data.id}`,
             order_id:    rz.razorpay_order_id,
             handler: async (response) => {

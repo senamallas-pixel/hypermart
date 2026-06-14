@@ -60,7 +60,7 @@ class AuthController
         }
 
         $user = Database::one('SELECT * FROM users WHERE id = :id', ['id' => $userId]);
-        Notifier::notify($userId, 'welcome', 'Welcome to HyperMart!',
+        Notifier::notify($userId, 'welcome', 'Welcome to HyperShopIndia!',
             'Your account has been created. Browse shops near you and start ordering.', null);
         $token = Auth::createToken($userId);
         Response::json([
@@ -96,7 +96,7 @@ class AuthController
         if ($location) $msg .= "\nLocation: $location";
         if ($ip)       $msg .= "\nIP: $ip";
         $msg .= "\nIf this wasn't you, change your password.";
-        Notifier::notify((int) $user['id'], 'login', 'New sign-in to your HyperMart account', $msg, null);
+        Notifier::notify((int) $user['id'], 'login', 'New sign-in to your HyperShopIndia account', $msg, null);
 
         $token = Auth::createToken((int) $user['id']);
         Response::json([

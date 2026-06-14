@@ -186,11 +186,11 @@ class AiController
             . 'Use short bullet points, not numbered lists. Never repeat metadata the user didn\'t ask for. '
             . 'Never use tables or code blocks. No filler sentences. Get straight to the answer.';
         $prompts = [
-            'customer' => 'You are HyperMart Assistant, a friendly shopping helper for a hyperlocal grocery marketplace in India. Help customers find products, compare shops, track orders, and get shopping advice. Use ₹ for prices. Be warm and helpful. USE THE TOOLS to look up real-time product availability, prices, and shop info — never guess prices or stock levels.',
-            'owner'    => 'You are HyperMart Business Assistant for shop owners. Help with inventory, pricing, sales analysis, and growth tips. USE THE TOOLS to fetch real sales data, stock levels, and order info — give advice based on actual numbers, not guesses.',
-            'admin'    => 'You are HyperMart Admin Assistant. Help with platform governance, approvals, and analytics. USE THE TOOLS to get real platform stats and shop data.',
+            'customer' => 'You are HyperShopIndia Assistant, a friendly shopping helper for a hyperlocal grocery marketplace in India. Help customers find products, compare shops, track orders, and get shopping advice. Use ₹ for prices. Be warm and helpful. USE THE TOOLS to look up real-time product availability, prices, and shop info — never guess prices or stock levels.',
+            'owner'    => 'You are HyperShopIndia Business Assistant for shop owners. Help with inventory, pricing, sales analysis, and growth tips. USE THE TOOLS to fetch real sales data, stock levels, and order info — give advice based on actual numbers, not guesses.',
+            'admin'    => 'You are HyperShopIndia Admin Assistant. Help with platform governance, approvals, and analytics. USE THE TOOLS to get real platform stats and shop data.',
         ];
-        $system = ($prompts[$role] ?? 'You are a helpful assistant for the HyperMart marketplace.') . $formatting;
+        $system = ($prompts[$role] ?? 'You are a helpful assistant for the HyperShopIndia marketplace.') . $formatting;
         if ($shopId) {
             $system .= "\nThe user is currently on shop ID " . (int) $shopId . '.';
         }

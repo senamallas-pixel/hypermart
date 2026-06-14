@@ -7,7 +7,7 @@
  *   SMTP_USER=noreply@hypershopindia.com
  *   SMTP_PASS=...
  *   SMTP_FROM=noreply@hypershopindia.com
- *   SMTP_FROM_NAME=HyperMart
+ *   SMTP_FROM_NAME=HyperShopIndia
  * If SMTP is not configured, send() is a no-op that returns false (app keeps working).
  */
 class Mailer
@@ -29,7 +29,7 @@ class Mailer
         $user = env('SMTP_USER', '');
         $pass = env('SMTP_PASS', '');
         $from = env('SMTP_FROM', $user);
-        $fromName = env('SMTP_FROM_NAME', 'HyperMart');
+        $fromName = env('SMTP_FROM_NAME', 'HyperShopIndia');
         $secure = strtolower(env('SMTP_SECURE', $port === 465 ? 'ssl' : 'tls'));
 
         try {

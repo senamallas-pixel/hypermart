@@ -1,4 +1,4 @@
-// End-to-end UI tests for HyperMart (React frontend + Backend_php + MySQL).
+// End-to-end UI tests for HyperShopIndia (React frontend + Backend_php + MySQL).
 // Drives the real browser against the live stack: public marketplace data load,
 // login for each role (token issued), and an invalid-login error path.
 const { test, expect } = require('@playwright/test');
@@ -27,7 +27,7 @@ const token = (page) => page.evaluate(() => sessionStorage.getItem('hypermart_to
 
 test('public marketplace loads seeded shops from the live API', async ({ page }) => {
   await fresh(page, '/marketplace');
-  await expect(page.getByText('HyperMart').first()).toBeVisible();
+  await expect(page.getByText('HyperShopIndia').first()).toBeVisible();
   await expect(page.getByText('Anand Groceries').first()).toBeVisible({ timeout: 15000 });
   await expect(page.getByText('Anand Dairy Fresh').first()).toBeVisible();
 });

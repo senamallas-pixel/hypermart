@@ -193,7 +193,7 @@ export default function AIChatWidget() {
   const { aiAvailable, currentUser } = useApp();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hi! I\'m your HyperMart assistant. I can look up real-time product data, shop info, sales analytics, and more. Try the suggestions below or ask me anything! 🛒' }
+    { role: 'assistant', content: 'Hi! I\'m your HyperShopIndia assistant. I can look up real-time product data, shop info, sales analytics, and more. Try the suggestions below or ask me anything! 🛒' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -302,7 +302,7 @@ export default function AIChatWidget() {
             <div className="flex items-center gap-2">
               <span className="text-lg">✨</span>
               <div>
-                <p className="font-semibold text-sm leading-none">HyperMart Assistant</p>
+                <p className="font-semibold text-sm leading-none">HyperShopIndia Assistant</p>
                 <p className="text-xs text-green-200 mt-0.5 capitalize">{callerRole} mode</p>
               </div>
             </div>

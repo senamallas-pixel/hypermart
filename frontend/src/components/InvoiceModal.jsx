@@ -87,7 +87,7 @@ export default function InvoiceModal({ order, shopView, onClose }) {
                 <div className="w-8 h-8 bg-[#5A5A40] rounded-lg flex items-center justify-center">
                   <Store size={14} className="text-white" />
                 </div>
-                <span className="font-serif text-xl font-bold text-[#5A5A40]">HyperMart</span>
+                <span className="font-serif text-xl font-bold text-[#5A5A40]">HyperShopIndia</span>
               </div>
               <p className="text-[10px] text-[#1A1A1A]/40">Your neighbourhood marketplace</p>
             </div>
@@ -185,7 +185,7 @@ export default function InvoiceModal({ order, shopView, onClose }) {
 
           {/* Footer */}
           <div className="text-center border-t border-[#1A1A1A]/5 pt-4">
-            <p className="text-[10px] text-[#1A1A1A]/30">Thank you for shopping with HyperMart!</p>
+            <p className="text-[10px] text-[#1A1A1A]/30">Thank you for shopping with HyperShopIndia!</p>
             <p className="text-[9px] text-[#1A1A1A]/20 mt-1">This is a computer-generated invoice.</p>
           </div>
         </div>
