@@ -1,0 +1,20 @@
+# HyperMart PHP API — route everything to index.php, protect internals.
+
+# Pass the Authorization header through to PHP (some hosts strip it).
+CGIPassAuth On
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Serve real files (index.php, seed.php) directly; route everything else to index.php.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Block direct web access to source, config, schema, and env files.
+<FilesMatch "\.(env|sql)$">
+  Require all denied
+</FilesMatch>
+<Files "config.php">
+  Require all denied
+</Files>
+RedirectMatch 403 ^/.*/src/.*$

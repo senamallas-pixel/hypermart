@@ -6,9 +6,9 @@ services:
   - type: web
     name: hypermart-api
     runtime: python
-    rootDir: backend
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    rootDir: Backend_python
+    buildCommand: cd Backend_python && pip install -r requirements.txt
+    startCommand: cd Backend_python && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: JWT_SECRET
         sync: false
