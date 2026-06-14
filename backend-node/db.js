@@ -156,6 +156,16 @@ const SCHEMA_SQL = `
     valid_till     TEXT,
     created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS notifications (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type       TEXT    NOT NULL,
+    title      TEXT    NOT NULL,
+    message    TEXT,
+    order_id   INTEGER,
+    is_read    INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  );
 `;
 
 // Convert undefined → null so sql.js binding never chokes
@@ -224,6 +234,7 @@ class DB {
       DROP TABLE IF EXISTS purchase_orders;
       DROP TABLE IF EXISTS product_discounts;
       DROP TABLE IF EXISTS order_discounts;
+      DROP TABLE IF EXISTS notifications;
       DROP TABLE IF EXISTS suppliers;
       DROP TABLE IF EXISTS reviews;
       DROP TABLE IF EXISTS password_reset_tokens;

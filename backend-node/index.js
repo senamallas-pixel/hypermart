@@ -1,6 +1,6 @@
 "use strict";
 /**
- * HyperMart — Express / better-sqlite3 / JWT backend
+ * HyperShopIndia — Express / better-sqlite3 / JWT backend
  * Drop-in replacement for the Python FastAPI server.
  * All routes, auth logic, and business rules are faithfully ported.
  *
@@ -17,6 +17,7 @@ const { v4: uuidv4 } = require("uuid");
 const multer     = require("multer");
 const path       = require("path");
 const fs         = require("fs");
+const nodemailer = require("nodemailer");
 const db         = require("./db");
 
 const app  = express();
@@ -53,10 +54,263 @@ const upload = multer({
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SECRET_KEY          = process.env.JWT_SECRET || "hypermart-dev-secret-change-in-production";
+const SECRET_KEY          = process.env.JWT_SECRET || "hypershopindia-dev-secret-change-in-production";
 const TOKEN_EXPIRY        = "30d";
 const ADMIN_EMAIL         = "senamallas@gmail.com";
 const SUBSCRIPTION_AMOUNT = 10.0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMTP Mailer — sends HTML email (no-op if SMTP unconfigured). Mirrors PHP Mailer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SMTP_HOST      = process.env.SMTP_HOST || "";
+const SMTP_PORT      = Number(process.env.SMTP_PORT || 465);
+const SMTP_USER      = process.env.SMTP_USER || "";
+const SMTP_PASS      = process.env.SMTP_PASS || "";
+const SMTP_FROM      = process.env.SMTP_FROM || SMTP_USER;
+const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "HyperShopIndia";
+
+function mailerConfigured() {
+  return SMTP_HOST !== "" && SMTP_USER !== "" && SMTP_PASS !== "";
+}
+
+let _transporter = null;
+function getTransporter() {
+  if (_transporter) return _transporter;
+  _transporter = nodemailer.createTransport({
+    host:   SMTP_HOST,
+    port:   SMTP_PORT,
+    secure: SMTP_PORT === 465, // 465 = SSL, 587 = STARTTLS
+    auth:   { user: SMTP_USER, pass: SMTP_PASS },
+    tls:    { rejectUnauthorized: false },
+  });
+  return _transporter;
+}
+
+/** Send an HTML email. Best-effort: never throws into the request flow. */
+async function sendMail(to, subject, html) {
+  if (!mailerConfigured()) {
+    console.warn(`[Mailer] SMTP not configured — skipped email to ${to}: ${subject}`);
+    return false;
+  }
+  try {
+    await getTransporter().sendMail({
+      from:    `"${SMTP_FROM_NAME}" <${SMTP_FROM}>`,
+      to,
+      subject,
+      html,
+      text:    html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+    });
+    return true;
+  } catch (e) {
+    console.error("[Mailer] error:", e.message);
+    return false;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function notificationEmailHtml(title, message, name) {
+  const greeting = name ? `Hi ${escapeHtml(name)},` : "Hello,";
+  const body = escapeHtml(message).replace(/\n/g, "<br>");
+  return "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
+    + "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperShopIndia</h2>"
+    + `<h3 style='margin:0 0 8px'>${escapeHtml(title)}</h3>`
+    + `<p style='font-size:14px;line-height:1.6'>${greeting}</p>`
+    + `<div style='font-size:14px;line-height:1.6'>${body}</div>`
+    + "<p style='color:#999;font-size:12px;margin-top:24px'>HyperShopIndia · hypershopindia.com</p></div>";
+}
+
+function emailWrap(heading, bodyHtml) {
+  return "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
+    + "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperShopIndia</h2>"
+    + `<h3 style='margin:0 0 8px'>${heading}</h3>`
+    + `<div style='font-size:14px;line-height:1.6'>${bodyHtml}</div>`
+    + "<p style='color:#999;font-size:12px;margin-top:24px'>HyperShopIndia · hypershopindia.com</p></div>";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifier — central dispatcher: log in-app notification (+ optional email).
+// Both steps are best-effort and never throw into the request flow.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Log an in-app notification only (no email). */
+function logNotification(userId, type, title, message = null, orderId = null) {
+  try {
+    db.prepare(
+      "INSERT INTO notifications (user_id, type, title, message, order_id, is_read) VALUES (?, ?, ?, ?, ?, 0)"
+    ).run(userId, type, title, message, orderId);
+  } catch (e) {
+    console.error("[Notifier] log failed:", e.message);
+  }
+}
+
+/** Log in-app + send an email to the user. */
+function notify(userId, type, title, message = null, orderId = null) {
+  logNotification(userId, type, title, message, orderId);
+  if (!mailerConfigured()) return;
+  try {
+    const u = db.prepare("SELECT email, display_name FROM users WHERE id = ?").get(userId);
+    if (u && u.email) {
+      sendMail(u.email, title, notificationEmailHtml(title, message || "", u.display_name || ""));
+    }
+  } catch (e) {
+    console.error("[Notifier] email failed:", e.message);
+  }
+}
+
+function serializeNotification(n) {
+  return {
+    id:         n.id,
+    type:       n.type,
+    title:      n.title,
+    message:    n.message ?? null,
+    order_id:   n.order_id != null ? Number(n.order_id) : null,
+    is_read:    Number(n.is_read),
+    created_at: n.created_at,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Login device + location helpers (mirror PHP AuthController).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function clientIp(req) {
+  const candidates = [
+    req.headers["cf-connecting-ip"],
+    req.headers["x-forwarded-for"],
+    req.headers["x-real-ip"],
+    req.ip,
+    req.socket && req.socket.remoteAddress,
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    let ip = String(c).split(",")[0].trim();
+    if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+    if (ip && ip !== "::1") return ip;
+  }
+  return "";
+}
+
+function parseDevice(ua) {
+  if (!ua) return "Unknown device";
+  let os = "Unknown OS";
+  if (/Windows/i.test(ua))                       os = "Windows";
+  else if (/iPhone|iPad/i.test(ua))              os = "iOS";
+  else if (/Mac OS/i.test(ua))                   os = "macOS";
+  else if (/Android/i.test(ua))                  os = "Android";
+  else if (/Linux/i.test(ua))                    os = "Linux";
+
+  let browser = "Unknown browser";
+  if (/Edg/i.test(ua))                           browser = "Edge";
+  else if (/OPR|Opera/i.test(ua))                browser = "Opera";
+  else if (/Chrome/i.test(ua))                   browser = "Chrome";
+  else if (/Firefox/i.test(ua))                  browser = "Firefox";
+  else if (/Safari/i.test(ua))                   browser = "Safari";
+
+  return `${browser} on ${os}`;
+}
+
+function isPrivateIp(ip) {
+  if (!ip) return true;
+  return /^(10\.|127\.|192\.168\.|169\.254\.|::1$|fc|fd)/i.test(ip)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+}
+
+/** Geolocate a public IP via ip-api.com. Empty string for private/local IPs or on failure. */
+async function geoLocate(ip) {
+  if (!ip || isPrivateIp(ip)) return "";
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const resp = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city`, { signal: ctrl.signal });
+    clearTimeout(t);
+    const j = await resp.json();
+    if (j && j.status === "success") {
+      return [j.city, j.regionName, j.country].filter(Boolean).join(", ").trim();
+    }
+  } catch (e) {
+    console.error("[geoLocate]", e.message);
+  }
+  return "";
+}
+
+function itemsHtml(orderId) {
+  const items = db.prepare("SELECT name, price, quantity FROM order_items WHERE order_id = ?").all(orderId);
+  let rows = "";
+  for (const it of items) {
+    const line = (it.price * it.quantity).toFixed(2);
+    rows += `<tr><td style='padding:4px 8px;border-bottom:1px solid #eee'>${escapeHtml(it.name)}</td>`
+      + `<td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:center'>x${it.quantity}</td>`
+      + `<td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:right'>₹${line}</td></tr>`;
+  }
+  return `<table style='width:100%;border-collapse:collapse;margin:12px 0'>${rows}</table>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order notification wiring (in-app log always + rich email if SMTP configured).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function notifyOrderPlaced(order, customer) {
+  const oid = order.id;
+  const total = Number(order.total).toFixed(2);
+  const ownerRow = db.prepare(
+    "SELECT u.id, u.email, u.display_name FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = ?"
+  ).get(order.shop_id);
+
+  // In-app notifications (always)
+  logNotification(order.customer_id, "order_placed", `Order #${oid} placed`,
+    `Your order at ${order.shop_name} was placed. Total ₹${total}.`, oid);
+  if (ownerRow) {
+    logNotification(ownerRow.id, "new_order", `New order #${oid}`,
+      `New order at ${order.shop_name} — ₹${total}. Deliver to: ${order.delivery_address}`, oid);
+  }
+
+  // Rich emails (only if SMTP configured)
+  if (!mailerConfigured()) return;
+  const itemsTable = itemsHtml(oid);
+  if (customer && customer.email) {
+    const html = emailWrap("Order Confirmed 🛒",
+      `Hi ${escapeHtml(customer.display_name || "there")}, your order <b>#${oid}</b> at `
+      + `<b>${escapeHtml(order.shop_name)}</b> has been placed.`
+      + itemsTable + `<p style='font-size:16px'><b>Total: ₹${total}</b></p>`
+      + `<p>Status: <b>${escapeHtml(order.status)}</b> · Payment: ${escapeHtml(order.payment_status)}</p>`);
+    sendMail(customer.email, `Order #${oid} confirmed — HyperShopIndia`, html);
+  }
+  if (ownerRow && ownerRow.email) {
+    const html = emailWrap("New Order 📦",
+      `You have a new order <b>#${oid}</b> at <b>${escapeHtml(order.shop_name)}</b>.`
+      + itemsTable + `<p style='font-size:16px'><b>Total: ₹${total}</b></p>`
+      + `<p>Deliver to: ${escapeHtml(order.delivery_address)}</p>`
+      + `<p>Manage it in your HyperShopIndia owner dashboard.</p>`);
+    sendMail(ownerRow.email, `New order #${oid} — ${order.shop_name}`, html);
+  }
+}
+
+function notifyStatusChange(order, status) {
+  const oid = order.id;
+  const labels = {
+    accepted:         "accepted and is being prepared",
+    ready:            "ready",
+    out_for_delivery: "out for delivery",
+    delivered:        "delivered — enjoy!",
+    rejected:         "cancelled",
+  };
+  const msg = labels[status] || `updated to ${status}`;
+  // In-app (always)
+  logNotification(order.customer_id, "order_status", `Order #${oid} ${status}`,
+    `Your order at ${order.shop_name} is now ${msg}.`, oid);
+  // Email (if configured)
+  if (!mailerConfigured()) return;
+  const cust = db.prepare("SELECT email, display_name FROM users WHERE id = ?").get(order.customer_id);
+  if (!cust || !cust.email) return;
+  const html = emailWrap("Order Update",
+    `Hi ${escapeHtml(cust.display_name || "there")}, your order <b>#${oid}</b> at `
+    + `<b>${escapeHtml(order.shop_name)}</b> is now <b>${msg}</b>.`);
+  sendMail(cust.email, `Order #${oid} is ${status} — HyperShopIndia`, html);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Middleware
@@ -317,12 +571,14 @@ app.post("/auth/register", (req, res) => {
   }
 
   const user  = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  notify(userId, "welcome", "Welcome to HyperShopIndia!",
+    "Your account has been created. Browse shops near you and start ordering.", null);
   const token = createAccessToken(user.id);
   return res.status(201).json({ access_token: token, token_type: "bearer", user: serializeUser(user) });
 });
 
 // POST /auth/login
-app.post("/auth/login", (req, res) => {
+app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(422).json({ detail: "email and password are required" });
@@ -338,6 +594,21 @@ app.post("/auth/login", (req, res) => {
   const now = new Date().toISOString();
   db.prepare("UPDATE users SET last_login = ? WHERE id = ?").run(now, user.id);
   user.last_login = now;
+
+  // Login notification (in-app + email together) — with device + location
+  const ip = clientIp(req);
+  const device = parseDevice(req.headers["user-agent"] || "");
+  const location = await geoLocate(ip);
+  const d = new Date();
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const pad = (n) => String(n).padStart(2, "0");
+  const ts = `${pad(d.getUTCDate())} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} at ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  let msg = `Signed in on ${ts} UTC.\nDevice: ${device}`;
+  if (location) msg += `\nLocation: ${location}`;
+  if (ip)       msg += `\nIP: ${ip}`;
+  msg += "\nIf this wasn't you, change your password.";
+  notify(user.id, "login", "New sign-in to your HyperShopIndia account", msg, null);
+
   const token = createAccessToken(user.id);
   return res.json({ access_token: token, token_type: "bearer", user: serializeUser(user) });
 });
@@ -519,9 +790,10 @@ app.post("/shops", requireRole("owner", "admin"), (req, res) => {
   if (!SHOP_CATS.includes(category))  return res.status(422).json({ detail: "Invalid category" });
   if (!SHOP_LOCS.includes(location_name)) return res.status(422).json({ detail: "Invalid location" });
 
+  // Auto-approve new shops (mirror PHP backend): created live, not pending.
   const r = db.prepare(
     `INSERT INTO shops (owner_id, name, address, category, location_name, logo, timings, lat, lng,
-     delivery_radius, pincode, city, state, upi_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     delivery_radius, pincode, city, state, upi_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`
   ).run(req.user.id, name.trim(), address, category, location_name, logo || null, timings || null,
         lat ?? null, lng ?? null, delivery_radius ?? null, pincode || null, city || null, state || null, upi_id || null);
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(r.lastInsertRowid);
@@ -611,6 +883,9 @@ app.patch("/shops/:id/status", requireRole("admin"), (req, res) => {
   if (!SHOP_STATUSES.includes(status)) return res.status(422).json({ detail: "Invalid status" });
   db.prepare("UPDATE shops SET status = ? WHERE id = ?").run(status, shop.id);
   const updated = db.prepare("SELECT * FROM shops WHERE id = ?").get(shop.id);
+  const label = status === "approved" ? "approved and is now live" : (status === "suspended" ? "suspended" : status);
+  notify(updated.owner_id, "shop_status", `Shop '${updated.name}' ${status}`,
+    `Your shop '${updated.name}' has been ${label}.`, null);
   res.json(serializeShop(updated));
 });
 
@@ -793,6 +1068,7 @@ app.post("/orders", requireRole("customer"), (req, res) => {
 
   try {
     const order = placeOrderTx();
+    notifyOrderPlaced(order, req.user);
     res.status(201).json(serializeOrder(order));
   } catch (err) {
     res.status(err.status || 500).json({ detail: err.message });
@@ -853,6 +1129,7 @@ app.patch("/orders/:id/status", requireAuth, (req, res) => {
   const updatedAt = new Date().toISOString();
   db.prepare("UPDATE orders SET status = ?, updated_at = ? WHERE id = ?").run(status, updatedAt, orderId);
   const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  notifyStatusChange(updated, status);
   res.json(serializeOrder(updated));
 });
 
@@ -1137,11 +1414,42 @@ app.post("/upload", requireAuth, (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI ENDPOINTS (Gemini 2.0 Flash)
+// AI ENDPOINTS (OpenRouter preferred, Gemini 2.0 Flash fallback)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-const GEMINI_URL     = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_API_KEY     = process.env.GEMINI_API_KEY || "";
+const GEMINI_URL         = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+const OPENROUTER_URL     = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODEL   = process.env.OPENAI_MODEL || "openai/gpt-4o-mini";
+const APP_URL            = process.env.APP_URL || "https://hypershopindia.com";
+
+// AI is available when either provider is configured. OpenRouter is preferred.
+function aiAvailable() {
+  return Boolean(OPENROUTER_API_KEY) || Boolean(GEMINI_API_KEY);
+}
+
+async function callOpenRouter(prompt) {
+  const resp = await fetch(OPENROUTER_URL, {
+    method:  "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type":  "application/json",
+      "HTTP-Referer":  APP_URL,
+      "X-Title":       "HyperShopIndia",
+    },
+    body: JSON.stringify({
+      model:    OPENROUTER_MODEL,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`OpenRouter error ${resp.status}: ${body.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  return (data.choices?.[0]?.message?.content || "").trim();
+}
 
 async function callGemini(prompt) {
   if (!GEMINI_API_KEY) throw new Error("Gemini API key not configured");
@@ -1158,14 +1466,20 @@ async function callGemini(prompt) {
   return data.candidates[0].content.parts[0].text.trim();
 }
 
+// Provider-agnostic LLM call: OpenRouter when configured, else Gemini.
+async function callLLM(prompt) {
+  if (OPENROUTER_API_KEY) return callOpenRouter(prompt);
+  return callGemini(prompt);
+}
+
 // GET /ai/status
 app.get("/ai/status", (_req, res) => {
-  res.json({ available: Boolean(GEMINI_API_KEY) });
+  res.json({ available: aiAvailable() });
 });
 
 // POST /ai/suggest-products
 app.post("/ai/suggest-products", async (req, res) => {
-  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  if (!aiAvailable()) return res.status(503).json({ detail: "AI service not configured" });
   const { category = "Grocery", partial_name = "" } = req.body;
   if (!partial_name.trim()) return res.status(422).json({ detail: "partial_name is required" });
   try {
@@ -1176,7 +1490,7 @@ app.post("/ai/suggest-products", async (req, res) => {
       `Suggest 5 complete, realistic product names that match this category and start with or relate to "${partial_name}".\n` +
       `Each name should be specific (include brand, weight, or variety if appropriate).\n` +
       `Respond ONLY with a JSON array of 5 strings. No explanation, no markdown.`;
-    const raw   = await callGemini(prompt);
+    const raw   = await callLLM(prompt);
     const match = raw.match(/\[[\s\S]*\]/);
     const suggestions = match ? JSON.parse(match[0]) : [];
     res.json({ suggestions: Array.isArray(suggestions) ? suggestions.slice(0, 5) : [] });
@@ -1187,7 +1501,7 @@ app.post("/ai/suggest-products", async (req, res) => {
 
 // POST /ai/generate-description
 app.post("/ai/generate-description", async (req, res) => {
-  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  if (!aiAvailable()) return res.status(503).json({ detail: "AI service not configured" });
   const { name, category } = req.body;
   if (!name || !category) return res.status(422).json({ detail: "name and category are required" });
   try {
@@ -1196,7 +1510,7 @@ app.post("/ai/generate-description", async (req, res) => {
       `for an online grocery store in the "${category}" category.\n` +
       `Highlight freshness, quality, or value.\n` +
       `Respond with ONLY the description sentence, no quotes.`;
-    const raw = await callGemini(prompt);
+    const raw = await callLLM(prompt);
     res.json({ description: raw.replace(/^["']|["']$/g, "").replace(/\.$/, "") });
   } catch (err) {
     res.status(500).json({ detail: err.message });
@@ -1205,7 +1519,7 @@ app.post("/ai/generate-description", async (req, res) => {
 
 // POST /ai/low-stock-insight
 app.post("/ai/low-stock-insight", async (req, res) => {
-  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  if (!aiAvailable()) return res.status(503).json({ detail: "AI service not configured" });
   const { shop_name, low_stock_items } = req.body;
   if (!low_stock_items || !low_stock_items.length) {
     return res.status(422).json({ detail: "low_stock_items is required" });
@@ -1218,7 +1532,7 @@ app.post("/ai/low-stock-insight", async (req, res) => {
       `Give 2-3 short, practical sentences of advice on restocking priorities and what to order first.\n` +
       `Consider typical demand patterns for Indian grocery stores.\n` +
       `Respond in plain text, no bullet points or headers.`;
-    const insight = await callGemini(prompt);
+    const insight = await callLLM(prompt);
     res.json({ insight });
   } catch (err) {
     res.status(500).json({ detail: err.message });
@@ -1227,7 +1541,7 @@ app.post("/ai/low-stock-insight", async (req, res) => {
 
 // POST /ai/chat — Conversational AI with rolling history and role-based system context
 app.post("/ai/chat", async (req, res) => {
-  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  if (!aiAvailable()) return res.status(503).json({ detail: "AI service not configured" });
   const { message, role = "customer", shop_id, history = [] } = req.body;
   if (!message || !String(message).trim()) {
     return res.status(422).json({ detail: "message is required" });
@@ -1235,20 +1549,20 @@ app.post("/ai/chat", async (req, res) => {
 
   const roleContext = {
     customer: (
-      "You are HyperMart Assistant, a helpful shopping assistant for a hyperlocal " +
+      "You are HyperShopIndia Assistant, a helpful shopping assistant for a hyperlocal " +
       "marketplace in India. Help customers find products, compare shops, and get " +
       "shopping advice. Be friendly, concise, and use ₹ for prices."
     ),
     owner: (
-      "You are HyperMart Business Assistant, an AI advisor for shop owners. " +
+      "You are HyperShopIndia Business Assistant, an AI advisor for shop owners. " +
       "Help with inventory decisions, pricing strategies, sales trends, and " +
       "business growth tips relevant to small Indian neighbourhood shops."
     ),
     admin: (
-      "You are HyperMart Admin Assistant. Help with platform governance, " +
+      "You are HyperShopIndia Admin Assistant. Help with platform governance, " +
       "shop approval decisions, user management issues, and analytics interpretation."
     ),
-  }[role] || "You are a helpful assistant for the HyperMart marketplace.";
+  }[role] || "You are a helpful assistant for the HyperShopIndia marketplace.";
 
   const shopContext = shop_id ? ` The user is currently managing shop ID ${shop_id}.` : "";
 
@@ -1262,7 +1576,7 @@ app.post("/ai/chat", async (req, res) => {
     `User: ${message}\nAssistant:`;
 
   try {
-    const reply = await callGemini(prompt);
+    const reply = await callLLM(prompt);
     res.json({ reply, tools_used: [], sources: [] });
   } catch (_) {
     res.json({
@@ -1275,7 +1589,7 @@ app.post("/ai/chat", async (req, res) => {
 
 // POST /ai/sales-forecast  (auth required)
 app.post("/ai/sales-forecast", requireAuth, async (req, res) => {
-  if (!GEMINI_API_KEY) return res.status(503).json({ detail: "AI service not configured" });
+  if (!aiAvailable()) return res.status(503).json({ detail: "AI service not configured" });
   const { shop_id } = req.body;
   if (!shop_id) return res.status(422).json({ detail: "shop_id is required" });
   const shop = db.prepare("SELECT * FROM shops WHERE id = ?").get(Number(shop_id));
@@ -1316,7 +1630,7 @@ app.post("/ai/sales-forecast", requireAuth, async (req, res) => {
       `daily revenue (INR) over the last 7 days: ${last7.map((v, i) => `Day ${i + 1}: ₹${v}`).join(", ")}.\n` +
       `Average daily revenue: ₹${Math.round(avgRevenue)}.\n` +
       `Give 2-3 sentences of sales forecast insight for the next 7 days, considering typical Indian grocery demand. Plain text only.`;
-    const insight = await callGemini(prompt);
+    const insight = await callLLM(prompt);
     res.json({ forecast, insight, avg_daily_revenue: Math.round(avgRevenue * 100) / 100 });
   } catch (_) {
     res.json({ forecast, insight: null, avg_daily_revenue: Math.round(avgRevenue * 100) / 100 });
@@ -1339,6 +1653,9 @@ app.post("/shops/:shopId/reviews", requireRole("customer"), (req, res) => {
   const avg = db.prepare("SELECT AVG(rating) as a, COUNT(*) as c FROM reviews WHERE shop_id = ?").get(shopId);
   db.prepare("UPDATE shops SET rating = ?, review_count = ? WHERE id = ?").run(Math.round((avg.a || 0) * 10) / 10, avg.c, shopId);
   const review = db.prepare("SELECT * FROM reviews WHERE id = ?").get(r.lastInsertRowid);
+  const commentSuffix = comment ? `: "${comment}"` : "";
+  notify(shop.owner_id, "review", `New ${rating}★ review for ${shop.name}`,
+    `${req.user.display_name} reviewed your shop ${rating}★${commentSuffix}`, null);
   res.status(201).json({ ...review, customer_name: req.user.display_name });
 });
 
@@ -1348,6 +1665,46 @@ app.get("/shops/:shopId/reviews", (req, res) => {
   if (!shop) return res.status(404).json({ detail: "Shop not found" });
   const reviews = db.prepare("SELECT r.*, u.display_name as customer_name FROM reviews r JOIN users u ON u.id = r.customer_id WHERE r.shop_id = ? ORDER BY r.created_at DESC").all(shopId);
   res.json(reviews);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS (header bell)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /notifications/me
+app.get("/notifications/me", requireAuth, (req, res) => {
+  let limit = Number(req.query.limit || 30);
+  if (!Number.isFinite(limit) || limit < 1 || limit > 100) limit = 30;
+  const rows = db.prepare(
+    "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?"
+  ).all(req.user.id, limit);
+  const unread = db.prepare(
+    "SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0"
+  ).get(req.user.id).c;
+  res.json({ items: rows.map(serializeNotification), unread_count: unread });
+});
+
+// GET /notifications/me/unread-count
+app.get("/notifications/me/unread-count", requireAuth, (req, res) => {
+  const unread = db.prepare(
+    "SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0"
+  ).get(req.user.id).c;
+  res.json({ unread_count: unread });
+});
+
+// POST /notifications/read-all
+app.post("/notifications/read-all", requireAuth, (req, res) => {
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0").run(req.user.id);
+  res.json({ ok: true });
+});
+
+// PATCH /notifications/:id/read
+app.patch("/notifications/:id/read", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const n = db.prepare("SELECT * FROM notifications WHERE id = ? AND user_id = ?").get(id, req.user.id);
+  if (!n) return res.status(404).json({ detail: "Notification not found" });
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+  res.json({ ok: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1368,6 +1725,11 @@ app.post("/orders/:orderId/cancel", requireAuth, (req, res) => {
   }
   db.prepare("UPDATE orders SET status = 'rejected', updated_at = ? WHERE id = ?").run(new Date().toISOString(), orderId);
   const updated = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  const ownerRow = db.prepare("SELECT u.id FROM shops s JOIN users u ON u.id = s.owner_id WHERE s.id = ?").get(updated.shop_id);
+  if (ownerRow) {
+    notify(ownerRow.id, "order_cancelled", `Order #${updated.id} cancelled`,
+      `A customer cancelled order #${updated.id} at ${updated.shop_name}.`, updated.id);
+  }
   res.json(serializeOrder(updated));
 });
 
@@ -1812,7 +2174,7 @@ app.delete("/users/me", requireAuth, (req, res) => {
 async function startServer() {
   await db.init();
   app.listen(PORT, () => {
-    console.log(`\nHyperMart API (Node.js) running on http://localhost:${PORT}`);
+    console.log(`\nHyperShopIndia API (Node.js) running on http://localhost:${PORT}`);
     console.log("  POST /auth/register  POST /auth/login");
     console.log("  GET  /shops          GET  /shops/:id");
     console.log("  POST /orders         GET  /orders/me");

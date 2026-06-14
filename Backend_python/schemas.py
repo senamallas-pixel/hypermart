@@ -477,6 +477,23 @@ class ReviewOut(OrmBase):
     created_at:    datetime
 
 
+# ── Notifications ────────────────────────────────────────────────────
+
+class NotificationOut(OrmBase):
+    id:         int
+    type:       str
+    title:      str
+    message:    Optional[str] = None
+    order_id:   Optional[int] = None
+    is_read:    int
+    created_at: datetime
+
+
+class NotificationListOut(BaseModel):
+    items:        List[NotificationOut]
+    unread_count: int
+
+
 # ── Password Reset ───────────────────────────────────────────────────
 
 class ForgotPasswordRequest(BaseModel):

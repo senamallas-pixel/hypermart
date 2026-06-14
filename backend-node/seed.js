@@ -1,6 +1,6 @@
 "use strict";
 /**
- * HyperMart — Node.js Seed Script
+ * HyperShopIndia — Node.js Seed Script
  *
  *   node seed.js           — upsert (safe to run multiple times)
  *   node seed.js --reset   — drop all tables first, then seed fresh

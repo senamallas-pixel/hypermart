@@ -6,10 +6,14 @@ JWT auth, password hashing, subscription system, full CRUD.
 import os
 import csv
 import io
+import json
 import uuid
 import secrets
 import pathlib
 import base64
+import ipaddress
+import urllib.request
+import urllib.parse
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 from collections import defaultdict
@@ -17,6 +21,7 @@ from collections import defaultdict
 from fastapi import FastAPI, Depends, HTTPException, Query, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, text, Date
@@ -32,13 +37,14 @@ import models as M
 import schemas as S
 from database import get_db, create_tables
 from ai import router as ai_router
+import notifier as N
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App
 # ─────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="HyperMart API",
+    title="HyperShopIndia API",
     description="Hyperlocal marketplace — Python / SQLAlchemy / SQLite backend",
     version="3.0.0",
 )
@@ -56,6 +62,13 @@ app.include_router(ai_router)
 
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "5"))
+
+# ── Local file uploads ─────────────────────────────────────────────────────────
+_API_ROOT = pathlib.Path(__file__).resolve().parent
+UPLOAD_DIR = pathlib.Path(os.getenv("UPLOAD_DIR", str(_API_ROOT / "uploads")))
+UPLOAD_URL_PREFIX = os.getenv("UPLOAD_URL_PREFIX", "/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(UPLOAD_URL_PREFIX, StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
@@ -229,6 +242,84 @@ def _check_subscription(user: M.User, db: Session) -> None:
         )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Login device + location helpers (mirror Backend_php AuthController)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _client_ip(request: Request) -> str:
+    """Best-effort real client IP (handles Cloudflare / proxy headers)."""
+    headers = request.headers
+    for key in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        val = headers.get(key)
+        if val:
+            ip = val.split(",")[0].strip()
+            try:
+                ipaddress.ip_address(ip)
+                return ip
+            except ValueError:
+                continue
+    if request.client and request.client.host:
+        try:
+            ipaddress.ip_address(request.client.host)
+            return request.client.host
+        except ValueError:
+            pass
+    return ""
+
+
+def _parse_device(ua: str) -> str:
+    """Parse a User-Agent string into 'Browser on OS'."""
+    if not ua:
+        return "Unknown device"
+    low = ua.lower()
+    os_name = "Unknown OS"
+    if "windows" in low:
+        os_name = "Windows"
+    elif "iphone" in low or "ipad" in low:
+        os_name = "iOS"
+    elif "mac os" in low:
+        os_name = "macOS"
+    elif "android" in low:
+        os_name = "Android"
+    elif "linux" in low:
+        os_name = "Linux"
+
+    browser = "Unknown browser"
+    if "edg" in low:
+        browser = "Edge"
+    elif "opr" in low or "opera" in low:
+        browser = "Opera"
+    elif "chrome" in low:
+        browser = "Chrome"
+    elif "firefox" in low:
+        browser = "Firefox"
+    elif "safari" in low:
+        browser = "Safari"
+    return f"{browser} on {os_name}"
+
+
+def _geo_locate(ip: str) -> str:
+    """Geolocate a public IP via ip-api.com. Empty for private/local IPs or on failure."""
+    if not ip:
+        return ""
+    try:
+        addr = ipaddress.ip_address(ip)
+        if addr.is_private or addr.is_loopback or addr.is_reserved or addr.is_link_local:
+            return ""
+    except ValueError:
+        return ""
+    try:
+        url = f"http://ip-api.com/json/{urllib.parse.quote(ip)}?fields=status,country,regionName,city"
+        with urllib.request.urlopen(url, timeout=4) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if data.get("status") == "success":
+            parts = [data.get("city", ""), data.get("regionName", ""), data.get("country", "")]
+            return ", ".join(p for p in parts if p).strip()
+    except Exception:
+        pass
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════════
 # AUTH — register / login
 # ═══════════════════════════════════════════════════════════════════
@@ -263,12 +354,15 @@ def register(payload: S.RegisterRequest, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(user)
+    N.notify(db, user.id, "welcome", "Welcome to HyperShopIndia!",
+             "Your account has been created. Browse shops near you and start ordering.")
+    db.commit()
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user": user}
 
 
 @app.post("/auth/login", response_model=S.TokenOut)
-def login(payload: S.LoginRequest, db: Session = Depends(get_db)):
+def login(payload: S.LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Verify email + password and return a JWT token."""
     user = db.query(M.User).filter(M.User.email == str(payload.email)).first()
     if not user:
@@ -282,6 +376,20 @@ def login(payload: S.LoginRequest, db: Session = Depends(get_db)):
     user.last_login = datetime.utcnow()
     db.commit()
     db.refresh(user)
+
+    # Login notification (in-app + email together) — with device + location
+    ip = _client_ip(request)
+    device = _parse_device(request.headers.get("user-agent", ""))
+    location = _geo_locate(ip)
+    msg = "Signed in on " + datetime.utcnow().strftime("%d %b %Y at %H:%M") + " UTC.\nDevice: " + device
+    if location:
+        msg += f"\nLocation: {location}"
+    if ip:
+        msg += f"\nIP: {ip}"
+    msg += "\nIf this wasn't you, change your password."
+    N.notify(db, user.id, "login", "New sign-in to your HyperShopIndia account", msg)
+    db.commit()
+
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user": user}
 
@@ -503,7 +611,7 @@ def create_shop(
 ):
     if current_user.role == M.UserRole.owner:
         _check_subscription(current_user, db)
-    shop = M.Shop(owner_id=current_user.id, **payload.model_dump())
+    shop = M.Shop(owner_id=current_user.id, status=M.ShopStatus.approved, **payload.model_dump())
     db.add(shop)
     db.commit()
     db.refresh(shop)
@@ -555,6 +663,16 @@ def update_shop_status(
     shop.status = payload.status
     db.commit()
     db.refresh(shop)
+    status_value = shop.status.value if hasattr(shop.status, "value") else str(shop.status)
+    if status_value == "approved":
+        label = "approved and is now live"
+    elif status_value == "suspended":
+        label = "suspended"
+    else:
+        label = status_value
+    N.notify(db, shop.owner_id, "shop_status", f"Shop '{shop.name}' {status_value}",
+             f"Your shop '{shop.name}' has been {label}.")
+    db.commit()
     return shop
 
 
@@ -739,8 +857,100 @@ def place_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    _notify_order_placed(db, order, current_user)
+    db.commit()
     return order
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Order notifications: in-app log (always) + rich email (if SMTP configured)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _email_wrap(heading: str, body_html: str) -> str:
+    return (
+        "<div style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A1A1A'>"
+        "<h2 style='color:#5A5A40;margin:0 0 12px'>HyperShopIndia</h2>"
+        f"<h3 style='margin:0 0 8px'>{heading}</h3>"
+        f"<div style='font-size:14px;line-height:1.6'>{body_html}</div>"
+        "<p style='color:#999;font-size:12px;margin-top:24px'>HyperShopIndia · hypershopindia.com</p></div>"
+    )
+
+
+def _order_items_html(order: M.Order) -> str:
+    import html as _html
+    rows = ""
+    for it in order.items:
+        line = f"{it.price * it.quantity:.2f}"
+        rows += (
+            "<tr><td style='padding:4px 8px;border-bottom:1px solid #eee'>" + _html.escape(it.name)
+            + f"</td><td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:center'>x{it.quantity}</td>"
+            + f"<td style='padding:4px 8px;border-bottom:1px solid #eee;text-align:right'>₹{line}</td></tr>"
+        )
+    return f"<table style='width:100%;border-collapse:collapse;margin:12px 0'>{rows}</table>"
+
+
+def _notify_order_placed(db: Session, order: M.Order, customer: M.User) -> None:
+    """Customer order confirmation + new-order alert to the shop owner."""
+    import html as _html
+    oid = order.id
+    total = f"{float(order.total):.2f}"
+    shop = db.get(M.Shop, order.shop_id)
+    owner = db.get(M.User, shop.owner_id) if shop else None
+
+    # In-app notifications (always)
+    N.log_notification(db, order.customer_id, "order_placed", f"Order #{oid} placed",
+                       f"Your order at {order.shop_name} was placed. Total ₹{total}.", oid)
+    if owner:
+        N.log_notification(db, owner.id, "new_order", f"New order #{oid}",
+                           f"New order at {order.shop_name} — ₹{total}. Deliver to: {order.delivery_address}", oid)
+
+    # Rich emails (only if SMTP configured)
+    if not N.mailer_configured():
+        return
+    items_html = _order_items_html(order)
+    status_value = order.status.value if hasattr(order.status, "value") else str(order.status)
+    payment_value = order.payment_status.value if hasattr(order.payment_status, "value") else str(order.payment_status)
+    if customer.email:
+        html_body = _email_wrap("Order Confirmed 🛒",
+            f"Hi {_html.escape(customer.display_name or 'there')}, your order <b>#{oid}</b> at "
+            f"<b>{_html.escape(order.shop_name)}</b> has been placed."
+            + items_html + f"<p style='font-size:16px'><b>Total: ₹{total}</b></p>"
+            + f"<p>Status: <b>{_html.escape(status_value)}</b> · Payment: {_html.escape(payment_value)}</p>")
+        N.send_email(customer.email, f"Order #{oid} confirmed — HyperShopIndia", html_body)
+    if owner and owner.email:
+        html_body = _email_wrap("New Order 📦",
+            f"You have a new order <b>#{oid}</b> at <b>{_html.escape(order.shop_name)}</b>."
+            + items_html + f"<p style='font-size:16px'><b>Total: ₹{total}</b></p>"
+            + f"<p>Deliver to: {_html.escape(order.delivery_address)}</p>"
+            + "<p>Manage it in your HyperShopIndia owner dashboard.</p>")
+        N.send_email(owner.email, f"New order #{oid} — {order.shop_name}", html_body)
+
+
+def _notify_status_change(db: Session, order: M.Order, status: str) -> None:
+    """Notify the customer when their order status changes."""
+    import html as _html
+    oid = order.id
+    labels = {
+        "accepted": "accepted and is being prepared",
+        "ready": "ready",
+        "out_for_delivery": "out for delivery",
+        "delivered": "delivered — enjoy!",
+        "rejected": "cancelled",
+    }
+    msg = labels.get(status, f"updated to {status}")
+    # In-app (always)
+    N.log_notification(db, order.customer_id, "order_status", f"Order #{oid} {status}",
+                       f"Your order at {order.shop_name} is now {msg}.", oid)
+    # Email (if configured)
+    if not N.mailer_configured():
+        return
+    cust = db.get(M.User, order.customer_id)
+    if not cust or not cust.email:
+        return
+    html_body = _email_wrap("Order Update",
+        f"Hi {_html.escape(cust.display_name or 'there')}, your order <b>#{oid}</b> at "
+        f"<b>{_html.escape(order.shop_name)}</b> is now <b>{msg}</b>.")
+    N.send_email(cust.email, f"Order #{oid} is {status} — HyperShopIndia", html_body)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -977,6 +1187,9 @@ def update_order_status(
         order.delivered_at = now
     db.commit()
     db.refresh(order)
+    status_value = payload.status.value if hasattr(payload.status, "value") else str(payload.status)
+    _notify_status_change(db, order, status_value)
+    db.commit()
     return order
 
 
@@ -1238,11 +1451,14 @@ def shop_analytics(
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    if not CLOUDINARY_CONFIGURED:
-        raise HTTPException(500, "Cloudinary is not configured on server")
+    """Save an uploaded image to the local uploads/ dir and return a relative URL.
 
-    ext = pathlib.Path(file.filename or "image.bin").suffix.lower()
-    if ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
+    Returns {"url": "/uploads/<uuid>.<ext>"} — the frontend prepends VITE_API_URL.
+    Cloudinary is used only as a fallback when CLOUDINARY_URL/creds are configured
+    and FORCE_LOCAL_UPLOAD is not set.
+    """
+    ext = pathlib.Path(file.filename or "image.bin").suffix.lower().lstrip(".")
+    if ext not in {"jpg", "jpeg", "png", "gif", "webp"}:
         raise HTTPException(400, "Only image files are allowed (jpg, png, gif, webp)")
 
     # Read file and enforce size limit
@@ -1251,21 +1467,32 @@ async def upload_file(file: UploadFile = File(...)):
     if len(contents) > max_bytes:
         raise HTTPException(413, f"File too large. Maximum size is {MAX_UPLOAD_MB}MB")
 
-    mime_type = file.content_type or "application/octet-stream"
-    data_uri = f"data:{mime_type};base64,{base64.b64encode(contents).decode('utf-8')}"
+    use_cloudinary = CLOUDINARY_CONFIGURED and os.getenv("FORCE_LOCAL_UPLOAD", "").lower() not in ("1", "true", "yes")
+    if use_cloudinary:
+        mime_type = file.content_type or "application/octet-stream"
+        data_uri = f"data:{mime_type};base64,{base64.b64encode(contents).decode('utf-8')}"
+        try:
+            uploaded = cloudinary.uploader.upload(
+                data_uri,
+                folder=CLOUDINARY_FOLDER,
+                public_id=str(uuid.uuid4()),
+                overwrite=False,
+                resource_type="image",
+            )
+            return {"url": uploaded.get("secure_url")}
+        except Exception as exc:
+            raise HTTPException(500, f"Cloudinary upload failed: {exc}")
 
+    # Local-disk upload (default)
+    filename = f"{uuid.uuid4()}.{ext}"
+    dest = UPLOAD_DIR / filename
     try:
-        uploaded = cloudinary.uploader.upload(
-            data_uri,
-            folder=CLOUDINARY_FOLDER,
-            public_id=str(uuid.uuid4()),
-            overwrite=False,
-            resource_type="image",
-        )
-    except Exception as exc:
-        raise HTTPException(500, f"Cloudinary upload failed: {exc}")
+        with open(dest, "wb") as fh:
+            fh.write(contents)
+    except Exception:
+        raise HTTPException(500, "Failed to store uploaded file")
 
-    return {"url": uploaded.get("secure_url")}
+    return {"url": f"{UPLOAD_URL_PREFIX.rstrip('/')}/{filename}"}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1356,6 +1583,10 @@ def create_review(
     shop.review_count = cnt
     db.commit()
     db.refresh(review)
+    comment_suffix = f': "{payload.comment}"' if payload.comment else ""
+    N.notify(db, shop.owner_id, "review", f"New {payload.rating}★ review for {shop.name}",
+             f"{current_user.display_name} reviewed your shop {payload.rating}★{comment_suffix}")
+    db.commit()
     return {
         **{c.name: getattr(review, c.name) for c in review.__table__.columns},
         "customer_name": current_user.display_name,
@@ -1381,6 +1612,78 @@ def list_reviews(shop_id: int, db: Session = Depends(get_db)):
             "customer_name": customer.display_name if customer else "Unknown",
         })
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NOTIFICATIONS (header bell)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/notifications/me", response_model=S.NotificationListOut)
+def list_my_notifications(
+    limit: int = Query(default=30),
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if limit < 1 or limit > 100:
+        limit = 30
+    rows = (
+        db.query(M.Notification)
+        .filter(M.Notification.user_id == current_user.id)
+        .order_by(M.Notification.created_at.desc(), M.Notification.id.desc())
+        .limit(limit)
+        .all()
+    )
+    unread = (
+        db.query(M.Notification)
+        .filter(M.Notification.user_id == current_user.id, M.Notification.is_read == 0)
+        .count()
+    )
+    return {"items": rows, "unread_count": unread}
+
+
+@app.get("/notifications/me/unread-count")
+def my_unread_count(
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    unread = (
+        db.query(M.Notification)
+        .filter(M.Notification.user_id == current_user.id, M.Notification.is_read == 0)
+        .count()
+    )
+    return {"unread_count": unread}
+
+
+@app.post("/notifications/read-all")
+def mark_all_notifications_read(
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    (
+        db.query(M.Notification)
+        .filter(M.Notification.user_id == current_user.id, M.Notification.is_read == 0)
+        .update({M.Notification.is_read: 1})
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@app.patch("/notifications/{notification_id}/read")
+def mark_notification_read(
+    notification_id: int,
+    current_user: M.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notif = (
+        db.query(M.Notification)
+        .filter(M.Notification.id == notification_id, M.Notification.user_id == current_user.id)
+        .first()
+    )
+    if not notif:
+        raise HTTPException(404, "Notification not found")
+    notif.is_read = 1
+    db.commit()
+    return {"ok": True}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1410,6 +1713,11 @@ def cancel_order(
     order.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(order)
+    shop = db.get(M.Shop, order.shop_id)
+    if shop:
+        N.notify(db, shop.owner_id, "order_cancelled", f"Order #{order.id} cancelled",
+                 f"A customer cancelled order #{order.id} at {order.shop_name}.", order.id)
+        db.commit()
     return order
 
 

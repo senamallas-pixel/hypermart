@@ -280,6 +280,22 @@ class PasswordResetToken(Base):
         return f"<PasswordResetToken user={self.user_id}>"
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    type       = Column(String(40), nullable=False)
+    title      = Column(String(255), nullable=False)
+    message    = Column(Text, nullable=True)
+    order_id   = Column(Integer, nullable=True)
+    is_read    = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<Notification user={self.user_id} type={self.type}>"
+
+
 # ── New Feature Models ───────────────────────────────────────────────────────
 
 class Supplier(Base):

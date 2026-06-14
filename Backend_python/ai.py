@@ -1,5 +1,5 @@
 """
-HyperMart — AI Router (OpenAI GPT)
+HyperShopIndia — AI Router (OpenAI / OpenRouter compatible)
 Enhanced with real DB context for smarter, data-driven AI responses.
 Mounted in main.py: app.include_router(ai_router)
 """
@@ -19,16 +19,40 @@ import models as M
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
-OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# ── Provider config (OpenAI or OpenRouter) ──────────────────────────────────────
+# OpenRouter key takes precedence over OpenAI; either enables AI.
+USING_OPENROUTER = bool(os.getenv("OPENROUTER_API_KEY", ""))
+OPENAI_KEY = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+
+if os.getenv("AI_BASE_URL", ""):
+    OPENAI_URL = os.getenv("AI_BASE_URL").rstrip("/") + "/chat/completions"
+elif USING_OPENROUTER:
+    OPENAI_URL = "https://openrouter.ai/api/v1/chat/completions"
+else:
+    OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+
+# OpenRouter needs vendor-prefixed model ids (e.g. openai/gpt-4o-mini).
+_DEFAULT_MODEL = "openai/gpt-4o-mini" if USING_OPENROUTER else "gpt-4o-mini"
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", _DEFAULT_MODEL)
 AI_AVAILABLE = bool(OPENAI_KEY)
 
 
+def _ai_headers() -> dict:
+    """Auth + (optional) OpenRouter attribution headers."""
+    headers = {
+        "Authorization": f"Bearer {OPENAI_KEY}",
+        "Content-Type": "application/json",
+    }
+    if USING_OPENROUTER:
+        headers["HTTP-Referer"] = os.getenv("APP_URL", "https://hypershopindia.com")
+        headers["X-Title"] = "HyperShopIndia"
+    return headers
+
+
 async def call_openai(prompt: str, system: str = "", max_tokens: int = 512, temperature: float = 0.7) -> str:
-    """Send a prompt to OpenAI and return the response text."""
+    """Send a prompt to the configured provider and return the response text."""
     if not AI_AVAILABLE:
-        raise HTTPException(503, "OpenAI API key not configured")
+        raise HTTPException(503, "AI API key not configured")
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -43,10 +67,7 @@ async def call_openai(prompt: str, system: str = "", max_tokens: int = 512, temp
         r = await client.post(
             OPENAI_URL,
             json=payload,
-            headers={
-                "Authorization": f"Bearer {OPENAI_KEY}",
-                "Content-Type": "application/json",
-            },
+            headers=_ai_headers(),
         )
         r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
@@ -648,22 +669,22 @@ async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
 
     system_prompt = {
         "customer": (
-            "You are HyperMart Assistant, a friendly shopping helper for a hyperlocal "
+            "You are HyperShopIndia Assistant, a friendly shopping helper for a hyperlocal "
             "grocery marketplace in India. Help customers find products, compare shops, "
             "track orders, and get shopping advice. Use ₹ for prices. Be warm and helpful. "
             "USE THE TOOLS to look up real-time product availability, prices, and shop info — "
             "never guess prices or stock levels."
         ),
         "owner": (
-            "You are HyperMart Business Assistant for shop owners. Help with inventory, "
+            "You are HyperShopIndia Business Assistant for shop owners. Help with inventory, "
             "pricing, sales analysis, and growth tips. USE THE TOOLS to fetch real sales data, "
             "stock levels, and order info — give advice based on actual numbers, not guesses."
         ),
         "admin": (
-            "You are HyperMart Admin Assistant. Help with platform governance, approvals, "
+            "You are HyperShopIndia Admin Assistant. Help with platform governance, approvals, "
             "and analytics. USE THE TOOLS to get real platform stats and shop data."
         ),
-    }.get(body.role, "You are a helpful assistant for the HyperMart marketplace.")
+    }.get(body.role, "You are a helpful assistant for the HyperShopIndia marketplace.")
     system_prompt += formatting_rules
 
     if body.shop_id:
@@ -675,7 +696,7 @@ async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
     messages.append({"role": "user", "content": body.message})
 
     if not AI_AVAILABLE:
-        return {"reply": "AI is not configured. Please set OPENAI_API_KEY.", "tools_used": [], "sources": []}
+        return {"reply": "AI is not configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.", "tools_used": [], "sources": []}
 
     # Filter tools by role
     role_tools = {
@@ -704,7 +725,7 @@ async def ai_chat(body: ChatRequest, db: Session = Depends(get_db)) -> dict:
                 r = await client.post(
                     OPENAI_URL,
                     json=payload,
-                    headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
+                    headers=_ai_headers(),
                 )
                 r.raise_for_status()
 
