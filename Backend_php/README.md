@@ -5,8 +5,8 @@ A dependency-free PHP 8 + MySQL port of the Python FastAPI backend (now `Backend
 app servers). It reproduces the same REST contract, so the unchanged React frontend works
 against it by only pointing `VITE_API_URL` at `https://<your-domain>/api`.
 
-- No Composer / external libraries — JWT (HS256), HMAC, base64url are native PHP; OpenAI,
-  Cloudinary, and Razorpay are plain cURL calls.
+- No Composer / external libraries — JWT (HS256), HMAC, base64url are native PHP; OpenAI
+  and Razorpay are plain cURL calls; image uploads are stored on the local (Hostinger) filesystem.
 - Front controller (`index.php`) + `.htaccess` route all `/api/*` requests through a tiny router.
 - `src/` holds the framework (`Database`, `Auth`, `Router`, `Present`, `Enums`, `Validation`)
   and `src/controllers/` holds one controller per route group.
@@ -33,7 +33,7 @@ Backend_php/
 2. **Import the schema**: open *phpMyAdmin* for that DB → *Import* → upload `schema.sql`.
 3. **Upload the API**: put the **contents of `Backend_php/`** into `public_html/api/`.
 4. **Create `public_html/api/.env`** from `.env.example` with the real DB credentials, a strong
-   `JWT_SECRET`, and (optionally) Razorpay / OpenAI / Cloudinary keys. Set a `SEED_TOKEN` if you
+   `JWT_SECRET`, and (optionally) Razorpay / OpenAI keys. Set a `SEED_TOKEN` if you
    plan to seed over HTTP.
 5. **Seed demo data (optional)**: visit `https://<domain>/api/seed.php?token=<SEED_TOKEN>`
    (add `&reset=1` to drop+recreate tables first). Then blank out `SEED_TOKEN` or delete
@@ -65,6 +65,7 @@ Point the web app at it with `VITE_API_URL=http://localhost:8000` and run `npm r
 - **Enums**: category/location are stored as the SQLAlchemy *keys* (`vegetables`, `green_valley`)
   and exchanged over the API as *values* (`Vegetables & Fruits`, `Green Valley`), matching the
   original backend and the frontend. `src/Enums.php` does the mapping.
-- **Optional services** (AI, Razorpay, Cloudinary) return `503`/degrade gracefully when their env
-  keys are unset — identical to the Python backend.
+- **Optional services** (AI, Razorpay) return `503`/degrade gracefully when their env
+  keys are unset — identical to the Python backend. Image uploads are written to the local
+  `uploads/` folder and served from `/api/uploads/`.
 - The existing `Backend_python/` (Python) and `backend-node/` remain untouched as references.

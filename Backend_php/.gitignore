@@ -1,2 +1,6 @@
 .env
 *.log
+
+# Runtime image uploads (stored on the Hostinger filesystem)
+uploads/*
+!uploads/.gitkeep

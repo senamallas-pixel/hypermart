@@ -44,9 +44,11 @@ jobs:
           protocol: ftps
           local-dir: ./Backend_php/
           server-dir: ${{ vars.HOSTINGER_API_DIR || 'public_html/api/' }}
-          # Never push local env/readme; never delete the server's live .env.
+          # Never push local env/readme; never delete the server's live .env
+          # or the runtime image-upload folder.
           exclude: |
             **/.env
             **/.env.*
             **/README.md
             **/.git*/**
+            uploads/**

@@ -1,6 +1,11 @@
 <?php
 /**
- * POST /upload — image upload to Cloudinary (signed REST call via cURL).
+ * POST /upload — image upload to the local (Hostinger) filesystem.
+ *
+ * Files are written under the API root's `uploads/` directory (served directly
+ * by Apache because .htaccess only rewrites non-existent paths to index.php).
+ * The endpoint returns a relative URL (e.g. `/uploads/<uuid>.jpg`); the frontend
+ * prepends VITE_API_URL, yielding `https://<domain>/api/uploads/<uuid>.jpg`.
  */
 class UploadController
 {
@@ -11,10 +16,6 @@ class UploadController
 
     public static function upload(array $p): void
     {
-        [$cloud, $key, $secret, $folder] = self::config();
-        if (!$cloud || !$key || !$secret) {
-            throw new ApiException(500, 'Cloudinary is not configured on server');
-        }
         if (empty($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
             throw new ApiException(400, 'No file uploaded');
         }
@@ -28,53 +29,30 @@ class UploadController
             throw new ApiException(413, 'File too large. Maximum size is ' . env('MAX_UPLOAD_MB', '5') . 'MB');
         }
 
-        $contents = file_get_contents($file['tmp_name']);
-        $mime = $file['type'] ?: 'application/octet-stream';
-        $dataUri = "data:$mime;base64," . base64_encode($contents);
-
-        $publicId = AuthController::uuid4();
-        $timestamp = time();
-        // Cloudinary signature: sha1 of sorted params + api_secret
-        $toSign = "folder=$folder&public_id=$publicId&timestamp=$timestamp" . $secret;
-        $signature = sha1($toSign);
-
-        $ch = curl_init("https://api.cloudinary.com/v1_1/$cloud/image/upload");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => [
-                'file'      => $dataUri,
-                'api_key'   => $key,
-                'timestamp' => $timestamp,
-                'public_id' => $publicId,
-                'folder'    => $folder,
-                'signature' => $signature,
-            ],
-            CURLOPT_TIMEOUT        => 60,
-        ]);
-        $resp = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $json = json_decode($resp ?: '', true);
-        if ($code >= 400 || !isset($json['secure_url'])) {
-            $msg = $json['error']['message'] ?? 'unknown error';
-            throw new ApiException(500, "Cloudinary upload failed: $msg");
+        [$dir, $prefix] = self::config();
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new ApiException(500, 'Upload directory is not writable on server');
         }
-        Response::json(['url' => $json['secure_url']]);
+
+        $filename = AuthController::uuid4() . '.' . $ext;
+        $dest = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $filename;
+        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+            throw new ApiException(500, 'Failed to store uploaded file');
+        }
+        @chmod($dest, 0644);
+
+        Response::json(['url' => rtrim($prefix, '/') . '/' . $filename]);
     }
 
+    /**
+     * Returns [absolute filesystem dir, public URL prefix].
+     * Defaults to the `uploads/` folder under the API root, served at `/uploads`.
+     */
     private static function config(): array
     {
-        $url = env('CLOUDINARY_URL', '');
-        $folder = env('CLOUDINARY_FOLDER', 'hypermart');
-        if ($url && preg_match('#cloudinary://([^:]+):([^@]+)@(.+)#', $url, $m)) {
-            return [$m[3], $m[1], $m[2], $folder];
-        }
-        return [
-            env('CLOUDINARY_CLOUD_NAME', ''),
-            env('CLOUDINARY_API_KEY', ''),
-            env('CLOUDINARY_API_SECRET', ''),
-            $folder,
-        ];
+        $apiRoot = dirname(__DIR__, 2);                         // Backend_php (= public_html/api)
+        $dir = env('UPLOAD_DIR', $apiRoot . '/uploads');
+        $prefix = env('UPLOAD_URL_PREFIX', '/uploads');
+        return [$dir, $prefix];
     }
 }

@@ -35,8 +35,10 @@ Three workflows deploy HyperMart to Hostinger Premium shared hosting:
 
 ### 3. Server-side `.env` (once, by hand)
 Create `public_html/api/.env` from `Backend_php/.env.example` with real DB creds, a strong
-`JWT_SECRET`, and any Razorpay/OpenAI/Cloudinary keys. **The PHP workflow never overwrites it**
-(`.env` is excluded from the upload).
+`JWT_SECRET`, and any Razorpay/OpenAI keys. **The PHP workflow never overwrites it**
+(`.env` is excluded from the upload). Image uploads are stored on the Hostinger filesystem
+under `public_html/api/uploads/` (created automatically) and served from `/api/uploads/`;
+that folder is excluded from the deploy so uploaded files survive redeploys.
 
 ## First deploy order
 
