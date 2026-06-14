@@ -104,7 +104,7 @@ class ShopController
             'city'            => $b['city'] ?? null,
             'state'           => $b['state'] ?? null,
             'upi_id'          => $b['upi_id'] ?? null,
-            'status'          => 'pending',
+            'status'          => 'approved',
             'rating'          => 4.5,
             'review_count'    => 0,
             'created_at'      => now_utc(),

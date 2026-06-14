@@ -6,7 +6,9 @@
 }
 
 html, body {
-  overflow-x: hidden;
+  /* `clip` prevents horizontal scroll WITHOUT breaking position: sticky
+     (overflow-x: hidden forces overflow-y: auto, which disables sticky). */
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 

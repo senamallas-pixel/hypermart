@@ -7,19 +7,19 @@ import {
   Store, ShoppingCart, User, LayoutDashboard, Settings,
   LogOut, MapPin, ChevronDown, ShoppingBag, Loader2, ArrowRight,
   Search, Package, CheckCircle2, Eye, EyeOff, Phone, Tag, Percent,
-  Navigation, Check, X,
+  Navigation, Check, X, Globe, LayoutGrid,
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
 import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
 import Marketplace        from './pages/Marketplace';
+import Explore            from './pages/Explore';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
 import CustomerProfile    from './pages/CustomerProfile';
 import OrderHistory       from './pages/OrderHistory';
 import CustomerSettings   from './pages/CustomerSettings';
 import InvoiceModal       from './components/InvoiceModal';
-import LanguageSelector   from './components/LanguageSelector';
 import GlobalSearch       from './components/GlobalSearch';
 import NotificationBell    from './components/NotificationBell';
 
@@ -268,11 +268,13 @@ function SignIn() {
 
 // ── Top Nav ────────────────────────────────────────────────────────
 function TopNav() {
-  const { currentUser, signOut, search, setSearch, activeLocation, setActiveLocation } = useApp();
+  const { currentUser, signOut, search, setSearch, activeLocation, setActiveLocation, language, setLanguage } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showLangSubmenu, setShowLangSubmenu] = useState(false);
   const [showLocMenu, setShowLocMenu] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
   const [allLocations, setAllLocations] = useState(['All']);
   const [userCity, setUserCity] = useState('');
   const [locLoading, setLocLoading] = useState(true);
@@ -343,12 +345,13 @@ function TopNav() {
           <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">HyperMart</span>
         </button>
 
-        <GlobalSearch />
+        {/* Desktop only — on mobile the search lives in the hero */}
+        <GlobalSearch widthClass="hidden md:block flex-1 max-w-xs sm:max-w-lg z-50" />
 
         <div className="flex items-center gap-2 ml-auto shrink-0">
           <div className="relative" ref={locRef}>
             <button
-              onClick={() => setShowLocMenu(v => !v)}
+              onClick={() => { setShowLocMenu(v => !v); setShowUserMenu(false); setShowNotif(false); }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F5F5F0] rounded-full border border-[#1A1A1A]/6 hover:bg-[#EBEBDB] transition-all">
               {locLoading
                 ? <Loader2 size={12} className="text-[#5A5A40] animate-spin shrink-0" />
@@ -360,7 +363,7 @@ function TopNav() {
             </button>
 
             {showLocMenu && (
-              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[240px] overflow-hidden z-[70]">
+              <div className="absolute top-full mt-2 right-0 bg-white border border-[#1A1A1A]/8 rounded-2xl shadow-xl min-w-[240px] overflow-hidden z-[70] max-sm:fixed max-sm:top-14 max-sm:right-3 max-sm:left-auto max-sm:mt-0 max-sm:min-w-0 max-sm:w-64">
                 {userCity && (
                   <div className="px-4 py-3 border-b border-[#1A1A1A]/5 flex items-center gap-2 bg-[#F5F5F0]">
                     <Navigation size={14} className="text-[#5A5A40] shrink-0" />
@@ -440,9 +443,12 @@ function TopNav() {
             )}
           </div>
 
-          <LanguageSelector />
-
-          {currentUser && <NotificationBell />}
+          {currentUser && (
+            <NotificationBell
+              open={showNotif}
+              onToggle={() => { setShowNotif(v => !v); setShowUserMenu(false); setShowLocMenu(false); }}
+            />
+          )}
 
           {currentUser ? (
             <div className="relative flex items-center gap-1">
@@ -451,7 +457,7 @@ function TopNav() {
                 <span className="text-xs font-bold truncate max-w-[90px] leading-tight">{currentUser.display_name}</span>
               </div>
               <button 
-                onClick={() => setShowUserMenu(!showUserMenu)}
+                onClick={() => { setShowUserMenu(v => !v); setShowNotif(false); setShowLocMenu(false); }}
                 title="User menu"
                 className="w-8 h-8 flex items-center justify-center hover:bg-[#F5F5F0] rounded-xl transition-colors text-[#5A5A40]">
                 <User size={16} />
@@ -480,7 +486,26 @@ function TopNav() {
                       <ShoppingBag size={14} /> Orders
                     </button>
                   )}
-                  <button 
+                  {/* Language (click to expand options) */}
+                  <button
+                    onClick={() => setShowLangSubmenu(v => !v)}
+                    className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center justify-between gap-2 border-b border-[#1A1A1A]/5"
+                  >
+                    <span className="flex items-center gap-2"><Globe size={14} /> Language</span>
+                    <ChevronDown size={14} className={`transition-transform ${showLangSubmenu ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showLangSubmenu && (
+                    <div className="bg-[#F5F5F0]/40 border-b border-[#1A1A1A]/5">
+                      {[{ code: 'en', label: '🇺🇸 English' }, { code: 'hi', label: '🇮🇳 हिन्दी' }, { code: 'te', label: '🇮🇳 తెలుగు' }].map(l => (
+                        <button key={l.code} onClick={() => { setLanguage(l.code); setShowLangSubmenu(false); }}
+                          className={`w-full text-left pl-9 pr-4 py-2 text-sm flex items-center justify-between hover:bg-[#F5F5F0] transition-colors ${language === l.code ? 'font-bold text-[#5A5A40]' : 'font-medium'}`}>
+                          <span>{l.label}</span>
+                          {language === l.code && <span className="text-[#5A5A40] text-xs">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
                     onClick={handleSignOut}
                     className="w-full text-left px-4 py-2 hover:bg-[#F5F5F0] transition-colors text-sm font-medium flex items-center gap-2 text-red-600"
                   >
@@ -511,14 +536,16 @@ function BottomNav() {
 
   const GUEST_TABS = [
     { path: '/marketplace', icon: ShoppingBag,  label: 'Shop'    },
-    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
     { path: '/orders',      icon: CheckCircle2,  label: 'Orders'  },
+    { path: '/explore',     icon: LayoutGrid,    label: 'Explore' },
+    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
     { path: '/login',       icon: User,          label: 'Login'   },
   ];
   const CUSTOMER_TABS = [
     { path: '/marketplace', icon: ShoppingBag,  label: 'Shop'    },
-    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
     { path: '/orders',      icon: CheckCircle2,  label: 'Orders'  },
+    { path: '/explore',     icon: LayoutGrid,    label: 'Explore' },
+    { path: '/cart',        icon: ShoppingCart,  label: 'Cart',   badge: cartItemCount },
     { path: '/profile',     icon: User,          label: 'Profile' },
   ];
   const OWNER_TABS = [
@@ -921,13 +948,14 @@ function CartPage() {
 // ── App Shell ──────────────────────────────────────────────────────
 function AppShell() {
   return (
-    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans overflow-x-clip">
       <TopNav />
       <main className="pb-16 sm:pb-0">
         <Routes>
           <Route path="/"            element={<Navigate to="/marketplace" replace />} />
           <Route path="/login"       element={<SignIn />} />
           <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/explore"     element={<Explore />} />
           <Route path="/cart" element={<RequireAuth><CartPage /></RequireAuth>} />
           <Route path="/owner" element={<RequireAuth roles={['owner','admin']}><OwnerDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><AdminPanel /></RequireAuth>} />

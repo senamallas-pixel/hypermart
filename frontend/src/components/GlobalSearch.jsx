@@ -26,7 +26,7 @@ function fixImageUrl(url) {
   return url;
 }
 
-export default function GlobalSearch() {
+export default function GlobalSearch({ widthClass = 'flex-1 max-w-xs sm:max-w-lg z-50' }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { setSearch, setTargetShopId } = useApp();
@@ -118,7 +118,7 @@ export default function GlobalSearch() {
   const hasResults = products.length > 0 || shops.length > 0;
 
   return (
-    <div ref={containerRef} className="flex-1 max-w-xs sm:max-w-lg relative z-50">
+    <div ref={containerRef} className={`${widthClass} relative`}>
       {/* ── Search input ── */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" size={14} />
@@ -132,7 +132,7 @@ export default function GlobalSearch() {
           onKeyDown={e => {
             if (e.key === 'Escape') { setFocused(false); inputRef.current?.blur(); }
           }}
-          className="w-full pl-9 pr-8 py-2 bg-[#F5F5F0] rounded-xl text-sm outline-none focus:ring-2 ring-[#5A5A40]/20 focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+          className="w-full pl-9 pr-8 py-2 bg-[#F5F5F0] rounded-xl text-sm outline-none placeholder:text-[#1A1A1A]/30"
         />
         {query && (
           <button onClick={() => { setQuery(''); inputRef.current?.focus(); }}
@@ -145,9 +145,6 @@ export default function GlobalSearch() {
       {/* ── Dropdown overlay ── */}
       {focused && (
         <>
-          {/* Mobile backdrop */}
-          <div className="fixed inset-0 bg-black/20 z-40 sm:hidden" onClick={() => setFocused(false)} />
-
           <div className="absolute top-full left-0 right-0 sm:right-auto sm:min-w-[420px] mt-2 bg-white rounded-2xl shadow-2xl border border-[#1A1A1A]/8 z-50 overflow-hidden max-h-[75vh] overflow-y-auto">
 
             {/* ─ Loading ─ */}

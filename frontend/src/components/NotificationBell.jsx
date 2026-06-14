@@ -20,8 +20,7 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-export default function NotificationBell() {
-  const [open, setOpen] = useState(false);
+export default function NotificationBell({ open = false, onToggle = () => {} }) {
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const ref = useRef(null);
@@ -48,18 +47,17 @@ export default function NotificationBell() {
     return () => clearInterval(id);
   }, [refreshCount]);
 
+  // Load list whenever the dropdown opens
+  useEffect(() => {
+    if (open) loadList();
+  }, [open, loadList]);
+
   // Close on outside click
   useEffect(() => {
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onClick = (e) => { if (open && ref.current && !ref.current.contains(e.target)) onToggle(); };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
-  }, []);
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next) loadList();
-  };
+  }, [open, onToggle]);
 
   const onItemClick = async (n) => {
     if (!n.is_read) {
@@ -78,7 +76,7 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={toggle}
+        onClick={onToggle}
         title="Notifications"
         className="relative w-8 h-8 flex items-center justify-center hover:bg-[#F5F5F0] rounded-xl transition-colors text-[#5A5A40]"
       >

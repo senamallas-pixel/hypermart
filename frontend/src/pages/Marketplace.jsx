@@ -14,6 +14,7 @@ import L from 'leaflet';
 import { listShops, listProducts, placeOrder, nearbyShops, getShopReviews, createReview, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment } from '../api/client';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
+import GlobalSearch from '../components/GlobalSearch';
 
 // Fix Leaflet default marker icon (bundler issue)
 delete L.Icon.Default.prototype._getIconUrl;
@@ -1205,18 +1206,23 @@ function MarketplaceBanner({ location }) {
   const { t } = useTranslation();
   
   return (
-    <div className="relative bg-gradient-to-r from-[#5A5A40] via-[#4A4A30] to-[#3A3A20] overflow-hidden">
-      {/* Decorative circles */}
-      <div className="absolute -right-16 -top-16 w-64 h-64 bg-white/5 rounded-full" />
-      <div className="absolute -right-8 -bottom-12 w-40 h-40 bg-white/5 rounded-full" />
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <p className="text-white/55 text-[10px] font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
+    <div className="relative md:overflow-hidden md:bg-gradient-to-r md:from-[#5A5A40] md:via-[#4A4A30] md:to-[#3A3A20] max-sm:sticky max-sm:top-14 max-sm:z-[45] max-sm:bg-white max-sm:border-b max-sm:border-[#1A1A1A]/6">
+      {/* Decorative circles (desktop hero only) */}
+      <div className="hidden md:block absolute -right-16 -top-16 w-64 h-64 bg-white/5 rounded-full" />
+      <div className="hidden md:block absolute -right-8 -bottom-12 w-40 h-40 bg-white/5 rounded-full" />
+      <div className="max-w-7xl mx-auto px-4 py-2 md:py-6">
+        <p className="hidden md:flex text-white/55 text-[10px] font-bold uppercase tracking-widest mb-1 items-center gap-1">
           <MapPin size={10} />{location}
         </p>
-        <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white mb-1">
+        {/* Desktop: greeting (search lives in the header on desktop) */}
+        <h2 className="hidden md:block font-serif text-2xl sm:text-3xl font-bold text-white mb-1">
           {t('marketplace.greeting')} <span id="greeting">{t('marketplace.greetingTime')}</span> &#128075;
         </h2>
-        <p className="text-white/55 text-sm">{t('marketplace.selectCategory')}</p>
+        <p className="hidden md:block text-white/55 text-sm">{t('marketplace.selectCategory')}</p>
+        {/* Mobile: only a compact full-width search bar (no hero background) */}
+        <div className="md:hidden">
+          <GlobalSearch widthClass="w-full z-[45]" />
+        </div>
       </div>
     </div>
   );
@@ -1298,7 +1304,7 @@ export default function Marketplace() {
       <MarketplaceBanner location={activeLocation} />
 
       {/* Category pills bar */}
-      <div className="sticky top-14 z-40 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6">
+      <div className="sticky top-14 max-sm:top-[6.75rem] z-40 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6">
         <div className="max-w-7xl mx-auto px-4 py-2.5">
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
             <button onClick={() => { setSearch(''); scrollToCategory(null); }}
@@ -1353,39 +1359,6 @@ export default function Marketplace() {
           </div>
         ) : (
           <>
-            {/* Stats row */}
-            {!debounced && totalShops > 0 && (
-              <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-                <div className="flex-shrink-0 bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 shadow-sm flex items-center gap-3 min-w-[140px]">
-                  <div className="w-9 h-9 bg-[#5A5A40]/10 rounded-xl flex items-center justify-center">
-                    <Store size={16} className="text-[#5A5A40]" />
-                  </div>
-                  <div>
-                    <p className="font-serif text-xl font-bold">{totalShops}</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.shopsOpen')}</p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 shadow-sm flex items-center gap-3 min-w-[140px]">
-                  <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
-                    <TrendingUp size={16} className="text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="font-serif text-xl font-bold">{activeLocation.split(' ')[0]}</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.yourArea')}</p>
-                  </div>
-                </div>
-                <div className="flex-shrink-0 bg-white border border-[#1A1A1A]/5 rounded-2xl p-4 shadow-sm flex items-center gap-3 min-w-[140px]">
-                  <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center">
-                    <Sparkles size={16} className="text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-serif text-xl font-bold">{t('marketplace.free')}</p>
-                    <p className="text-[9px] text-[#1A1A1A]/40 font-bold uppercase tracking-widest">{t('marketplace.delivery')}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Category sections */}
             {CATEGORIES.map(cat => {
               const catShops = shopsByCategory[cat] || [];
