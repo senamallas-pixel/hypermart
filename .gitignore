@@ -63,3 +63,6 @@ ios/
 
 # Logs
 *.log
+
+# Local WordPress backup (contains secrets) — never commit
+_wp_backup_*/
