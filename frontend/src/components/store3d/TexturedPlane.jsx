@@ -2,7 +2,8 @@
 // graceful colored+label fallback when the image is missing or fails CORS/404.
 import { Suspense, Component } from 'react';
 import * as THREE from 'three';
-import { useTexture, Text } from '@react-three/drei';
+import { useTexture } from '@react-three/drei';
+import Label from './Label';
 import { fixImageUrl } from '../../utils/fixImageUrl';
 
 function Fallback({ width, height, color, label }) {
@@ -13,7 +14,7 @@ function Fallback({ width, height, color, label }) {
         <meshBasicMaterial color={color} />
       </mesh>
       {label ? (
-        <Text
+        <Label
           position={[0, 0, 0.02]}
           fontSize={Math.min(width, height) * 0.13}
           maxWidth={width * 0.88}
@@ -23,7 +24,7 @@ function Fallback({ width, height, color, label }) {
           anchorY="middle"
         >
           {label}
-        </Text>
+        </Label>
       ) : null}
     </group>
   );

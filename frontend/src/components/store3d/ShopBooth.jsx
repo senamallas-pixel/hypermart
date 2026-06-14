@@ -1,7 +1,7 @@
 // One shop rendered as a 3D storefront booth (logo sign + name + rating).
 import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Text } from '@react-three/drei';
+import Label from './Label';
 import TexturedPlane from './TexturedPlane';
 
 export default function ShopBooth({ shop, position, onClick }) {
@@ -36,16 +36,22 @@ export default function ShopBooth({ shop, position, onClick }) {
         <meshStandardMaterial color={open ? '#3d6b4a' : '#7d828a'} />
       </mesh>
       {/* logo sign on the front face (box front ≈ z 0.7) */}
-      <group position={[0, 1.15, 0.72]}>
-        <TexturedPlane url={shop.logo} width={2} height={1.2} color="#3d6b4a" label={shop.name} />
+      <group position={[0, 1.0, 0.72]}>
+        <TexturedPlane url={shop.logo} width={2} height={1.05} color="#3d6b4a" label={shop.name} />
       </group>
-      {/* name + rating above */}
-      <Text position={[0, 2.55, 0]} fontSize={0.26} maxWidth={2.8} textAlign="center" color="#1A1A1A" anchorX="center" anchorY="middle">
-        {shop.name}
-      </Text>
-      <Text position={[0, 2.28, 0]} fontSize={0.18} color="#5A5A40" anchorX="center" anchorY="middle">
-        {`★ ${shop.rating || '4.5'}  ·  ${open ? 'Open' : 'Closed'}`}
-      </Text>
+      {/* name board mounted on the storefront (a real sign, so it never floats over other booths) */}
+      <group position={[0, 1.78, 0.74]}>
+        <mesh castShadow>
+          <boxGeometry args={[2.5, 0.5, 0.08]} />
+          <meshStandardMaterial color="#f4f1e8" />
+        </mesh>
+        <Label position={[0, 0.06, 0.06]} fontSize={0.2} maxWidth={2.35} textAlign="center" color="#1A1A1A" anchorX="center" anchorY="middle">
+          {shop.name}
+        </Label>
+        <Label position={[0, -0.16, 0.06]} fontSize={0.13} color={open ? '#3d6b4a' : '#9CA3AF'} anchorX="center" anchorY="middle">
+          {`★ ${shop.rating || '4.5'}  ·  ${open ? 'Open now' : 'Closed'}`}
+        </Label>
+      </group>
     </group>
   );
 }

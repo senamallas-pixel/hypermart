@@ -3,7 +3,7 @@
 // card base rests on the board.
 import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Text } from '@react-three/drei';
+import Label from './Label';
 import TexturedPlane from './TexturedPlane';
 
 export const CARD_W = 1.2;
@@ -41,7 +41,7 @@ export default function ProductPanel({ product, position, onAdd }) {
         <TexturedPlane url={product.image} width={CARD_W * 0.9} height={CARD_H * 0.72} color="#5A5A40" label={product.name} />
       </group>
       {/* product name printed on the lower strip of the package */}
-      <Text
+      <Label
         position={[0, -CARD_H / 2 + 0.16, CARD_D / 2 + 0.02]}
         fontSize={0.1}
         maxWidth={CARD_W * 0.92}
@@ -51,7 +51,7 @@ export default function ProductPanel({ product, position, onAdd }) {
         anchorY="middle"
       >
         {product.name}
-      </Text>
+      </Label>
 
       {/* price tag clipped to the shelf lip, in front of the board */}
       <group position={[0, -CARD_H / 2 - 0.22, 0.55]}>
@@ -59,9 +59,9 @@ export default function ProductPanel({ product, position, onAdd }) {
           <planeGeometry args={[0.74, 0.3]} />
           <meshBasicMaterial color={out ? '#f3d6d6' : '#fff7d6'} />
         </mesh>
-        <Text position={[0, 0, 0.01]} fontSize={0.16} color={out ? '#b91c1c' : '#3d6b4a'} anchorX="center" anchorY="middle">
+        <Label position={[0, 0, 0.01]} fontSize={0.16} color={out ? '#b91c1c' : '#3d6b4a'} anchorX="center" anchorY="middle">
           {out ? 'Sold out' : `₹${product.price}`}
-        </Text>
+        </Label>
       </group>
 
       {out && (
@@ -70,9 +70,9 @@ export default function ProductPanel({ product, position, onAdd }) {
             <planeGeometry args={[CARD_W, CARD_H]} />
             <meshBasicMaterial color="#000000" transparent opacity={0.4} />
           </mesh>
-          <Text position={[0, 0, CARD_D / 2 + 0.02]} fontSize={0.16} color="#ffffff" anchorX="center" anchorY="middle">
+          <Label position={[0, 0, CARD_D / 2 + 0.02]} fontSize={0.16} color="#ffffff" anchorX="center" anchorY="middle">
             Out of stock
-          </Text>
+          </Label>
         </>
       )}
     </group>
