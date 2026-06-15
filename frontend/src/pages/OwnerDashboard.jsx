@@ -331,7 +331,7 @@ function ProductModal({ shopId, product, onSave, onClose }) {
 function ShopRegistrationForm({ onSaved }) {
   const [form, setForm] = useState({
     name: '', address: '', category: SHOP_CATS[0],
-    location_name: LOCATIONS[0], timings: '9:00 AM – 9:00 PM', logo: '',
+    location_name: '', timings: '9:00 AM – 9:00 PM', logo: '',
     lat: '', lng: '',
   });
   const [saving, setSaving] = useState(false);
@@ -403,19 +403,11 @@ function ShopRegistrationForm({ onSaved }) {
           <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Shop name *" value={form.name} onChange={set('name')} required />
           <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Full address *" value={form.address} onChange={set('address')} required />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="relative">
-            <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.category} onChange={set('category')}>
-              {SHOP_CATS.map(c => <option key={c}>{c}</option>)}
-            </select>
-            <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none rotate-90" />
-          </div>
-          <div className="relative">
-            <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.location_name} onChange={set('location_name')}>
-              {LOCATIONS.map(l => <option key={l}>{l}</option>)}
-            </select>
-            <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none rotate-90" />
-          </div>
+        <div className="relative">
+          <select className={`${inp} appearance-none cursor-pointer hover:border-[#1A1A1A]/20`} value={form.category} onChange={set('category')}>
+            {SHOP_CATS.map(c => <option key={c}>{c}</option>)}
+          </select>
+          <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none rotate-90" />
         </div>
         <input className={inp + " hover:border-[#1A1A1A]/20"} placeholder="Timings (e.g. 9:00 AM – 9:00 PM)" value={form.timings} onChange={set('timings')} />
 

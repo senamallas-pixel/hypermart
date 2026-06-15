@@ -94,7 +94,7 @@ class ShopController
             'name'            => $name,
             'address'         => (string) Validation::require($b, 'address'),
             'category'        => Validation::category(Validation::require($b, 'category')),
-            'location_name'   => Validation::location(Validation::require($b, 'location_name')),
+            'location_name'   => (isset($b['location_name']) && $b['location_name'] !== '') ? Validation::location($b['location_name']) : '',
             'logo'            => $b['logo'] ?? null,
             'timings'         => $b['timings'] ?? null,
             'lat'             => isset($b['lat']) ? (float) $b['lat'] : null,
@@ -104,7 +104,7 @@ class ShopController
             'city'            => $b['city'] ?? null,
             'state'           => $b['state'] ?? null,
             'upi_id'          => $b['upi_id'] ?? null,
-            'status'          => 'approved',
+            'status'          => 'pending',   // new shops await admin approval
             'rating'          => 4.5,
             'review_count'    => 0,
             'created_at'      => now_utc(),
