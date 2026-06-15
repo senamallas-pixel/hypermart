@@ -335,6 +335,7 @@ function ShopRegistrationForm({ onSaved }) {
     lat: '', lng: '',
   });
   const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);   // success confirmation screen
   const [uploading, setUploading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
@@ -379,7 +380,8 @@ function ShopRegistrationForm({ onSaved }) {
     e.preventDefault(); setSaving(true);
     try {
       const payload = { ...form, lat: form.lat ? +form.lat : null, lng: form.lng ? +form.lng : null };
-      await createShop(payload); onSaved();
+      await createShop(payload);
+      setSubmitted(true);   // show the "request sent" confirmation instead of a blank form
     }
     catch (err) {
       const detail = err.response?.data?.detail;
@@ -390,8 +392,33 @@ function ShopRegistrationForm({ onSaved }) {
     finally { setSaving(false); }
   };
 
+  if (submitted) return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-sm border border-[#1A1A1A]/5 text-center"
+    >
+      <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-green-50 flex items-center justify-center">
+        <CheckCircle2 size={40} className="text-green-600" />
+      </div>
+      <h2 className="font-serif text-2xl font-bold mb-2 text-[#1A1A1A]">Request sent for approval</h2>
+      <p className="text-sm text-[#1A1A1A]/55 mb-1 leading-relaxed">
+        Your shop <span className="font-semibold text-[#1A1A1A]">“{form.name}”</span> has been submitted.
+      </p>
+      <p className="text-sm text-[#1A1A1A]/45 mb-7 leading-relaxed">
+        An admin will review it shortly — you'll be notified once it's approved and your shop goes live.
+      </p>
+      <button
+        onClick={() => onSaved()}
+        className="w-full bg-[#5A5A40] text-white font-bold py-3.5 rounded-2xl hover:bg-[#4A4A30] active:scale-[0.98] transition-all"
+      >
+        Go to Dashboard
+      </button>
+    </motion.div>
+  );
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-sm border border-[#1A1A1A]/5"
@@ -3505,7 +3532,7 @@ export default function OwnerDashboard() {
     getMyShops()
       .then(r => {
         setShops(r.data);
-        if (r.data.length > 0) setSelectedShop(r.data[0]);
+        if (r.data.length > 0) { setSelectedShop(r.data[0]); setRegistering(false); }
         else setRegistering(true);
       })
       .catch(console.error)
