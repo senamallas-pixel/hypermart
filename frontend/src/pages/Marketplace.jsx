@@ -1274,14 +1274,6 @@ export default function Marketplace() {
   const contentRef = useRef(null);
   const sectionRefs = useRef({});
 
-  const scrollToCategory = useCallback((cat) => {
-    const el = cat ? sectionRefs.current[cat] : contentRef.current;
-    if (!el) return;
-    const STICKY_HEIGHT = 108; // nav 56px + pills bar 48px + 4px gap
-    const top = el.getBoundingClientRect().top + window.pageYOffset - STICKY_HEIGHT;
-    window.scrollTo({ top, behavior: 'smooth' });
-  }, []);
-
   useEffect(() => {
     if (location.state?.homeReset) {
       setSelectedShop(null);   // leave any open shop
@@ -1345,12 +1337,12 @@ export default function Marketplace() {
         <div className="max-w-7xl mx-auto px-4 py-2.5">
           <div className="flex items-center gap-2">
             <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
-              <button onClick={() => { setSearch(''); scrollToCategory(null); }}
+              <button onClick={() => { setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
                 {t('common.all')}
               </button>
               {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
+                <button key={cat} onClick={() => { setSearch(cat); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                   className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
                   {cat}
                 </button>
@@ -1424,7 +1416,7 @@ export default function Marketplace() {
                       </p>
                     </div>
                     {catShops.length > 0 && (
-                      <button onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
+                      <button onClick={() => { setSearch(cat); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                         className="text-[#5A5A40] text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline shrink-0">
                         {t('common.seeAll')} <ChevronRight size={14} />
                       </button>
