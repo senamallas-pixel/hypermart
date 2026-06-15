@@ -1281,7 +1281,11 @@ export default function Marketplace() {
   }, []);
 
   useEffect(() => {
-    if (location.state?.homeReset) setSelectedShop(null);
+    if (location.state?.homeReset) {
+      setSelectedShop(null);   // leave any open shop
+      setSearch('');           // clear the active category/search filter → full home view
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, [location.state]);
 
   useEffect(() => {
