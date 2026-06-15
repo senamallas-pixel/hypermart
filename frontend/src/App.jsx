@@ -12,7 +12,6 @@ import {
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
 import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
-import Landing            from './pages/Landing';
 import Marketplace        from './pages/Marketplace';
 import Explore            from './pages/Explore';
 import OwnerDashboard     from './pages/OwnerDashboard';
@@ -948,23 +947,12 @@ function CartPage() {
 
 // ── App Shell ──────────────────────────────────────────────────────
 function AppShell() {
-  const { pathname } = useLocation();
-  const isLanding = pathname === '/';   // landing renders full-screen, no app chrome
-
-  if (isLanding) {
-    return (
-      <Routes>
-        <Route path="/" element={<Landing />} />
-      </Routes>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#F5F5F0] text-[#1A1A1A] font-sans overflow-x-clip">
       <TopNav />
       <main className="pb-16 sm:pb-0">
         <Routes>
-          <Route path="/"            element={<Landing />} />
+          <Route path="/"            element={<Navigate to="/marketplace" replace />} />
           <Route path="/login"       element={<SignIn />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/explore"     element={<Explore />} />
