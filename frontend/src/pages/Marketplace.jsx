@@ -113,14 +113,16 @@ const CAT_EMOJI = {
 };
 
 // ── Shop Card ──────────────────────────────────────────────────────
-function ShopCard({ shop, onClick }) {
+// `fill` = full-width (vertical grid, single-category view); otherwise fixed
+// width for the horizontal-scroll rows on the main page.
+function ShopCard({ shop, onClick, fill = false }) {
   const isOpen = shop.is_open !== 0;
   return (
     <motion.div
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className={`w-full sm:w-48 sm:flex-shrink-0 bg-white border rounded-2xl overflow-hidden cursor-pointer shadow-sm transition-all group ${isOpen ? 'border-[#1A1A1A]/5 hover:shadow-lg' : 'border-[#1A1A1A]/8 opacity-70 hover:opacity-90'}`}
+      className={`${fill ? 'w-full' : 'flex-shrink-0 w-40 sm:w-48'} bg-white border rounded-2xl overflow-hidden cursor-pointer shadow-sm transition-all group ${isOpen ? 'border-[#1A1A1A]/5 hover:shadow-lg' : 'border-[#1A1A1A]/8 opacity-70 hover:opacity-90'}`}
     >
       {/* Image */}
       <div className="aspect-[4/3] bg-[#F5F5F0] relative overflow-hidden">
@@ -1429,19 +1431,27 @@ export default function Marketplace() {
                     )}
                   </div>
 
-                  {/* Shop cards — vertical grid on mobile, horizontal scroll on desktop */}
-                  <div className="grid grid-cols-2 gap-3 sm:flex sm:overflow-x-auto sm:no-scrollbar sm:pb-2">
-                    {catShops.length > 0
-                      ? catShops.map(shop => (
-                          <ShopCard key={shop.id} shop={shop} onClick={() => setSelectedShop(shop)} />
-                        ))
-                      : (
-                        <div className="col-span-2 sm:flex-shrink-0 sm:w-full h-28 flex items-center justify-center bg-white/60 rounded-2xl border border-dashed border-[#1A1A1A]/10">
+                  {/* Single category selected (SEE ALL / pill) → vertical grid;
+                      main page (all sections) → horizontal scroll like before. */}
+                  {(() => {
+                    const categoryView = debounced === cat;   // drilled into this one category
+                    if (catShops.length === 0) {
+                      return (
+                        <div className="flex-shrink-0 w-full h-28 flex items-center justify-center bg-white/60 rounded-2xl border border-dashed border-[#1A1A1A]/10">
                           <p className="text-[#1A1A1A]/25 italic text-sm">{t('messages.noShopsYet')}</p>
                         </div>
-                      )
+                      );
                     }
-                  </div>
+                    return (
+                      <div className={categoryView
+                        ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
+                        : 'flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0'}>
+                        {catShops.map(shop => (
+                          <ShopCard key={shop.id} shop={shop} fill={categoryView} onClick={() => setSelectedShop(shop)} />
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
