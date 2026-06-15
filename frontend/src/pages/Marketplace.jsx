@@ -120,7 +120,7 @@ function ShopCard({ shop, onClick }) {
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className={`flex-shrink-0 w-40 sm:w-48 bg-white border rounded-2xl overflow-hidden cursor-pointer shadow-sm transition-all group ${isOpen ? 'border-[#1A1A1A]/5 hover:shadow-lg' : 'border-[#1A1A1A]/8 opacity-70 hover:opacity-90'}`}
+      className={`w-full sm:w-48 sm:flex-shrink-0 bg-white border rounded-2xl overflow-hidden cursor-pointer shadow-sm transition-all group ${isOpen ? 'border-[#1A1A1A]/5 hover:shadow-lg' : 'border-[#1A1A1A]/8 opacity-70 hover:opacity-90'}`}
     >
       {/* Image */}
       <div className="aspect-[4/3] bg-[#F5F5F0] relative overflow-hidden">
@@ -1422,21 +1422,21 @@ export default function Marketplace() {
                       </p>
                     </div>
                     {catShops.length > 0 && (
-                      <button onClick={() => setSearch(cat)}
+                      <button onClick={() => { setSearch(cat); setTimeout(() => scrollToCategory(cat), 320); }}
                         className="text-[#5A5A40] text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline shrink-0">
                         {t('common.seeAll')} <ChevronRight size={14} />
                       </button>
                     )}
                   </div>
 
-                  {/* Shop cards horizontal scroll */}
-                  <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+                  {/* Shop cards — vertical grid on mobile, horizontal scroll on desktop */}
+                  <div className="grid grid-cols-2 gap-3 sm:flex sm:overflow-x-auto sm:no-scrollbar sm:pb-2">
                     {catShops.length > 0
                       ? catShops.map(shop => (
                           <ShopCard key={shop.id} shop={shop} onClick={() => setSelectedShop(shop)} />
                         ))
                       : (
-                        <div className="flex-shrink-0 w-full h-28 flex items-center justify-center bg-white/60 rounded-2xl border border-dashed border-[#1A1A1A]/10">
+                        <div className="col-span-2 sm:flex-shrink-0 sm:w-full h-28 flex items-center justify-center bg-white/60 rounded-2xl border border-dashed border-[#1A1A1A]/10">
                           <p className="text-[#1A1A1A]/25 italic text-sm">{t('messages.noShopsYet')}</p>
                         </div>
                       )
