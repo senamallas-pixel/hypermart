@@ -1415,6 +1415,12 @@ export default function Marketplace() {
                         {catShops.length > 0 && <span className="ml-2 text-[#5A5A40]">&bull; {catShops.length} {catShops.length === 1 ? t('common.shop') : t('common.shops')}</span>}
                       </p>
                     </div>
+                    {catShops.length > 0 && debounced !== cat && (
+                      <button onClick={() => { setSearch(cat); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="text-[#5A5A40] text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline shrink-0">
+                        {t('common.seeAll')} <ChevronRight size={14} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Single category selected (SEE ALL / pill) → vertical grid;
