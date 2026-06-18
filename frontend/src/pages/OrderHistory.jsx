@@ -81,7 +81,8 @@ export default function OrderHistory() {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

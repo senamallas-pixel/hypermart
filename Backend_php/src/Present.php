@@ -10,7 +10,9 @@ class Present
     public static function iso($v): ?string
     {
         if ($v === null || $v === '') return null;
-        return str_replace(' ', 'T', substr((string) $v, 0, 19));
+        // Stored datetimes are UTC (gmdate). Mark them with 'Z' so clients parse
+        // them as UTC and convert to the viewer's local time correctly.
+        return str_replace(' ', 'T', substr((string) $v, 0, 19)) . 'Z';
     }
 
     private static function f($v): ?float { return $v === null ? null : (float) $v; }
