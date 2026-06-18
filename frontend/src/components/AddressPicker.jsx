@@ -70,47 +70,7 @@ export default function AddressPicker({ value, onChange }) {
 
   return (
     <div ref={wrapRef}>
-      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-        <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Delivery Address</p>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={useCurrent} disabled={locating}
-            className="flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] hover:underline disabled:opacity-50">
-            {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
-            {locating ? 'Locating…' : 'Use current location'}
-          </button>
-          {/* Select address (with dropdown) — sits to the right of Use current location */}
-          <div className="relative">
-            <button type="button" onClick={() => { setSaved(loadSaved()); setOpen(o => !o); }}
-              className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
-              <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} /> Select address
-            </button>
-            {open && (
-              <div className="absolute z-30 right-0 top-full mt-1 w-64 max-w-[78vw] bg-white border border-[#1A1A1A]/10 rounded-xl shadow-lg overflow-hidden">
-                {saved.length > 0 && (
-                  <div className="max-h-40 overflow-y-auto border-b border-[#1A1A1A]/6">
-                    {saved.map((a, i) => (
-                      <button key={i} type="button" onClick={() => pick(a)}
-                        className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-[#F5F5F0] transition-colors">
-                        <MapPin size={14} className="mt-0.5 shrink-0 text-[#5A5A40]/60" />
-                        <span className="text-[12px] text-[#1A1A1A]/75 line-clamp-2 flex-1">{a}</span>
-                        {value === a && <Check size={14} className="shrink-0 text-[#5A5A40]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button type="button" onClick={addCurrent}
-                  className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-[12px] font-semibold text-[#1A1A1A]/70 hover:bg-[#F5F5F0] transition-colors">
-                  <Plus size={14} className="text-[#5A5A40]" /> Add address
-                </button>
-                <button type="button" onClick={useCurrent}
-                  className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-[12px] font-semibold text-[#1A1A1A]/70 hover:bg-[#F5F5F0] transition-colors border-t border-[#1A1A1A]/6">
-                  <Navigation size={14} className="text-[#5A5A40]" /> Use current location
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Delivery Address</p>
 
       <textarea
         ref={taRef}
@@ -120,6 +80,46 @@ export default function AddressPicker({ value, onChange }) {
         placeholder="Flat / house no, street, area, landmark…"
         className="w-full resize-none rounded-xl border border-[#1A1A1A]/10 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/40 focus:border-[#5A5A40]/40 placeholder-[#1A1A1A]/30"
       />
+
+      {/* options under the box: current location (left), select address (right) */}
+      <div className="flex items-center justify-between mt-2">
+        <button type="button" onClick={useCurrent} disabled={locating}
+          className="flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] hover:underline disabled:opacity-50">
+          {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
+          {locating ? 'Locating…' : 'Use current location'}
+        </button>
+
+        <div className="relative">
+          <button type="button" onClick={() => { setSaved(loadSaved()); setOpen(o => !o); }}
+            className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
+            Select address <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+          {open && (
+            <div className="absolute z-30 right-0 bottom-full mb-1 w-64 max-w-[78vw] bg-white border border-[#1A1A1A]/10 rounded-xl shadow-lg overflow-hidden">
+              {saved.length > 0 && (
+                <div className="max-h-40 overflow-y-auto border-b border-[#1A1A1A]/6">
+                  {saved.map((a, i) => (
+                    <button key={i} type="button" onClick={() => pick(a)}
+                      className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-[#F5F5F0] transition-colors">
+                      <MapPin size={14} className="mt-0.5 shrink-0 text-[#5A5A40]/60" />
+                      <span className="text-[12px] text-[#1A1A1A]/75 line-clamp-2 flex-1">{a}</span>
+                      {value === a && <Check size={14} className="shrink-0 text-[#5A5A40]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" onClick={addCurrent}
+                className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-[12px] font-semibold text-[#1A1A1A]/70 hover:bg-[#F5F5F0] transition-colors">
+                <Plus size={14} className="text-[#5A5A40]" /> Add address
+              </button>
+              <button type="button" onClick={useCurrent}
+                className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-[12px] font-semibold text-[#1A1A1A]/70 hover:bg-[#F5F5F0] transition-colors border-t border-[#1A1A1A]/6">
+                <Navigation size={14} className="text-[#5A5A40]" /> Use current location
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
       {savedMsg && <span className="mt-1 flex items-center gap-1 text-[11px] font-bold text-[#5A7C59]"><Check size={12} /> Address saved</span>}
     </div>
   );
