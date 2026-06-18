@@ -23,7 +23,6 @@ import InvoiceModal       from './components/InvoiceModal';
 import GlobalSearch       from './components/GlobalSearch';
 import NotificationBell    from './components/NotificationBell';
 import AddressPicker, { rememberAddress } from './components/AddressPicker';
-import BrandMark           from './components/BrandMark';
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
@@ -130,10 +129,9 @@ function SignIn() {
         <div className="bg-white rounded-3xl shadow-2xl shadow-[#5A5A40]/10 overflow-hidden">
           {/* Header */}
           <div className="bg-[#5A5A40] px-8 pt-10 pb-6">
-            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm">
-              <BrandMark size={38} />
+            <div className="bg-white rounded-2xl px-4 py-3 mb-4 inline-flex shadow-sm">
+              <img src="/logo.png" alt="HyperShopIndia" className="h-10 w-auto" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-white mb-0.5">HyperShopIndia</h1>
             <p className="text-white/55 text-sm">Your neighbourhood marketplace</p>
           </div>
 
@@ -341,13 +339,7 @@ function TopNav() {
             }
           }}
           className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform z-[60] relative bg-transparent border-0 p-0 cursor-pointer">
-          <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-sm shrink-0">
-            <Store size={16} />
-          </div>
-          <BrandMark size={30} className="shrink-0" />
-          <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">
-            <span className="text-[#FB6A14]">Hyper</span><span className="text-[#1F6FC2]">ShopIndia</span>
-          </span>
+          <img src="/logo.png" alt="HyperShopIndia" className="h-9 w-auto shrink-0" />
         </button>
 
         {/* Desktop only — on mobile the search lives in the hero */}
