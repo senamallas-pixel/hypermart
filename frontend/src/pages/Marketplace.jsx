@@ -1,7 +1,7 @@
 ﻿// src/pages/Marketplace.jsx — Customer view: shop listing, products, cart & orders
 
 import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store, MapPin, Phone, MessageCircle, Package, ShoppingCart, Star,
@@ -239,6 +239,7 @@ function ProductCard({ product, cartQty, onAdd, onUpdateQty, offerLabel, shopClo
 // ── Shop Products View ─────────────────────────────────────────────
 function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { currentUser, cart, addToCart, updateQuantity, clearCart } = useApp();
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -340,7 +341,8 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
     if (!currentUser) { setNeedsLogin(true); return; }
     if (shopCartItems.length === 0) { alert('Your cart is empty.'); return; }
     if (deliveryAddress.trim().length < 10) { alert('Please enter a delivery address (at least 10 characters).'); return; }
-    setCheckoutStep('payment');
+    setShowCart(false);
+    navigate('/payment', { state: { address: deliveryAddress.trim() } });
   };
 
   const handlePlaceOrder = async () => {
@@ -727,54 +729,13 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
                   );
                 })()}
 
-                {checkoutStep === 'address' ? (
-                  <>
-                    {/* Step 1 — delivery address */}
-                    <AddressPicker value={deliveryAddress} onChange={setDeliveryAddress} />
+                {/* Delivery address → Continue to the payment page */}
+                <AddressPicker value={deliveryAddress} onChange={setDeliveryAddress} />
 
-                    <button onClick={goToPayment}
-                      className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
-                      <span>Continue</span><ChevronRight size={18} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {/* Step 2 — payment method */}
-                    <button type="button" onClick={() => setCheckoutStep('address')}
-                      className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
-                      <ArrowLeft size={13} /> Back to address
-                    </button>
-                    <div>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Payment Method</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { key: 'cash',     label: 'Cash on Delivery', icon: '💵' },
-                          { key: 'razorpay', label: 'Pay Online',        icon: '💳' },
-                        ].map(m => (
-                          <button key={m.key} onClick={() => setPaymentMethod(m.key)}
-                            className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-xs font-bold transition-all ${
-                              paymentMethod === m.key
-                                ? 'border-[#5A5A40] bg-[#5A5A40]/10 text-[#5A5A40]'
-                                : 'border-[#1A1A1A]/10 text-[#1A1A1A]/50 hover:border-[#5A5A40]/30'
-                            }`}>
-                            <span className="text-lg">{m.icon}</span>
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button onClick={handlePlaceOrder} disabled={placing}
-                      className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
-                      {placing
-                        ? <><Loader2 size={16} className="animate-spin" />{t('marketplace.placingOrder')}…</>
-                        : paymentMethod === 'razorpay'
-                          ? <><span>Pay Online</span><ChevronRight size={18} /></>
-                          : <><span>{t('marketplace.placeOrder')}</span><ChevronRight size={18} /></>
-                      }
-                    </button>
-                  </>
-                )}
+                <button onClick={goToPayment}
+                  className="w-full bg-[#5A5A40] text-white py-4 rounded-2xl font-bold uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
+                  <span>Continue</span><ChevronRight size={18} />
+                </button>
               </div>
             </motion.div>
           </div>

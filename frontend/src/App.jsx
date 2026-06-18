@@ -13,6 +13,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
 import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
 import Marketplace        from './pages/Marketplace';
+import Payment            from './pages/Payment';
 import Explore            from './pages/Explore';
 import OwnerDashboard     from './pages/OwnerDashboard';
 import AdminPanel         from './pages/AdminPanel';
@@ -962,6 +963,7 @@ function AppShell() {
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/explore"     element={<Explore />} />
           <Route path="/cart" element={<RequireAuth><CartPage /></RequireAuth>} />
+          <Route path="/payment" element={<RequireAuth><Payment /></RequireAuth>} />
           <Route path="/owner" element={<RequireAuth roles={['owner','admin']}><OwnerDashboard /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth roles={['admin']}><AdminPanel /></RequireAuth>} />
           <Route path="/profile" element={<RequireAuth><CustomerProfile /></RequireAuth>} />
