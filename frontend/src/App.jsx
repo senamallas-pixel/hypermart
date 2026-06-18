@@ -23,6 +23,7 @@ import InvoiceModal       from './components/InvoiceModal';
 import GlobalSearch       from './components/GlobalSearch';
 import NotificationBell    from './components/NotificationBell';
 import AddressPicker, { rememberAddress } from './components/AddressPicker';
+import BrandMark           from './components/BrandMark';
 
 // Fix double-prefixed Cloudinary URLs from old data
 function fixImageUrl(url) {
