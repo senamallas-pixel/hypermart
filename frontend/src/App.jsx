@@ -341,9 +341,12 @@ function TopNav() {
             }
           }}
           className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform z-[60] relative bg-transparent border-0 p-0 cursor-pointer">
-          <BrandMark size={34} className="shrink-0" />
+          <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-sm shrink-0">
+            <Store size={16} />
+          </div>
+          <BrandMark size={30} className="shrink-0" />
           <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">
-            <span className="text-[#FB6A14]">Hyper</span><span className="text-[#1A1A1A]">ShopIndia</span>
+            <span className="text-[#FB6A14]">Hyper</span><span className="text-[#1F6FC2]">ShopIndia</span>
           </span>
         </button>
 
