@@ -25,6 +25,7 @@ export default function AddressPicker({ value, onChange }) {
   const [locating, setLocating] = useState(false);
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(loadSaved());
+  const [savedMsg, setSavedMsg] = useState(false);
   const taRef = useRef(null);
   const wrapRef = useRef(null);
 
@@ -55,7 +56,16 @@ export default function AddressPicker({ value, onChange }) {
     );
   };
 
-  const addNew = () => { onChange(''); setOpen(false); setTimeout(() => taRef.current?.focus(), 50); };
+  // Save the address currently in the box to history so it can be reused later.
+  const addCurrent = () => {
+    const a = (value || '').trim();
+    if (a.length < 10) { alert('Please type or pick an address first (at least 10 characters), then tap Add address.'); return; }
+    rememberAddress(a);
+    setSaved(loadSaved());
+    setOpen(false);
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2500);
+  };
   const pick = (a) => { onChange(a); setOpen(false); };
 
   return (
@@ -80,10 +90,13 @@ export default function AddressPicker({ value, onChange }) {
 
       {/* Select address */}
       <div className="relative mt-2">
-        <button type="button" onClick={() => { setSaved(loadSaved()); setOpen(o => !o); }}
-          className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
-          <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} /> Select address
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => { setSaved(loadSaved()); setOpen(o => !o); }}
+            className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
+            <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} /> Select address
+          </button>
+          {savedMsg && <span className="flex items-center gap-1 text-[11px] font-bold text-[#5A7C59]"><Check size={12} /> Saved</span>}
+        </div>
 
         {open && (
           <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#1A1A1A]/10 rounded-xl shadow-lg overflow-hidden">
@@ -99,7 +112,7 @@ export default function AddressPicker({ value, onChange }) {
                 ))}
               </div>
             )}
-            <button type="button" onClick={addNew}
+            <button type="button" onClick={addCurrent}
               className="w-full text-left px-3 py-2.5 flex items-center gap-2 text-[12px] font-semibold text-[#1A1A1A]/70 hover:bg-[#F5F5F0] transition-colors">
               <Plus size={14} className="text-[#5A5A40]" /> Add address
             </button>
