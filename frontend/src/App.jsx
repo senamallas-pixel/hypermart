@@ -596,8 +596,28 @@ function CartPage() {
   const [orderDiscounts, setOrderDiscounts] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [locatingAddr, setLocatingAddr] = useState(false);
   const [shopUPI, setShopUPI] = useState(null);
   const [showUPIQR, setShowUPIQR] = useState(false);
+
+  const useCurrentLocationForAddress = () => {
+    if (!navigator.geolocation) { alert('Geolocation is not supported on this device.'); return; }
+    setLocatingAddr(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`, { headers: { Accept: 'application/json' } });
+          const data = await r.json();
+          setDeliveryAddress(data.display_name || `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        } catch {
+          setDeliveryAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        } finally { setLocatingAddr(false); }
+      },
+      (err) => { alert('Could not get your location: ' + err.message); setLocatingAddr(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     if (!cart.shopId) return;
@@ -886,7 +906,14 @@ function CartPage() {
             </div>
             {/* Delivery Address */}
             <div className="pt-3 border-t border-[#1A1A1A]/6">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Delivery Address</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Delivery Address</p>
+                <button type="button" onClick={useCurrentLocationForAddress} disabled={locatingAddr}
+                  className="flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] hover:underline disabled:opacity-50">
+                  {locatingAddr ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
+                  {locatingAddr ? 'Locating…' : 'Use current location'}
+                </button>
+              </div>
               <textarea
                 value={deliveryAddress}
                 onChange={e => setDeliveryAddress(e.target.value)}
