@@ -244,6 +244,7 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
   const [placing, setPlacing]           = useState(false);
   const [toast, setToast]               = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [activeFilter, setActiveFilter] = useState(t('common.all'));
   const [needsLogin, setNeedsLogin]     = useState(false);
   const [reviews, setReviews]           = useState([]);
@@ -329,12 +330,13 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
     if (!currentUser) { setNeedsLogin(true); return; }
     if (!shop?.id) { alert('Shop not found. Please try again.'); return; }
     if (shopCartItems.length === 0) { alert('Your cart is empty.'); return; }
+    if (deliveryAddress.trim().length < 10) { alert('Please enter a delivery address (at least 10 characters).'); return; }
     setPlacing(true);
     try {
       const payload = {
         shop_id:          shop.id,
         items:            shopCartItems.map(i => ({ product_id: i.productId, quantity: i.quantity })),
-        delivery_address: 'Default Address',
+        delivery_address: deliveryAddress.trim(),
         payment_method:   paymentMethod,
       };
       const res = await placeOrder(payload);
@@ -706,6 +708,18 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
                     </>
                   );
                 })()}
+
+                {/* Delivery address */}
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Delivery Address</p>
+                  <textarea
+                    value={deliveryAddress}
+                    onChange={e => setDeliveryAddress(e.target.value)}
+                    rows={2}
+                    placeholder="Flat / house no, street, area, landmark…"
+                    className="w-full resize-none rounded-xl border border-[#1A1A1A]/10 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/40 focus:border-[#5A5A40]/40 placeholder-[#1A1A1A]/30"
+                  />
+                </div>
 
                 {/* Payment method selector */}
                 <div>

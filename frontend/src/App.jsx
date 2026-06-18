@@ -595,6 +595,7 @@ function CartPage() {
   const [productDiscounts, setProductDiscounts] = useState([]);
   const [orderDiscounts, setOrderDiscounts] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [shopUPI, setShopUPI] = useState(null);
   const [showUPIQR, setShowUPIQR] = useState(false);
 
@@ -673,6 +674,7 @@ function CartPage() {
   const handlePlace = async () => {
     if (cart.items.length === 0) return;
     if (!currentUser) { navigate('/login'); return; }
+    if (deliveryAddress.trim().length < 10) { alert('Please enter a delivery address (at least 10 characters).'); return; }
 
     // UPI — show QR, user pays outside, then we place order as "upi"
     if (paymentMethod === 'upi') {
@@ -686,7 +688,7 @@ function CartPage() {
       const res = await placeOrder({
         shop_id:          cart.shopId,
         items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
-        delivery_address: 'Default Address',
+        delivery_address: deliveryAddress.trim(),
         payment_method:   paymentMethod,
         subtotal:         calculations.subtotal,
         item_discounts:   calculations.itemDiscounts,
@@ -752,7 +754,7 @@ function CartPage() {
       const res = await placeOrder({
         shop_id:          cart.shopId,
         items:            cart.items.map(i => ({ product_id: i.productId, quantity: i.quantity })),
-        delivery_address: 'Default Address',
+        delivery_address: deliveryAddress.trim(),
         payment_method:   'upi',
         subtotal:         calculations.subtotal,
         item_discounts:   calculations.itemDiscounts,
@@ -881,6 +883,17 @@ function CartPage() {
             <div className="flex justify-between items-center border-t border-[#1A1A1A]/6 pt-3">
               <span className="font-bold uppercase tracking-widest text-xs text-[#1A1A1A]/40">Total</span>
               <span className="font-serif text-3xl font-bold">&#8377;{calculations.total.toFixed(2)}</span>
+            </div>
+            {/* Delivery Address */}
+            <div className="pt-3 border-t border-[#1A1A1A]/6">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40 mb-2">Delivery Address</p>
+              <textarea
+                value={deliveryAddress}
+                onChange={e => setDeliveryAddress(e.target.value)}
+                rows={2}
+                placeholder="Flat / house no, street, area, landmark…"
+                className="w-full resize-none rounded-xl border border-[#1A1A1A]/10 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/40 focus:border-[#5A5A40]/40 placeholder-[#1A1A1A]/30"
+              />
             </div>
             {/* Payment Method Selector */}
             <div className="pt-3 border-t border-[#1A1A1A]/6">
