@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { isShopOpenNow } from '../utils/shopOpen';
 import {
   getMyShops, createShop, updateShop,
   listProducts, createProduct, updateProduct, deleteProduct,
@@ -3665,7 +3666,7 @@ export default function OwnerDashboard() {
                       <div className={`absolute top-2 left-2 backdrop-blur px-1.5 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-widest border border-[#1A1A1A]/5 ${
                         s.status === 'pending' ? 'bg-amber-100/90 text-amber-700' : 'bg-white/90 text-[#5A5A40]'
                       }`}>
-                        {s.status === 'pending' ? 'PENDING' : s.is_open ? 'OPEN' : 'CLOSED'}
+                        {s.status === 'pending' ? 'PENDING' : isShopOpenNow(s) ? 'OPEN' : 'CLOSED'}
                       </div>
                     </div>
                     <div className="p-3">
