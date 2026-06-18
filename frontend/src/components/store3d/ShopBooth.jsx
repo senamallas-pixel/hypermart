@@ -3,11 +3,12 @@ import { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import Label from './Label';
 import TexturedPlane from './TexturedPlane';
+import { isShopOpenNow } from '../../utils/shopOpen';
 
 export default function ShopBooth({ shop, position, onClick }) {
   const grp = useRef();
   const [hover, setHover] = useState(false);
-  const open = shop.is_open === undefined ? shop.status === 'approved' : !!shop.is_open;
+  const open = isShopOpenNow(shop);
 
   useFrame(() => {
     if (!grp.current) return;

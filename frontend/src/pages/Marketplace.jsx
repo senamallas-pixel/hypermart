@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext';
 import { useTranslation } from '../hooks/useTranslation';
 import GlobalSearch from '../components/GlobalSearch';
 import AddressPicker, { rememberAddress } from '../components/AddressPicker';
+import { isShopOpenNow } from '../utils/shopOpen';
 import Store3DLoader from '../components/store3d/Store3DLoader';
 
 // 3D store scenes — lazy so three.js only loads when the user switches to 3D.
@@ -117,7 +118,7 @@ const CAT_EMOJI = {
 // `fill` = full-width (vertical grid, single-category view); otherwise fixed
 // width for the horizontal-scroll rows on the main page.
 function ShopCard({ shop, onClick, fill = false }) {
-  const isOpen = shop.is_open !== 0;
+  const isOpen = isShopOpenNow(shop);
   return (
     <motion.div
       whileHover={{ y: -3 }}
@@ -254,6 +255,10 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [productDiscounts, setProductDiscounts] = useState([]);
+  const [nowTick, setNowTick] = useState(() => new Date());
+
+  // refresh open/closed status every minute without a reload
+  useEffect(() => { const id = setInterval(() => setNowTick(new Date()), 60000); return () => clearInterval(id); }, []);
 
   useEffect(() => {
     listProducts(shop.id)
@@ -320,7 +325,7 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
     return products.filter(p => p.category === activeFilter);
   }, [products, activeFilter, t]);
 
-  const shopIsOpen = shop.is_open !== 0;
+  const shopIsOpen = isShopOpenNow(shop, nowTick);
 
   const handleAddToCart = product => {
     if (!shopIsOpen) return;
@@ -1162,7 +1167,7 @@ function NearbyShopsSection({ onSelectShop }) {
                   <Marker
                     key={shop.id}
                     position={[parseFloat(shop.lat), parseFloat(shop.lng)]}
-                    icon={shopMapIcon(shop.is_open)}
+                    icon={shopMapIcon(isShopOpenNow(shop))}
                   >
                     <Popup>
                       <div style={{ fontFamily: 'sans-serif', minWidth: 160 }}>
@@ -1171,9 +1176,9 @@ function NearbyShopsSection({ onSelectShop }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                           <span style={{
                             fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
-                            background: shop.is_open ? '#D1FAE5' : '#FEE2E2',
-                            color: shop.is_open ? '#065F46' : '#991B1B',
-                          }}>{shop.is_open ? '● OPEN' : '● CLOSED'}</span>
+                            background: isShopOpenNow(shop) ? '#D1FAE5' : '#FEE2E2',
+                            color: isShopOpenNow(shop) ? '#065F46' : '#991B1B',
+                          }}>{isShopOpenNow(shop) ? '● OPEN' : '● CLOSED'}</span>
                           <span style={{ fontSize: 10, color: '#5A5A40', fontWeight: 700 }}>{shop.distance_km} km</span>
                           <span style={{ fontSize: 10, color: '#D97706' }}>★ {shop.rating}</span>
                         </div>
@@ -1217,7 +1222,7 @@ function NearbyShopsSection({ onSelectShop }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="font-bold text-sm truncate">{shop.name}</p>
-                  {shop.is_open ? (
+                  {isShopOpenNow(shop) ? (
                     <span className="text-[7px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                       <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />{t('common.open')}
                     </span>
@@ -1304,8 +1309,12 @@ export default function Marketplace() {
   const [selectedShop, setSelectedShop] = useState(null);
   const [debounced, setDebounced]       = useState('');
   const [view3D, setView3D]             = useState(false);
+  const [, setNowTick]                  = useState(0);
   const contentRef = useRef(null);
   const sectionRefs = useRef({});
+
+  // re-render every minute so shop OPEN/CLOSED badges reflect the current time
+  useEffect(() => { const id = setInterval(() => setNowTick(n => n + 1), 60000); return () => clearInterval(id); }, []);
 
   useEffect(() => {
     if (location.state?.homeReset) {
