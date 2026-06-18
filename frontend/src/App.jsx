@@ -130,8 +130,8 @@ function SignIn() {
         <div className="bg-white rounded-3xl shadow-2xl shadow-[#5A5A40]/10 overflow-hidden">
           {/* Header */}
           <div className="bg-[#5A5A40] px-8 pt-10 pb-6">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
-              <Store size={28} className="text-white" />
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+              <BrandMark size={38} />
             </div>
             <h1 className="font-serif text-3xl font-bold text-white mb-0.5">HyperShopIndia</h1>
             <p className="text-white/55 text-sm">Your neighbourhood marketplace</p>
@@ -341,10 +341,10 @@ function TopNav() {
             }
           }}
           className="flex items-center gap-2 shrink-0 active:scale-95 transition-transform z-[60] relative bg-transparent border-0 p-0 cursor-pointer">
-          <div className="w-8 h-8 bg-[#5A5A40] rounded-xl flex items-center justify-center text-white shadow-sm">
-            <Store size={16} />
-          </div>
-          <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">HyperShopIndia</span>
+          <BrandMark size={34} className="shrink-0" />
+          <span className="font-serif text-lg font-bold tracking-tight hidden sm:block">
+            <span className="text-[#FB6A14]">Hyper</span><span className="text-[#1A1A1A]">ShopIndia</span>
+          </span>
         </button>
 
         {/* Desktop only — on mobile the search lives in the hero */}
