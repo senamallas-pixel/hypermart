@@ -500,20 +500,17 @@ function ShopProductsView({ shop, onBack, view3D = false, onToggle3D = () => {} 
       )}
 
       <div className="max-w-7xl mx-auto px-4">
-        {/* Category filter pills + 2D/3D toggle */}
-        <div className="flex items-center gap-2 mb-5">
-          {productCategories.length > 2 ? (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1 -mx-4 px-4 sm:mx-0 sm:px-0">
-              {productCategories.map(cat => (
-                <button key={cat} onClick={() => setActiveFilter(cat)}
-                  className={`px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${activeFilter === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/60 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-                  {cat}
-                </button>
-              ))}
-            </div>
-          ) : <div className="flex-1" />}
-          <ViewToggle view3D={view3D} onChange={onToggle3D} />
-        </div>
+        {/* Category filter pills */}
+        {productCategories.length > 2 && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar mb-5 -mx-4 px-4 sm:mx-0 sm:px-0">
+            {productCategories.map(cat => (
+              <button key={cat} onClick={() => setActiveFilter(cat)}
+                className={`px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${activeFilter === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40]' : 'bg-white text-[#1A1A1A]/60 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Products — 3D shelves or 2D grid */}
         {view3D ? (
@@ -1338,20 +1335,17 @@ export default function Marketplace() {
       {/* Category pills bar */}
       <div className="sticky top-14 max-sm:top-[6.75rem] z-40 bg-white/95 backdrop-blur-md border-b border-[#1A1A1A]/6">
         <div className="max-w-7xl mx-auto px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
-              <button onClick={() => { setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-                {t('common.all')}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <button onClick={() => { setSearch(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${!debounced ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+              {t('common.all')}
+            </button>
+            {CATEGORIES.map(cat => (
+              <button key={cat} onClick={() => { setSearch(cat); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
+                {cat}
               </button>
-              {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => { setSearch(cat); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                  className={`px-4 py-2 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border uppercase tracking-widest ${debounced === cat ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-sm' : 'bg-white text-[#1A1A1A]/55 border-[#1A1A1A]/10 hover:border-[#5A5A40]/30'}`}>
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <ViewToggle view3D={view3D} onChange={setView3D} />
+            ))}
           </div>
         </div>
       </div>
