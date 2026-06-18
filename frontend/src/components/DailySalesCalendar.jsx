@@ -34,10 +34,11 @@ export default function DailySalesCalendar({ analytics, onDateSelect, selectedDa
     return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
   };
 
-  const getDayKey = (day) => {
-    const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    return date.toISOString().split('T')[0];
-  };
+  // Local YYYY-MM-DD (avoid toISOString, which shifts to UTC and rolls the day
+  // back in +offset timezones like IST).
+  const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const getDayKey = (day) => toKey(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day));
 
   const handlePrevMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
@@ -180,7 +181,7 @@ export default function DailySalesCalendar({ analytics, onDateSelect, selectedDa
 
             const dayData = isCurrentMonth ? dailySalesMap[dayKey] : null;
             const hasData = dayData && dayData.total > 0;
-            const isToday = isCurrentMonth && new Date().toISOString().split('T')[0] === dayKey;
+            const isToday = isCurrentMonth && toKey(new Date()) === dayKey;
 
             // Calculate percentage for walk-in vs online
             const walkInPercent = dayData?.total > 0 ? (dayData.walkIn / dayData.total) * 100 : 0;
