@@ -73,7 +73,12 @@ export default function AddressPicker({ value, onChange }) {
       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
         <p className="text-[9px] font-bold uppercase tracking-widest text-[#1A1A1A]/40">Delivery Address</p>
         <div className="flex items-center gap-3">
-          {/* Select address (with dropdown) — sits next to Use current location */}
+          <button type="button" onClick={useCurrent} disabled={locating}
+            className="flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] hover:underline disabled:opacity-50">
+            {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
+            {locating ? 'Locating…' : 'Use current location'}
+          </button>
+          {/* Select address (with dropdown) — sits to the right of Use current location */}
           <div className="relative">
             <button type="button" onClick={() => { setSaved(loadSaved()); setOpen(o => !o); }}
               className="flex items-center gap-1 text-[11px] font-bold text-[#1A1A1A]/55 hover:text-[#5A5A40]">
@@ -104,11 +109,6 @@ export default function AddressPicker({ value, onChange }) {
               </div>
             )}
           </div>
-          <button type="button" onClick={useCurrent} disabled={locating}
-            className="flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] hover:underline disabled:opacity-50">
-            {locating ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
-            {locating ? 'Locating…' : 'Use current location'}
-          </button>
         </div>
       </div>
 
