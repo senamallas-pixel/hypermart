@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext';
 import AIChatWidget from './components/AIChatWidget';
-import { login, register, placeOrder, forgotPassword, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
+import { login, register, placeOrder, forgotPassword, resetPassword, otpSend, otpVerify, getShopDiscounts, createRazorpayOrder, verifyRazorpayPayment, getShopUPI, nearbyShops, listShops } from './api/client';
 import Marketplace        from './pages/Marketplace';
 import Payment            from './pages/Payment';
 import Explore            from './pages/Explore';
@@ -86,6 +86,20 @@ function SignIn() {
   const [regPassword, setRegPassword] = useState('');
   const [regRole, setRegRole]       = useState('customer');
 
+  // OTP (phone) login fields
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCode, setOtpCode]   = useState('');
+  const [otpName, setOtpName]   = useState('');
+  const [otpSent, setOtpSent]   = useState(false);
+  const [otpInfo, setOtpInfo]   = useState('');
+
+  // Forgot-password via phone OTP
+  const [forgotMode, setForgotMode] = useState('email');   // 'email' | 'phone'
+  const [fpPhone, setFpPhone] = useState('');
+  const [fpCode, setFpCode]   = useState('');
+  const [fpNewPw, setFpNewPw] = useState('');
+  const [fpSent, setFpSent]   = useState(false);
+
   if (!authLoading && currentUser) return <Navigate to={roleHome(currentUser.role)} replace />;
   if (authLoading) return (
     <div className="h-screen flex items-center justify-center bg-[#F5F5F0]">
@@ -119,6 +133,48 @@ function SignIn() {
     } finally { setLoading(false); }
   };
 
+  const sendOtpCode = async () => {
+    if (!otpPhone.trim()) { setError('Enter your mobile number.'); return; }
+    setLoading(true); setError(''); setOtpInfo('');
+    try {
+      const res = await otpSend(otpPhone.trim(), 'login');
+      setOtpSent(true);
+      setOtpInfo(res.data?.dev_code ? `Dev OTP: ${res.data.dev_code}` : 'OTP sent to your phone.');
+    } catch (err) { setError(err.response?.data?.detail || 'Could not send OTP.'); }
+    finally { setLoading(false); }
+  };
+
+  const verifyOtpCode = async () => {
+    if (!otpCode.trim()) { setError('Enter the OTP you received.'); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await otpVerify(otpPhone.trim(), otpCode.trim(), 'login', otpName.trim() || undefined);
+      signIn(res.data.access_token, res.data.user);
+      navigate(roleHome(res.data.user.role), { replace: true });
+    } catch (err) { setError(err.response?.data?.detail || 'Invalid OTP.'); }
+    finally { setLoading(false); }
+  };
+
+  const handlePhoneReset = async () => {
+    setForgotMsg('');
+    if (!fpSent) {
+      if (!fpPhone.trim()) { setForgotMsg('Enter your mobile number.'); return; }
+      try {
+        const res = await otpSend(fpPhone.trim(), 'reset');
+        setFpSent(true);
+        setForgotMsg(res.data?.dev_code ? `Dev OTP: ${res.data.dev_code}` : 'OTP sent if the number is registered.');
+      } catch (err) { setForgotMsg(err.response?.data?.detail || 'Could not send OTP.'); }
+    } else {
+      if (!fpCode.trim() || fpNewPw.length < 6) { setForgotMsg('Enter the OTP and a new password (min 6 chars).'); return; }
+      try {
+        const vr = await otpVerify(fpPhone.trim(), fpCode.trim(), 'reset');
+        await resetPassword(vr.data.reset_token, fpNewPw);
+        setForgotMsg('Password updated! You can sign in now.');
+        setFpSent(false); setFpCode(''); setFpNewPw('');
+      } catch (err) { setForgotMsg(err.response?.data?.detail || 'Reset failed.'); }
+    }
+  };
+
   const ROLES = [
     { key: 'customer', label: 'Customer',   desc: 'Browse shops & order' },
     { key: 'owner',    label: 'Shop Owner', desc: 'List & manage your shop' },
@@ -138,10 +194,10 @@ function SignIn() {
 
           {/* Tabs */}
           <div className="flex border-b border-[#1A1A1A]/6">
-            {['login', 'register'].map(t => (
+            {[['login', 'Sign In'], ['otp', 'OTP'], ['register', 'Register']].map(([t, label]) => (
               <button key={t} onClick={() => { setTab(t); setError(''); }}
                 className={`flex-1 py-3.5 text-xs font-bold uppercase tracking-widest transition-all ${tab === t ? 'text-[#5A5A40] border-b-2 border-[#5A5A40] bg-[#5A5A40]/3' : 'text-[#1A1A1A]/35 hover:text-[#1A1A1A]/60'}`}>
-                {t === 'login' ? 'Sign In' : 'Register'}
+                {label}
               </button>
             ))}
           </div>
@@ -182,6 +238,47 @@ function SignIn() {
                     </button>
                   ))}
                 </div>
+              </>
+            ) : tab === 'otp' ? (
+              <>
+                <div className="relative">
+                  <Phone size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1A1A1A]/30 pointer-events-none" />
+                  <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl pl-10 pr-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 disabled:opacity-60"
+                    placeholder="Mobile number" type="tel" value={otpPhone} disabled={otpSent}
+                    onChange={e => { setOtpPhone(e.target.value); setError(''); }}
+                    onKeyDown={e => e.key === 'Enter' && (otpSent ? verifyOtpCode() : sendOtpCode())} />
+                </div>
+                {otpSent && (
+                  <>
+                    <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-base tracking-[0.4em] text-center outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:tracking-normal placeholder:text-[#1A1A1A]/30"
+                      placeholder="6-digit OTP" inputMode="numeric" maxLength={6} value={otpCode} autoFocus
+                      onChange={e => { setOtpCode(e.target.value.replace(/\D/g, '')); setError(''); }}
+                      onKeyDown={e => e.key === 'Enter' && verifyOtpCode()} />
+                    <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30"
+                      placeholder="Your name (new accounts only)" value={otpName}
+                      onChange={e => setOtpName(e.target.value)} />
+                  </>
+                )}
+                {otpInfo && <p className="text-xs text-emerald-600 font-semibold px-1">{otpInfo}</p>}
+                {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-semibold text-red-500 px-1">{error}</motion.p>}
+                {!otpSent ? (
+                  <button onClick={sendOtpCode} disabled={loading}
+                    className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
+                    {loading ? <><Loader2 size={16} className="animate-spin" /> Sending&hellip;</> : <>Send OTP <ArrowRight size={16} /></>}
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={verifyOtpCode} disabled={loading}
+                      className="w-full bg-[#5A5A40] text-white py-3.5 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-[#4A4A30] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[#5A5A40]/20">
+                      {loading ? <><Loader2 size={16} className="animate-spin" /> Verifying&hellip;</> : <>Verify &amp; Continue <ArrowRight size={16} /></>}
+                    </button>
+                    <button onClick={() => { setOtpSent(false); setOtpCode(''); setOtpInfo(''); setError(''); }}
+                      className="w-full text-center text-xs text-[#5A5A40]/60 hover:text-[#5A5A40] transition-colors py-1">
+                      Change number / resend
+                    </button>
+                  </>
+                )}
+                <p className="text-[11px] text-[#1A1A1A]/40 text-center leading-relaxed">Sign in with your mobile number — new numbers get an account automatically.</p>
               </>
             ) : (
               <>
@@ -239,27 +336,61 @@ function SignIn() {
             onClick={e => e.stopPropagation()}
             className="bg-white rounded-3xl p-8 max-w-sm w-full mx-4 shadow-2xl">
             <h3 className="font-serif text-xl font-bold mb-2">Reset Password</h3>
-            <p className="text-sm text-[#1A1A1A]/50 mb-4">Enter your email and we'll send a reset link.</p>
-            <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3"
-              placeholder="Email address" type="email" value={forgotEmail}
-              onChange={e => { setForgotEmail(e.target.value); setForgotMsg(''); }} />
-            {forgotMsg && <p className="text-xs text-emerald-600 font-semibold mb-3 px-1">{forgotMsg}</p>}
-            <div className="flex gap-3">
-              <button onClick={() => setShowForgot(false)}
-                className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0]">
-                Cancel
-              </button>
-              <button onClick={async () => {
-                  if (!forgotEmail) return;
-                  try {
-                    await forgotPassword(forgotEmail.trim());
-                    setForgotMsg('If this email exists, a reset link has been sent. Check console in dev.');
-                  } catch { setForgotMsg('Something went wrong.'); }
-                }}
-                className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold hover:bg-[#4A4A30] transition-all">
-                Send Reset
-              </button>
+            {/* mode toggle: email link vs phone OTP */}
+            <div className="flex bg-[#F5F5F0] rounded-full p-0.5 mb-4">
+              {[['email', 'Email link'], ['phone', 'Phone OTP']].map(([m, label]) => (
+                <button key={m} onClick={() => { setForgotMode(m); setForgotMsg(''); setFpSent(false); }}
+                  className={`flex-1 py-1.5 rounded-full text-[11px] font-bold transition-all ${forgotMode === m ? 'bg-white shadow-sm text-[#5A5A40]' : 'text-[#1A1A1A]/40'}`}>
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {forgotMode === 'email' ? (
+              <>
+                <p className="text-sm text-[#1A1A1A]/50 mb-4">Enter your email and we'll send a reset link.</p>
+                <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3"
+                  placeholder="Email address" type="email" value={forgotEmail}
+                  onChange={e => { setForgotEmail(e.target.value); setForgotMsg(''); }} />
+                {forgotMsg && <p className="text-xs text-emerald-600 font-semibold mb-3 px-1">{forgotMsg}</p>}
+                <div className="flex gap-3">
+                  <button onClick={() => setShowForgot(false)}
+                    className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0]">Cancel</button>
+                  <button onClick={async () => {
+                      if (!forgotEmail) return;
+                      try { await forgotPassword(forgotEmail.trim()); setForgotMsg('If this email exists, a reset link has been sent.'); }
+                      catch { setForgotMsg('Something went wrong.'); }
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold hover:bg-[#4A4A30] transition-all">Send Reset</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-[#1A1A1A]/50 mb-4">We'll text an OTP to your registered mobile number.</p>
+                <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3 disabled:opacity-60"
+                  placeholder="Mobile number" type="tel" value={fpPhone} disabled={fpSent}
+                  onChange={e => { setFpPhone(e.target.value); setForgotMsg(''); }} />
+                {fpSent && (
+                  <>
+                    <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3"
+                      placeholder="6-digit OTP" inputMode="numeric" maxLength={6} value={fpCode}
+                      onChange={e => { setFpCode(e.target.value.replace(/\D/g, '')); setForgotMsg(''); }} />
+                    <input className="w-full bg-[#F5F5F0] border border-transparent rounded-2xl px-4 py-3.5 text-sm outline-none focus:border-[#5A5A40] focus:bg-white transition-all placeholder:text-[#1A1A1A]/30 mb-3"
+                      placeholder="New password (min 6 chars)" type="password" value={fpNewPw}
+                      onChange={e => { setFpNewPw(e.target.value); setForgotMsg(''); }} />
+                  </>
+                )}
+                {forgotMsg && <p className="text-xs text-emerald-600 font-semibold mb-3 px-1">{forgotMsg}</p>}
+                <div className="flex gap-3">
+                  <button onClick={() => setShowForgot(false)}
+                    className="flex-1 py-3 rounded-2xl border border-[#1A1A1A]/10 text-sm font-bold text-[#1A1A1A]/60 hover:bg-[#F5F5F0]">Cancel</button>
+                  <button onClick={handlePhoneReset}
+                    className="flex-1 py-3 rounded-2xl bg-[#5A5A40] text-white text-sm font-bold hover:bg-[#4A4A30] transition-all">
+                    {fpSent ? 'Reset Password' : 'Send OTP'}
+                  </button>
+                </div>
+              </>
+            )}
           </motion.div>
         </div>
       )}

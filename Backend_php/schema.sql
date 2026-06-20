@@ -287,3 +287,17 @@ CREATE TABLE IF NOT EXISTS agent_pending_actions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- One-time passwords (Fast2SMS OTP login / signup verify / password reset)
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  phone       VARCHAR(20)  NOT NULL,
+  code_hash   VARCHAR(255) NOT NULL,
+  purpose     VARCHAR(20)  NOT NULL DEFAULT 'login',
+  attempts    INT          NOT NULL DEFAULT 0,
+  used        TINYINT      NOT NULL DEFAULT 0,
+  expires_at  DATETIME     NOT NULL,
+  created_at  DATETIME     NOT NULL,
+  KEY idx_otp_phone (phone),
+  KEY idx_otp_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

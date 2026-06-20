@@ -101,6 +101,10 @@ export const createReview    = (shopId, data) => api.post(`/shops/${shopId}/revi
 export const forgotPassword  = (email)        => api.post('/auth/forgot-password', { email });
 export const resetPassword   = (token, new_password) => api.post('/auth/reset-password', { token, new_password });
 
+// ── Phone OTP (Fast2SMS) ──
+export const otpSend   = (phone, purpose = 'login')             => api.post('/auth/otp/send',   { phone, purpose });
+export const otpVerify = (phone, code, purpose = 'login', display_name) => api.post('/auth/otp/verify', { phone, code, purpose, display_name });
+
 // ── Product Search ───────────────────────────────────────────────
 
 export const searchProducts  = (q, params = {}) => api.get('/products/search', { params: { q, ...params } });

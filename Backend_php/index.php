@@ -13,7 +13,7 @@ require __DIR__ . '/config.php';
 
 // ── Core framework ──
 foreach ([
-    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation', 'Mailer', 'Notifier',
+    'ApiException', 'Database', 'Response', 'Request', 'Enums', 'Auth', 'Present', 'Router', 'Validation', 'Mailer', 'Notifier', 'Sms',
 ] as $cls) {
     require __DIR__ . "/src/$cls.php";
 }
@@ -47,6 +47,7 @@ if (strlen($path) > 1) {
 
 $router = new Router();
 AuthController::register($router);
+OtpController::register($router);
 UserController::register($router);
 SubscriptionController::register($router);
 ShopController::register($router);

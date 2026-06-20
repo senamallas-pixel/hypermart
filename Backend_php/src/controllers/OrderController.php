@@ -325,6 +325,11 @@ class OrderController
             Notifier::log((int) $ownerRow['id'], 'new_order', "New order #$oid",
                 "New order at {$order['shop_name']} — ₹$total. Deliver to: {$order['delivery_address']}", $oid);
         }
+        // SMS confirmation to the customer (Fast2SMS, best-effort)
+        $custPhone = $customer['phone'] ?? '';
+        if ($custPhone && Sms::isValid($custPhone)) {
+            Sms::sendText($custPhone, "HyperShopIndia: Order #$oid placed at {$order['shop_name']} for Rs $total. We'll notify you on updates.");
+        }
         // Rich emails (only if SMTP configured)
         if (!Mailer::configured()) return;
         $itemsHtml = self::itemsHtml($oid);
